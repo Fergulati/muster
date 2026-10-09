@@ -1,6 +1,6 @@
 # Modernizing Muster's UI: a chat client first, the lifecycle on demand
 
-**Status:** plan agreed 2026-10-09 (§6). U0b (the screenshot harness) done; U0a (control census, lint gate) done in the runner, Basecamp and the Nim host still to check; U0d (the desktop mockup, `ui/prototype/desktop-v3.html`) awaiting review. §7 has what U0 found.
+**Status:** plan agreed 2026-10-09 (§6). U0b (the screenshot harness) and U0c (the decomposition) done; U0a (control census, lint gate) done in the runner, Basecamp and the Nim host still to check; U0d (the desktop mockup, `ui/prototype/desktop-v3.html`) awaiting review. §7 has what U0 found.
 **Reads with:** `docs/01-furps.md` (U-1 to U-10), `ui/prototype/coordination-prototype-v2.html` (the reference build), `docs/labbook/qml-errors-are-invisible-to-nix-build.md`, `docs/design/seaqt-ui.md` (the QML is kept when the backend moves to Nim, so this work carries over).
 
 ## 1. What was asked
@@ -235,3 +235,6 @@ Details, and the traps behind them: `docs/labbook/screenshots-of-the-qml-that-ho
 
   They are the lint baseline (147 findings); U1 removes them.
 - **The baseline shows the problem the plan names.** At 1440×900, a room's join request and its Admit button sit below the fold of the right panel. At the runner's default 1024×768, the top bar of seven buttons wraps to two rows.
+- **The decomposition (U0c), a pure move.** `Room.qml` 3,738 → 1,321 lines (RoomHeader, RoomThread, RoomComposer, RoomDetails); `MusterCard.qml` 2,543 → 810 (CardProposal, CardNeeds, CardReceipt, CardAddressShare, CardAddressRequest, CardUnknownSchema); `RoomComposer.qml` 1,505 → 1,170 (the kind row, policy picker, needs, account picker, attest identity). All 66 gallery shots identical before and after, runtime warnings identical, `split-self-test.sh` green with the new QML live. Two things stay for later slices:
+  - The payment, statement, action and split forms share their fields with one Propose row, so they move in U5, when each form gets its own sheet and Propose.
+  - Sibling groups (the card's heading and actions, the composer's notices) stay where they are. Wrapping them would add layout spacing when all are hidden, which is a pixel change. U5 and U6 replace them.
