@@ -128,7 +128,7 @@ cmd_record() {
   XVFB_PIDFILE="$out/xvfb.pid"
   trap 'pkill -9 -s "$(cat "$XVFB_PIDFILE" 2>/dev/null)" 2>/dev/null' EXIT
   echo "recording $test on :$disp → $out"
-  env -u WAYLAND_DISPLAY DISPLAY=":$disp" MUSTER_QPA=xcb QT_QUICK_BACKEND=software \
+  env -u WAYLAND_DISPLAY DISPLAY=":$disp" MUSTER_QPA=xcb QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
       MUSTER_RUNNER="$dev/bin/muster-ui" "$@" "$test"
   local rc=$?
   cp "$dev"/plugin/qml/snapshots/*.json "$out"/ 2>/dev/null
