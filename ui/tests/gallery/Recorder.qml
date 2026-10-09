@@ -42,5 +42,5 @@ Item {
         xhr.send(JSON.stringify({ tag: tag, seq: seq, at: Date.now(), props: props, ui: ui }, null, 1));
     }
 
-    Timer { interval: 1000; running: true; repeat: true; onTriggered: recorder.snapshot() }
+    Timer { interval: 250; running: true; repeat: true; onTriggered: recorder.snapshot() }
 }

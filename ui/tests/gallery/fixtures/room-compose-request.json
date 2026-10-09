@@ -1,0 +1,25 @@
+{
+  "about": "The composer on Request (the XMR payment request), on Monero.",
+  "snapshot": "data/split-alice-final.json",
+  "props": {
+    "policyJson": {
+      "policy": "monero-split",
+      "kind": "monero-split",
+      "account": ""
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "click": "roomKindRequest"
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

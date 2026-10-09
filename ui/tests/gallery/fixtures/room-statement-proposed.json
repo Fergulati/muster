@@ -1,0 +1,12 @@
+{
+  "about": "A statement proposed under the threshold policy, as each member sees it (recorded from two-instance-proof.sh).",
+  "snapshot": "data/statement-proposed.json",
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

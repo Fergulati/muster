@@ -1,0 +1,22 @@
+{
+  "about": "The composer on Payment, the LEZ multisig.",
+  "snapshot": "data/split-alice-final.json",
+  "props": {
+    "policyJson": {
+      "policy": "lez-multisig",
+      "kind": "lez-multisig",
+      "account": ""
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

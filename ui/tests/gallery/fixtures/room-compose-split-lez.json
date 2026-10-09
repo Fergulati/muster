@@ -1,0 +1,25 @@
+{
+  "about": "The composer on Split, the private split (lez-split).",
+  "snapshot": "data/split-alice-final.json",
+  "props": {
+    "policyJson": {
+      "policy": "lez-split",
+      "kind": "lez-split",
+      "account": ""
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "click": "roomKindSplit"
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

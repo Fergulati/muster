@@ -1,0 +1,18 @@
+{
+  "about": "A Monero payment request refused for want of a wallet, naming both remedies (recorded from split-xmr-self-test.sh).",
+  "snapshot": "data/xmr-request-refused.json",
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "click": "roomKindRequest"
+    },
+    {
+      "shot": ""
+    }
+  ]
+}
