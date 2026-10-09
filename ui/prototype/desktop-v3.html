@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muster desktop mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!--
+  Muster — desktop mockup v3 (exo-720.4, docs/design/ui-modernization.md §4 U0d).
+
+  The LAYOUT reference for the QML redesign (epic exo-720). A no-crypto simulation, like
+  coordination-prototype-v2.html, which stays the reference for the lifecycle and copy voice.
+  Where the two differ on layout, this file wins; where either differs from FURPS, FURPS wins.
+
+  Every colour below is a Logos.Theme token value (logos-design-system 1.0.0, DarkTheme.qml);
+  the comment beside each names the Theme.palette key the QML port uses. Type sizes are
+  Theme.typography's: 24 panelTitle · 16 subtitle · 14 primary · 12 secondary. Counts on
+  badges use 11 (badgeText is 8, too small to read; a token to add, exo-720.5).
+-->
+<style>
+:root{
+  --bg:#171717;            /* palette.background */
+  --bg2:#262626;           /* palette.backgroundSecondary */
+  --bg3:#1C1C1C;           /* palette.backgroundTertiary — sidebar, drawer */
+  --bg-elev:#0E121B;       /* palette.backgroundElevated — what has left the room (U-2) */
+  --inset:#141414;         /* palette.backgroundInset — inputs */
+  --surface:#343434;       /* palette.surface */
+  --raised:#232323;        /* palette.surfaceRaised — cards */
+  --recessed:#1F1F1F;      /* palette.surfaceRecessed */
+  --text:#FFFFFF;          /* palette.text */
+  --text2:#A4A4A4;         /* palette.textSecondary */
+  --text3:#969696;         /* palette.textTertiary */
+  --placeholder:#717784;   /* palette.textPlaceholder */
+  --border:#434343;        /* palette.border */
+  --border-subtle:#333333; /* palette.borderSubtle */
+  --hairline:rgba(128,128,128,.2); /* palette.borderHairline */
+  --primary:#ED7B58;       /* palette.primary */
+  --primary-hover:#F55702; /* palette.primaryHover */
+  --primary-soft:#FFD5C0;  /* palette.primarySoft */
+  --success:#6CCC93;       /* colors.green400 (palette.successHover) — readable on dark */
+  --error:#FF736A;         /* colors.red400 (palette.errorHover) */
+  --warning:#FEBC2E;       /* palette.warning */
+  --info:#4A90E2;          /* palette.info */
+  --hover:#262626;         /* row hover: backgroundSecondary */
+  --focus:#FF8800;         /* palette.focus */
+  --ui:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;   /* typography.publicSans */
+  --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#0b0b0b;color:var(--text);font-family:var(--ui);font-size:14px;-webkit-font-smoothing:antialiased;min-height:100vh}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:none;padding:0}
+input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+svg.i.sm{width:15px;height:15px}
+.mono{font-family:var(--mono);font-size:12px}
+.muted{color:var(--text2)}
+.dim{color:var(--text3)}
+
+/* ---------- mockup chrome (not the app) ---------- */
+.mock-bar{position:sticky;top:0;z-index:100;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:10px 16px;background:#0b0b0b;border-bottom:1px solid #222;font-size:12px;color:#bbb}
+.mock-bar b{color:#fff;font-weight:600;font-size:13px;margin-right:4px}
+.mock-bar .grp{display:flex;align-items:center;gap:4px}
+.mock-bar .seg{padding:4px 9px;border:1px solid #333;border-radius:999px;color:#bbb}
+.mock-bar .seg[aria-pressed=true]{background:#fff;color:#111;border-color:#fff}
+.mock-bar label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.mock-bar .sp{flex:1}
+.stage{padding:16px;display:flex;justify-content:center}
+.stage-inner{position:relative}
+.frame{display:flex;background:var(--bg);border:1px solid #2a2a2a;border-radius:10px;overflow:hidden;position:relative;transform-origin:top left;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.legend{max-width:1100px;margin:8px auto 48px;padding:0 16px;color:#aaa;font-size:13px;line-height:1.6;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px}
+.legend h3{color:#fff;font-size:14px;margin:0 0 6px}
+.legend ol,.legend ul{margin:0;padding-left:18px}
+.legend code{font-family:var(--mono);font-size:12px;color:#ddd}
+
+/* ---------- Basecamp's own chrome (simulated host) ---------- */
+.host-rail{display:none;width:60px;flex:none;background:#0E121B;border-right:1px solid #1d2230;flex-direction:column;align-items:center;gap:10px;padding:12px 0}
+.frame.basecamp .host-rail{display:flex}
+.host-rail .app-ico{width:36px;height:36px;border-radius:10px;background:#1b2130;display:grid;place-items:center;color:#7f8aa3;font-size:11px;font-weight:700}
+.host-rail .app-ico.on{background:var(--primary);color:#171717}
+.host-rail .lbl{font-size:9px;color:#5f6a82;letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+
+/* ---------- the app ---------- */
+.app{flex:1;min-width:0;display:flex;position:relative;overflow:hidden}
+
+/* sidebar */
+.side{width:248px;flex:none;background:var(--bg3);border-right:1px solid var(--border-subtle);display:flex;flex-direction:column;min-height:0;transition:width .15s}
+.app[data-side=rail] .side{width:60px}
+.app[data-side=hidden] .side{position:absolute;inset:0 auto 0 0;width:272px;z-index:40;transform:translateX(-105%);transition:transform .18s;box-shadow:12px 0 40px rgba(0,0,0,.5)}
+.app[data-side=hidden].side-open .side{transform:none}
+.side-top{display:flex;align-items:center;gap:8px;padding:14px 12px 8px 16px}
+.brand{font-weight:700;font-size:16px;letter-spacing:-.01em;flex:1;display:flex;align-items:center;gap:8px}
+.brand .mark{width:22px;height:22px;border-radius:6px;background:var(--primary);color:#171717;display:grid;place-items:center;font-size:12px;font-weight:800}
+.app[data-side=rail] .brand .word,.app[data-side=rail] .side .txt,.app[data-side=rail] .side .sec-h .txt,.app[data-side=rail] .side .kbd,.app[data-side=rail] .room-row .meta,.app[data-side=rail] .me .who{display:none}
+.app[data-side=rail] .side-top{flex-direction:column;padding:14px 0 8px;gap:10px}
+.app[data-side=rail] .brand{flex:none}
+.side-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:4px 8px 8px}
+.nav{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:6px;color:var(--text2);text-align:left;position:relative}
+.nav:hover{background:var(--hover);color:var(--text)}
+.nav[aria-current=page]{background:var(--surface);color:var(--text)}
+.nav .txt{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.app[data-side=rail] .nav{justify-content:center;padding:9px 0}
+.count{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--primary);color:#171717;font-size:11px;font-weight:700;display:inline-grid;place-items:center}
+.app[data-side=rail] .nav .count{position:absolute;top:2px;right:6px;min-width:16px;height:16px;font-size:10px;padding:0 4px}
+.search{display:flex;align-items:center;gap:8px;width:100%;margin:4px 0 8px;padding:7px 10px;border-radius:6px;background:var(--inset);border:1px solid var(--border-subtle);color:var(--placeholder);font-size:13px}
+.search:hover{border-color:var(--border)}
+.app[data-side=rail] .search{justify-content:center;padding:8px 0;background:none;border-color:transparent}
+.kbd{margin-left:auto;font-family:var(--mono);font-size:11px;border:1px solid var(--border);border-radius:4px;padding:0 5px;color:var(--text3)}
+.sec-h{display:flex;align-items:center;justify-content:space-between;padding:14px 10px 6px;color:var(--text3);font-size:12px;font-weight:600;letter-spacing:.02em}
+.app[data-side=rail] .sec-h{justify-content:center;padding:12px 0 6px}
+.icon-btn{width:32px;height:32px;border-radius:6px;display:inline-grid;place-items:center;color:var(--text2);flex:none;position:relative}
+.icon-btn:hover{background:var(--hover);color:var(--text)}
+.icon-btn[aria-pressed=true]{background:var(--surface);color:var(--text)}
+.icon-btn.sm{width:26px;height:26px}
+.room-row{display:flex;align-items:center;gap:10px;width:100%;padding:7px 8px;border-radius:6px;text-align:left;position:relative}
+.room-row:hover{background:var(--hover)}
+.room-row[aria-current=page]{background:var(--surface)}
+.room-row .meta{flex:1;min-width:0}
+.room-row .meta{display:block;overflow:hidden}
+.room-row .t{display:flex;align-items:baseline;gap:6px}
+.room-row .t b{font-weight:500;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.room-row.unread .t b{font-weight:700}
+.room-row .when{font-size:11px;color:var(--text3);flex:none}
+.room-row .pv{display:block;font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.room-row .pv.hot{color:var(--primary)}
+.dot-needs{width:8px;height:8px;border-radius:50%;background:var(--primary);flex:none}
+.app[data-side=rail] .room-row{justify-content:center;padding:6px 0}
+.app[data-side=rail] .room-row .dot-needs{position:absolute;top:5px;right:9px;box-shadow:0 0 0 2px var(--bg3)}
+.side-foot{border-top:1px solid var(--border-subtle);padding:8px}
+.me{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;width:100%;text-align:left}
+.me:hover{background:var(--hover)}
+.me .who{flex:1;min-width:0;font-size:13px}
+.me .who .net{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px}
+.app[data-side=rail] .me{justify-content:center;padding:8px 0}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--success);display:inline-block;flex:none}
+.live-dot.warn{background:var(--warning)}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:35}
+
+/* avatars */
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;color:#171717;flex:none;user-select:none}
+.av.sm{width:22px;height:22px;font-size:10px}
+.av.lg{width:36px;height:36px;font-size:14px}
+.av.room{border-radius:8px;background:var(--surface);color:var(--text)}
+.faces{display:flex}
+.faces .av{box-shadow:0 0 0 2px var(--bg)}
+.faces .av+.av{margin-left:-7px}
+
+/* main */
+.main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;position:relative}
+.page{flex:1;min-height:0;overflow-y:auto}
+.page-inner{max-width:880px;margin:0 auto;padding:28px 32px 48px}
+.page-h{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px}
+.page-h h1{font-size:24px;font-weight:700;margin:0;letter-spacing:-.01em}
+.page-h p{margin:4px 0 0;color:var(--text2)}
+.burger{display:none}
+.app[data-side=hidden] .burger{display:inline-grid}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 14px;border-radius:6px;font-weight:600;font-size:13px;white-space:nowrap;border:1px solid transparent}
+.btn.primary{background:var(--primary);color:#171717}
+.btn.primary:hover{background:var(--primary-hover)}
+.btn.secondary{border-color:var(--border);color:var(--text)}
+.btn.secondary:hover{background:var(--hover)}
+.btn.ghost{color:var(--text2)}
+.btn.ghost:hover{color:var(--text);background:var(--hover)}
+.btn.danger{background:var(--error);color:#171717}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.sm{height:28px;padding:0 10px;font-size:12px}
+.link{color:var(--primary);font-weight:500;font-size:13px}
+.link:hover{text-decoration:underline}
+
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;flex:none}
+.pill.needs{background:rgba(237,123,88,.16);color:var(--primary)}
+.pill.wait{background:rgba(255,255,255,.07);color:var(--text2)}
+.pill.done{background:rgba(108,204,147,.14);color:var(--success)}
+.pill.bad{background:rgba(255,115,106,.14);color:var(--error)}
+.pill.info{background:rgba(74,144,226,.16);color:#8db8ee}
+.pill.out{background:rgba(74,144,226,.16);color:#8db8ee}
+
+/* home rows */
+.chips{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.chip{height:28px;padding:0 12px;border-radius:999px;border:1px solid var(--border);color:var(--text2);font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.chip:hover{color:var(--text)}
+.chip[aria-pressed=true]{background:var(--text);color:#171717;border-color:var(--text)}
+.chip .n{opacity:.65}
+.group-h{font-size:12px;font-weight:600;color:var(--text3);margin:20px 0 8px;letter-spacing:.02em}
+.group-h.hot{color:var(--primary)}
+.list{border:1px solid var(--border-subtle);border-radius:8px;overflow:hidden;background:var(--raised)}
+.lrow{display:flex;align-items:center;gap:14px;width:100%;padding:12px 16px;text-align:left;border-top:1px solid var(--border-subtle)}
+.lrow:first-child{border-top:none}
+.lrow:hover{background:var(--bg2)}
+.lrow .body{flex:1;min-width:0}
+.lrow .t{display:block;font-weight:600}
+.lrow .s{display:block;color:var(--text2);font-size:13px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lrow .when{font-size:12px;color:var(--text3);flex:none;width:44px;text-align:right}
+.invite{display:flex;align-items:center;gap:12px;padding:12px 16px;border:1px solid rgba(237,123,88,.35);background:rgba(237,123,88,.07);border-radius:8px;margin-bottom:8px}
+.invite .body{flex:1}
+.joinbox{display:flex;gap:8px;margin-top:28px;align-items:center}
+.joinbox .lbl{color:var(--text3);font-size:13px;margin-right:4px;white-space:nowrap}
+.field-in{flex:1;height:34px;padding:0 10px;border-radius:6px;background:var(--inset);border:1px solid var(--border-subtle);outline:none;min-width:0}
+.field-in:focus{border-color:var(--primary)}
+.field-in::placeholder{color:var(--placeholder)}
+.empty{border:1px dashed var(--border);border-radius:8px;padding:32px;text-align:center;color:var(--text2)}
+.empty p{margin:0 0 14px}
+
+/* room */
+.room-head{height:56px;flex:none;display:flex;align-items:center;gap:10px;padding:0 12px 0 20px;border-bottom:1px solid var(--border-subtle)}
+.app[data-side=hidden] .room-head{padding-left:8px}
+.room-title{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;padding:4px 6px;margin-left:-6px;border-radius:6px;text-align:left}
+.room-title:hover{background:var(--hover)}
+.rename{height:32px;padding:0 10px;border-radius:6px;background:var(--inset);border:1px solid var(--primary);outline:none;font-weight:700;font-size:15px;width:280px}
+.head-sp{flex:1}
+.people-btn{display:flex;align-items:center;gap:8px;padding:4px 8px 4px 4px;border-radius:999px;color:var(--text2);font-size:13px}
+.people-btn:hover{background:var(--hover);color:var(--text)}
+.conn{display:flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;color:var(--text2)}
+.conn:hover{background:var(--hover);color:var(--text)}
+.head-actions{display:flex;align-items:center;gap:2px}
+.pinned{flex:none;display:flex;align-items:center;gap:12px;padding:8px 20px;background:rgba(237,123,88,.09);border-bottom:1px solid rgba(237,123,88,.25);font-size:13px}
+.pinned.bad{background:rgba(255,115,106,.08);border-bottom-color:rgba(255,115,106,.3)}
+.pinned .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pinned .t b{color:var(--primary)}
+.pinned.bad .t b{color:var(--error)}
+.banner{flex:none;display:flex;align-items:center;gap:10px;padding:8px 20px;background:rgba(254,188,46,.08);border-bottom:1px solid rgba(254,188,46,.25);font-size:13px;color:var(--warning)}
+.banner .t{flex:1;color:var(--text)}
+.thread{flex:1;min-height:0;overflow-y:auto;padding:12px 0 8px}
+.thread-inner{max-width:780px;margin:0 auto;padding:0 24px}
+.day{display:flex;align-items:center;gap:12px;color:var(--text3);font-size:12px;font-weight:600;margin:14px 0 6px}
+.day::before,.day::after{content:"";flex:1;height:1px;background:var(--border-subtle)}
+.msg{display:flex;gap:12px;padding:6px 8px;margin:0 -8px;border-radius:6px}
+.msg:hover{background:rgba(255,255,255,.025)}
+.msg .body{flex:1;min-width:0}
+.msg .hd{display:flex;align-items:baseline;gap:8px}
+.msg .hd b{font-weight:600}
+.msg .hd span{font-size:12px;color:var(--text3)}
+.msg .tx{line-height:1.5;color:#e9e9e9;margin-top:1px}
+.msg.cont{padding-top:0}
+.msg.cont .gut{width:28px;flex:none}
+.sys{font-size:13px;color:var(--text2);padding:6px 0 6px 40px;line-height:1.5}
+.sys b{color:var(--text);font-weight:600}
+.seam{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--info);font-size:12px;font-weight:600}
+.seam::before,.seam::after{content:"";flex:1;height:0;border-top:1px dashed rgba(74,144,226,.5)}
+.notice{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--raised);margin:8px 0 8px 40px;font-size:13px;line-height:1.45}
+.notice .t{flex:1}
+.notice .acts{display:flex;gap:6px;flex:none;align-self:center}
+.notice.info{border-color:rgba(74,144,226,.4);background:rgba(74,144,226,.07)}
+.notice.info>svg{color:var(--info)}
+.notice.warn{border-color:rgba(254,188,46,.4);background:rgba(254,188,46,.06)}
+.notice.warn>svg{color:var(--warning)}
+.notice.err{border-color:rgba(255,115,106,.45);background:rgba(255,115,106,.07)}
+.notice.err>svg{color:var(--error)}
+.notice.flat{margin:0}
+.notice .acts.wrap{flex-wrap:wrap}
+
+/* cards */
+.card{margin:8px 0 10px 40px;max-width:600px;background:var(--raised);border:1px solid var(--border-subtle);border-radius:10px;overflow:hidden}
+.card.flash{animation:flash 1s ease-out}
+@keyframes flash{0%{box-shadow:0 0 0 0 rgba(237,123,88,.6)}100%{box-shadow:0 0 0 14px rgba(237,123,88,0)}}
+.card-h{display:flex;align-items:center;gap:10px;padding:12px 14px 0}
+.kind-ico{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:rgba(237,123,88,.14);color:var(--primary);flex:none}
+.card-h .k{flex:1;min-width:0}
+.card-h .k b{display:block;font-weight:600}
+.card-h .k span{font-size:12px;color:var(--text3)}
+.card-b{padding:10px 14px 0}
+.amount{font-size:22px;font-weight:700;letter-spacing:-.01em}
+.amount small{font-size:14px;color:var(--text2);font-weight:500;margin-left:4px}
+.memo{color:var(--text2);margin-top:2px;font-size:13px}
+.parts{margin-top:10px;border-top:1px solid var(--border-subtle)}
+.part{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border-subtle);font-size:13px}
+.part .nm{flex:1;min-width:0}
+.part .amt{font-family:var(--mono);font-size:12px;color:var(--text2)}
+.part .st{font-size:12px;width:170px;text-align:right;color:var(--text2)}
+.part .st.ok{color:var(--success)}
+.part .st.me{color:var(--primary);font-weight:600}
+.card-meta .trust{margin-left:auto;display:inline-flex;align-items:center;gap:12px}
+.card-meta .trust span{display:inline-flex;align-items:center;gap:5px}
+.card-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 14px;font-size:12px;color:var(--text2)}
+.slots{display:flex;gap:4px}
+.slot{width:24px;height:24px;border-radius:50%;border:1.5px dashed var(--border);display:grid;place-items:center}
+.slot .av{width:24px;height:24px;font-size:10px}
+.check{display:inline-flex;align-items:center;gap:5px;color:var(--success);border:none;padding:2px 6px;margin:-2px -6px;border-radius:4px}
+.check:hover{background:var(--hover)}
+.check.bad{color:var(--error)}
+.card-a{display:flex;align-items:center;gap:8px;padding:10px 14px 12px;border-top:1px solid var(--border-subtle)}
+.card-a .sp{flex:1}
+.details{border-top:1px solid var(--border-subtle);background:var(--recessed);padding:4px 14px 12px}
+.q{display:grid;grid-template-columns:150px 1fr;gap:4px 14px;padding:9px 0;border-bottom:1px solid var(--border-subtle);font-size:13px;line-height:1.5}
+.q:last-child{border-bottom:none}
+.q dt{color:var(--text3);font-weight:600}
+.q dd{margin:0}
+.need{display:flex;gap:8px;align-items:baseline}
+.need .ok{color:var(--success)} .need .no{color:var(--error)} .need .unk{color:var(--warning)}
+.kv{display:grid;grid-template-columns:90px 1fr;gap:2px 10px;font-family:var(--mono);font-size:12px;color:var(--text2);word-break:break-all}
+.kv span:nth-child(odd){color:var(--text3)}
+.rail{display:flex;gap:4px;margin-top:10px}
+.rail .st{flex:1;height:4px;border-radius:2px;background:var(--surface)}
+.rail .st.on{background:var(--primary)}
+.rail-l{display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:5px}
+.rail-l .now{color:var(--text);font-weight:600}
+.card.public{background:var(--bg-elev);border-color:rgba(74,144,226,.45)}
+.card.public .kind-ico{background:rgba(74,144,226,.16);color:#8db8ee}
+.leftroom{margin:10px 14px 12px;padding:10px 12px;border-radius:6px;background:rgba(74,144,226,.08);color:#c7d6ea;font-size:13px;line-height:1.5}
+.blocked{margin:10px 14px 0;padding:10px 12px;border-radius:6px;background:rgba(255,115,106,.08);border:1px solid rgba(255,115,106,.35);font-size:13px;line-height:1.5}
+.blocked b{color:var(--error)}
+.addr{margin:8px 0 10px 40px;max-width:600px;display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--border-subtle);border-radius:10px;background:var(--raised);font-size:13px}
+.addr .body{flex:1;min-width:0}
+.qr{width:64px;height:64px;border-radius:6px;background:repeating-conic-gradient(#e8e8e8 0 25%,#171717 0 50%) 0 0/12px 12px;flex:none;border:4px solid #e8e8e8}
+
+/* composer */
+.composer{flex:none;padding:8px 24px 10px}
+.composer-inner{max-width:780px;margin:0 auto;position:relative}
+.cbox{display:flex;align-items:center;gap:6px;padding:6px;border:1px solid var(--border);border-radius:10px;background:var(--inset)}
+.cbox:focus-within{border-color:var(--text3)}
+.cbox input{flex:1;min-width:0;height:32px;border:none;background:none;outline:none;padding:0 6px}
+.cbox input::placeholder{color:var(--placeholder)}
+.plus{width:32px;height:32px;border-radius:7px;display:grid;place-items:center;background:var(--surface);color:var(--text)}
+.plus:hover,.plus[aria-expanded=true]{background:var(--primary);color:#171717}
+.scope{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:12px;color:var(--text3)}
+.scope .lock{color:var(--success);display:inline-flex}
+.scope button{color:var(--text2);text-decoration:underline;text-decoration-color:var(--border);text-underline-offset:3px}
+.scope button:hover{color:var(--text)}
+
+/* popovers, menus */
+.pop{position:absolute;z-index:60;background:var(--bg2);border:1px solid var(--border);border-radius:10px;box-shadow:0 16px 48px rgba(0,0,0,.55);padding:6px;min-width:220px}
+.pop h4{margin:6px 8px 8px;font-size:13px}
+.menu-i{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:6px;text-align:left;font-size:13px}
+.menu-i:hover{background:var(--surface)}
+.menu-i.danger{color:var(--error)}
+.menu-sep{height:1px;background:var(--border-subtle);margin:4px 2px}
+.conn-row{display:flex;gap:10px;padding:8px;font-size:13px;align-items:flex-start}
+.conn-row .body{flex:1}
+.conn-row .s{font-size:12px;color:var(--text3);margin-top:1px}
+.actions-pop{bottom:calc(100% + 8px);left:0;width:min(560px,100%);padding:10px}
+.agrid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.act{display:flex;gap:10px;align-items:flex-start;text-align:left;padding:10px;border-radius:8px;border:1px solid var(--border-subtle);background:var(--raised)}
+.act:hover:not(:disabled){border-color:var(--primary)}
+.act:disabled{opacity:.55;cursor:default}
+.act .t{font-weight:600;font-size:13px}
+.act .d{font-size:12px;color:var(--text3);margin-top:2px;line-height:1.4}
+.act .drv{font-family:var(--mono);font-size:11px;color:var(--text3);margin-top:4px}
+.act .why{font-size:12px;color:var(--warning);margin-top:4px}
+
+/* sheets & dialogs */
+.modal-wrap{position:absolute;inset:0;z-index:70;display:grid;place-items:center;background:rgba(0,0,0,.5);padding:24px}
+.sheet{width:min(560px,100%);max-height:100%;display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border);border-radius:12px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:16px 16px 12px 20px;border-bottom:1px solid var(--border-subtle)}
+.sheet-h h2{flex:1;margin:0;font-size:16px}
+.sheet-b{padding:16px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.sheet-f{display:flex;align-items:center;gap:8px;padding:12px 20px 16px;border-top:1px solid var(--border-subtle)}
+.sheet-f .scope{margin:0;flex:1}
+.fld label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px}
+.fld .row{display:flex;gap:8px}
+.fld select{height:34px;border-radius:6px;background:var(--inset);border:1px solid var(--border-subtle);padding:0 8px}
+.fld .hint{font-size:12px;color:var(--text3);margin-top:5px;line-height:1.45}
+.pickers{display:flex;flex-wrap:wrap;gap:6px}
+.pick{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 4px;border-radius:999px;border:1px solid var(--border);font-size:13px}
+.pick[aria-pressed=true]{border-color:var(--primary);background:rgba(237,123,88,.12)}
+.pick .av{width:22px;height:22px;font-size:10px}
+.shares{border:1px solid var(--border-subtle);border-radius:8px;padding:4px 12px;background:var(--inset)}
+.shares .part:last-child{border-bottom:none}
+.disclose{color:var(--text2);font-size:13px;display:flex;align-items:center;gap:6px}
+.dlg{width:min(440px,100%);background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.dlg h2{margin:0 0 8px;font-size:16px}
+.dlg p{margin:0 0 16px;color:var(--text2);line-height:1.5}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px}
+.switcher{width:min(520px,100%);align-self:start;margin-top:60px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.switcher input{width:100%;height:48px;border:none;border-bottom:1px solid var(--border-subtle);background:none;outline:none;padding:0 16px;font-size:15px}
+.switcher .res{max-height:320px;overflow-y:auto;padding:6px}
+.switcher .menu-i[aria-selected=true]{background:var(--surface)}
+
+/* toast */
+.toast{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);z-index:80;background:var(--text);color:#171717;border-radius:8px;padding:9px 14px;font-weight:600;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.5);display:flex;gap:8px;align-items:center}
+
+/* details drawer */
+.drawer{width:360px;flex:none;display:flex;flex-direction:column;background:var(--bg3);border-left:1px solid var(--border-subtle);min-height:0}
+.app[data-details=overlay] .drawer{position:absolute;right:0;top:0;bottom:0;z-index:30;box-shadow:-12px 0 40px rgba(0,0,0,.5)}
+.drawer-h{display:flex;align-items:center;padding:0 8px 0 16px;height:56px;border-bottom:1px solid var(--border-subtle)}
+.drawer-h h3{flex:1;margin:0;font-size:15px}
+.tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--border-subtle)}
+.tab{padding:8px 10px;font-size:13px;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--text)}
+.tab[aria-selected=true]{color:var(--text);border-bottom-color:var(--primary);font-weight:600}
+.drawer-b{flex:1;min-height:0;overflow-y:auto;padding:14px 16px 24px}
+.d-sec{font-size:12px;font-weight:600;color:var(--text3);margin:14px 0 8px;letter-spacing:.02em}
+.d-sec:first-child{margin-top:0}
+.mrow{display:flex;align-items:center;gap:10px;padding:7px 0}
+.mrow .body{flex:1;min-width:0;font-size:13px}
+.mrow .body .s{font-size:12px;color:var(--text3)}
+.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--surface);color:var(--text2);margin-left:4px;font-weight:500}
+.foot-note{font-size:12px;color:var(--text3);line-height:1.5;margin-top:12px}
+.acct{border:1px solid var(--border-subtle);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:var(--raised)}
+.acct .t{display:flex;align-items:center;gap:8px;font-weight:600}
+.acct .s{font-size:12px;color:var(--text3);margin-top:4px;line-height:1.5}
+.hist{position:relative;padding-left:18px}
+.hist::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:1px;background:var(--border)}
+.hi{position:relative;padding:0 0 14px;font-size:13px;line-height:1.45}
+.hi::before{content:"";position:absolute;left:-17px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--bg3);border:2px solid var(--text3)}
+.hi.key::before{border-color:var(--info)}
+.hi.act::before{border-color:var(--primary)}
+.hi .s{font-size:12px;color:var(--text3)}
+.filter-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border-radius:999px;background:rgba(237,123,88,.12);color:var(--primary);font-size:12px;font-weight:600;margin-bottom:12px}
+.mx{width:100%;border-collapse:collapse;font-size:12px}
+.mx th{font-weight:600;color:var(--text3);text-align:center;padding:6px 2px;vertical-align:bottom;line-height:1.25}
+.mx th:first-child{text-align:left}
+.mx td{padding:8px 2px;border-top:1px solid var(--border-subtle);text-align:center}
+.mx td:first-child{text-align:left;color:var(--text)}
+.cell{display:inline-block;width:10px;height:10px;border-radius:50%}
+.cell.y{background:var(--primary)} .cell.m{background:transparent;border:2px solid var(--warning)} .cell.n{background:var(--surface)}
+.obs{border:1px solid var(--border-subtle);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;line-height:1.5}
+.obs b{display:block;margin-bottom:2px}
+.obs.out{border-color:rgba(74,144,226,.45)}
+
+/* settings */
+.set-wrap{display:flex;min-height:100%}
+.set-nav{width:200px;flex:none;padding:28px 8px;border-right:1px solid var(--border-subtle)}
+.set-body{flex:1;min-width:0}
+.set-card{border:1px solid var(--border-subtle);border-radius:8px;background:var(--raised);padding:4px 16px;margin-bottom:16px}
+.set-row{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--border-subtle)}
+.set-row:last-child{border-bottom:none}
+.set-row .body{flex:1}
+.set-row .s{font-size:12px;color:var(--text3);margin-top:2px;line-height:1.45}
+.seg2{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.seg2 button{padding:5px 10px;font-size:12px;color:var(--text2)}
+.seg2 button[aria-pressed=true]{background:var(--surface);color:var(--text);font-weight:600}
+.toggle{width:36px;height:20px;border-radius:999px;background:var(--surface);position:relative;flex:none}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--text2);transition:left .12s}
+.toggle[aria-pressed=true]{background:var(--primary)}
+.toggle[aria-pressed=true]::after{left:19px;background:#171717}
+.bal{display:flex;align-items:center;gap:14px;padding:12px 16px;border-top:1px solid var(--border-subtle)}
+.bal:first-child{border-top:none}
+.bal .body{flex:1}
+.bal .v{font-family:var(--mono);font-size:13px}
+.claim{padding:12px 16px;border-top:1px solid var(--border-subtle);display:flex;gap:12px;align-items:flex-start}
+.claim:first-child{border-top:none}
+.claim .body{flex:1}
+
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="mock-bar" role="toolbar" aria-label="Mockup controls">
+  <b>Muster · desktop mockup v3</b>
+  <span class="grp" id="mb-width"></span>
+  <label><input type="checkbox" id="mb-basecamp"> inside Basecamp</label>
+  <label><input type="checkbox" id="mb-refusal"> proposals are refused</label>
+  <label><input type="checkbox" id="mb-mismatch"> a payload mismatch</label>
+  <label><input type="checkbox" id="mb-rpc"> RPC down</label>
+  <span class="sp"></span>
+  <button class="seg" id="mb-reset">Reset</button>
+</div>
+
+<div class="stage"><div class="stage-inner" id="stage-inner">
+  <div class="frame" id="frame">
+    <div class="host-rail" aria-label="Basecamp (simulated host chrome)">
+      <span class="lbl">Basecamp</span>
+      <span class="app-ico">W</span><span class="app-ico on">M</span><span class="app-ico">S</span><span class="app-ico">⋯</span>
+    </div>
+    <div class="app" id="app"></div>
+  </div>
+</div></div>
+
+<div class="legend">
+  <div>
+    <h3>Worth poking at</h3>
+    <ol>
+      <li><b>Dinner at Ana's</b>: agree to your share, then pay it. The pinned line, the card and the sidebar follow.</li>
+      <li>Admit Carol from the thread. The seam marks what she can't read.</li>
+      <li>On a card, <b>Who sees this?</b> opens Privacy, filtered to that proposal.</li>
+      <li><b>+</b> in the message bar → Split a bill. Tick “proposals are refused” to see a refusal stay in the form, with its remedy.</li>
+      <li><b>Ops Safe</b>: tick “a payload mismatch”. The card blocks itself and says why (U-8).</li>
+      <li>Ctrl K jumps between rooms; Esc closes whatever is on top.</li>
+      <li>Change the width and tick “inside Basecamp”: the sidebar becomes a rail, the drawer overlays.</li>
+    </ol>
+  </div>
+  <div>
+    <h3>Where today's right panel went</h3>
+    <ul>
+      <li>Connections → the dot in the room header; a banner only when something is down.</li>
+      <li>Room accounts → Details › Accounts; a refusal that names one opens it.</li>
+      <li>Room history → Details › History.</li>
+      <li>Who can see what → Details › Privacy, and each card's “Who sees this?”.</li>
+      <li>Roster, join requests, Admit → the header's faces, Details › People, and a notice in the thread.</li>
+      <li>Room code, Rename, Leave → Invite, a click on the title, and the ⋯ menu.</li>
+    </ul>
+  </div>
+  <div>
+    <h3>Reading this file</h3>
+    <ul>
+      <li>Plan: <code>docs/design/ui-modernization.md</code>, epic <code>exo-720</code>.</li>
+      <li>Colours are <code>Logos.Theme</code> values; the CSS names each <code>Theme.palette</code> key.</li>
+      <li>No crypto, no network: a simulation for layout, like v2.</li>
+      <li>What it shows must already be true of the module. Anything it can't show truthfully is a product bug, not a copy problem.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ===================================================================== icons */
+const IC = {
+  inbox:'<path d="M3 13h5l1.5 2.5h5L16 13h5"/><path d="M5 5h14l2 8v6H3v-6z"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  wallet:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 14.5h2"/>',
+  people:'<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14c2.3 0 4 1.5 4.5 4"/>',
+  book:'<path d="M4 5.5C4 4.7 4.7 4 5.5 4H11v15H5.5A1.5 1.5 0 0 1 4 17.5z"/><path d="M20 5.5c0-.8-.7-1.5-1.5-1.5H13v15h5.5c.8 0 1.5-.7 1.5-1.5z"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6.2l2.1 2.1M17.7 15.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 17.8l2.1-2.1M17.7 8.3l2.1-2.1"/>',
+  search:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+  more:'<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
+  panel:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  sidebar:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  menu:'<path d="M4 7h16M4 12h16M4 17h16"/>',
+  x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  send:'<path d="M4 12l16-8-6 16-2.5-6.5z"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  alert:'<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.5v.01"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  shield:'<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/>',
+  lock:'<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  key:'<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/>',
+  link:'<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
+  out:'<path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  split:'<path d="M12 21V12M12 12L5 4M12 12l7-8M5 4v4M5 4h4M19 4v4M19 4h-4"/>',
+  coin:'<circle cx="12" cy="12" r="8.5"/><path d="M14.5 9.2c-.5-.9-1.5-1.4-2.6-1.4-1.6 0-2.7.9-2.7 2.1 0 2.8 5.6 1.5 5.6 4.2 0 1.2-1.2 2.1-2.8 2.1-1.2 0-2.3-.6-2.8-1.6M12 6v1.8M12 16.2V18"/>',
+  safe:'<rect x="3.5" y="4" width="17" height="15" rx="2"/><circle cx="12" cy="11.5" r="3.5"/><path d="M12 8v1M12 14v1M7 19v2M17 19v2"/>',
+  btc:'<path d="M8 5h6a3 3 0 0 1 0 6H8zM8 11h7a3 3 0 0 1 0 6H8zM8 5v12M10 3v2M13 3v2M10 17v2M13 17v2"/>',
+  lambda:'<path d="M6 4h3l9 16M12 11L6 20"/>',
+  code:'<path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/>',
+  ask:'<path d="M5 5h14v10H9l-4 4z"/><path d="M10 9.5a2 2 0 1 1 2.5 1.9c-.4.1-.5.4-.5.8M12 13.5v.01"/>',
+  net:'<path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0"/><circle cx="12" cy="12" r="1"/>',
+  door:'<path d="M14 4H6v16h8M10 12h10M17 9l3 3-3 3"/>',
+  chevd:'<path d="M6 9l6 6 6-6"/>',
+  chevu:'<path d="M6 15l6-6 6 6"/>',
+  chevr:'<path d="M9 6l6 6-6 6"/>',
+  qr:'<rect x="4" y="4" width="6" height="6"/><rect x="14" y="4" width="6" height="6"/><rect x="4" y="14" width="6" height="6"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2v2"/>',
+};
+const ic = (n, cls) => `<svg class="i${cls?" "+cls:""}" viewBox="0 0 24 24" aria-hidden="true">${IC[n]||""}</svg>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ===================================================================== people */
+// Names are each viewer's own address-book aliases (local, never sent to a room);
+// colours are derived from the member id, so they show nothing a member didn't disclose (inv 9).
+const P = {
+  you:{n:"You",   alias:"corey", id:"a3f2…91c0", c:"#ED7B58"},
+  ana:{n:"Ana",   id:"5e10…be72", c:"#6CCC93"},
+  bob:{n:"Bob",   id:"c771…0a19", c:"#4A90E2"},
+  carol:{n:"Carol",id:"19bd…e4f7", c:"#B48EF0"},
+  mira:{n:"Mira", id:"0d4e…77a2", c:"#FEBC2E"},
+  dev:{n:"Devon", id:"8a02…c3d1", c:"#29B6F6"},
+  sol:{n:"Sol",   id:"f61c…2b80", c:"#FF736A"},
+};
+const av = (id, cls) => { const p = P[id]; return p ? `<span class="av${cls?" "+cls:""}" style="background:${p.c}" title="${esc(p.n)}">${esc(p.n[0])}</span>` : ""; };
+const nm = id => (P[id] ? P[id].n : id);
+
+/* ===================================================================== state */
+let S, ROOMS, CARDS, uid;
+function seed(){
+  uid = 0;
+  CARDS = {
+    split1:{id:"split1", kind:"split", room:"dinner", proposer:"ana", creditor:"ana", asset:"ETH", chain:"Sepolia",
+      total:"0.12", memo:"Dinner at Ana's · Friday", at:"18:42",
+      shares:[{who:"you", amt:"0.04", st:"to agree"},{who:"bob", amt:"0.04", st:"agreed"}],
+      creditorAgreed:true, status:"collecting", open:false},
+    safe1:{id:"safe1", kind:"safe", room:"ops", proposer:"mira", account:"Ops Safe", policy:"2 of 3", chain:"Sepolia",
+      amount:"0.5", asset:"ETH", to:"0x7f3a…c19d", toLabel:"hosting invoice", nonce:14, at:"09:12",
+      signers:["mira","you","dev"], signed:["mira"], need:2, status:"collecting", conf:0, open:false},
+    safe0:{id:"safe0", kind:"safe", room:"ops", proposer:"dev", account:"Ops Safe", policy:"2 of 3", chain:"Sepolia",
+      amount:"1.2", asset:"ETH", to:"0xd1c8…3a77", toLabel:"node renewal", nonce:13, at:"Mon",
+      signers:["mira","you","dev"], signed:["dev","you"], need:2, status:"final", conf:12, open:false},
+    xmr1:{id:"xmr1", kind:"xmr", room:"rent", proposer:"you", creditor:"you", debtor:"dev", amount:"0.8", asset:"XMR",
+      chain:"Monero stagenet", sub:"84Lj…Qr2", seen:4, need:10, claimed:true, status:"collecting", at:"Tue", open:false},
+  };
+  ROOMS = {
+    dinner:{id:"dinner", title:"Dinner at Ana's", code:"/muster/1/muster.room.6ac8ea9cdc366149/proto",
+      members:["you","ana","bob"], epoch:2, when:"18:44", unread:2,
+      blocks:[
+        {k:"day", t:"Friday"},
+        {k:"sys", h:"<b>Ana</b> opened this room and invited <b>you</b> and <b>Bob</b>."},
+        {k:"msg", who:"ana", t:"Thanks for coming last night! Dinner came to 0.12 ETH all in.", at:"18:40"},
+        {k:"msg", who:"ana", t:"I'll put a split in so nobody has to do maths.", at:"18:41"},
+        {k:"card", id:"split1"},
+        {k:"msg", who:"bob", t:"Agreed mine.", at:"18:43"},
+        {k:"join", who:"carol", state:"pending", at:"18:44"},
+      ],
+      history:[
+        {c:"key", t:"The room was opened · epoch 1", s:"Ana · Fri 18:30"},
+        {c:"key", t:"Ana admitted you and Bob · re-keyed to epoch 2", s:"Fri 18:31"},
+        {c:"act", t:"Ana proposed a split of 0.12 ETH", s:"Fri 18:42 · Ana agreed by proposing (she is the creditor)"},
+        {c:"", t:"Bob agreed to his share (0.04 ETH)", s:"Fri 18:43"},
+        {c:"", t:"Carol asked to join", s:"Fri 18:44 · sealed to the room's join key"},
+      ],
+      accounts:[{t:"Ana's address", s:"Ethereum · Sepolia · 0x91cd…7b02 · shared by Ana into this room, for the split", chk:true}],
+      draft:""},
+    ops:{id:"ops", title:"Ops Safe", code:"/muster/1/muster.room.b18f02e4a7c13d55/proto",
+      members:["you","mira","dev"], epoch:1, when:"09:12", unread:0,
+      blocks:[
+        {k:"day", t:"Monday"},
+        {k:"sys", h:"<b>Mira</b> disclosed <b>Ops Safe</b> (Safe, 2 of 3, Sepolia) into this room. Your client checked it against the chain."},
+        {k:"card", id:"safe0"},
+        {k:"day", t:"Today"},
+        {k:"msg", who:"mira", t:"Hosting invoice for October. Same provider as last month.", at:"09:10"},
+        {k:"card", id:"safe1"},
+        {k:"msg", who:"dev", t:"I'm travelling, can you take the second signature?", at:"09:15"},
+      ],
+      history:[
+        {c:"key", t:"The room was opened · epoch 1", s:"Mira · Mon 08:55"},
+        {c:"", t:"Mira disclosed Ops Safe (2 of 3, Sepolia)", s:"Mon 08:56 · checked against the chain"},
+        {c:"act", t:"Devon proposed 1.2 ETH to 0xd1c8…3a77 · nonce 13", s:"Mon 09:01"},
+        {c:"", t:"You approved · threshold met", s:"Mon 09:20"},
+        {c:"act", t:"Submitted · final at 12 confirmations", s:"Mon 09:24"},
+        {c:"act", t:"Mira proposed 0.5 ETH to 0x7f3a…c19d · nonce 14", s:"Today 09:12"},
+      ],
+      accounts:[{t:"Ops Safe", s:"Safe 2 of 3 · Sepolia · 0x2b91…44ae · disclosed by Mira · ✓ checked against the chain · signers: Mira, you, Devon", chk:true, safe:true}],
+      draft:""},
+    rent:{id:"rent", title:"Rent · October", code:"/muster/1/muster.room.77e1c0aa52f9d813/proto",
+      members:["you","dev"], epoch:1, when:"Tue", unread:0,
+      blocks:[
+        {k:"day", t:"Tuesday"},
+        {k:"msg", who:"you", t:"October's rent share, same as always.", at:"10:02"},
+        {k:"card", id:"xmr1"},
+        {k:"msg", who:"dev", t:"Sent from my phone wallet.", at:"10:31"},
+      ],
+      history:[
+        {c:"key", t:"The room was opened · epoch 1", s:"You · Tue 10:00"},
+        {c:"act", t:"You requested 0.8 XMR from Devon", s:"Tue 10:02 · your wallet minted a subaddress for it"},
+        {c:"", t:"Devon says he paid", s:"Tue 10:31 · a claim; only your wallet confirms"},
+      ],
+      accounts:[], draft:""},
+    lisbon:{id:"lisbon", title:"Lisbon offsite", code:"/muster/1/muster.room.3c9a5b10de2244f0/proto",
+      members:["you","ana","mira","sol"], epoch:3, when:"Sep 28", unread:0,
+      blocks:[
+        {k:"day", t:"September 28"},
+        {k:"msg", who:"sol", t:"Flights are booked. Venue next?", at:"14:02"},
+        {k:"msg", who:"mira", t:"I have two quotes, will share tomorrow.", at:"14:20"},
+      ],
+      history:[{c:"key", t:"The room was opened · epoch 1", s:"Sol · Sep 20"},{c:"key", t:"Re-keyed to epoch 3 when Mira joined", s:"Sep 24"}],
+      accounts:[], draft:""},
+  };
+  S = {
+    view:"needs", room:null, sideMode:null, sideOpen:false,
+    details:{open:false, tab:"people", filter:null}, popover:null, sheet:null, dialog:null, toast:null,
+    homeFilter:"all", rename:false, expandDisclose:null,
+    invites:[{from:"mira", title:"Hackathon prizes", when:"2m"}],
+    sim: S && S.sim ? S.sim : {width:1440, basecamp:false, refusal:false, mismatch:false, rpc:false},
+  };
+}
+
+/* ===================================================================== derived */
+function cardState(c){
+  // → {bucket, pill, cls, headline, needsYou}
+  if(c.kind==="split"){
+    const mine = c.shares.find(s=>s.who==="you");
+    if(c.status==="final") return {bucket:"settled", pill:"Settled", cls:"done", head:"Everyone paid", needs:false};
+    if(c.status==="collecting"){
+      const agreed = c.shares.filter(s=>s.st!=="to agree").length + (c.creditorAgreed?1:0);
+      const of = c.shares.length + 1;
+      if(mine && mine.st==="to agree") return {bucket:"needs", pill:"Needs you", cls:"needs", head:`Agree to your share · ${mine.amt} ${c.asset}`, needs:true, agreed, of};
+      return {bucket:"waiting", pill:`${agreed} of ${of} agreed`, cls:"wait", head:`Waiting for the others to agree`, needs:false, agreed, of};
+    }
+    // agreed → paying
+    if(mine && mine.st==="agreed — to pay") return {bucket:"needs", pill:"Pay your share", cls:"needs", head:`Pay your share · ${mine.amt} ${c.asset}`, needs:true};
+    if(mine && mine.st==="paying") return {bucket:"waiting", pill:"Paying…", cls:"wait", head:"Your payment is on its way", needs:false};
+    return {bucket:"waiting", pill:"Being paid", cls:"wait", head:"Waiting for the others to pay", needs:false};
+  }
+  if(c.kind==="safe"){
+    if(S.sim.mismatch && c.id==="safe1" && c.status==="collecting") return {bucket:"needs", pill:"Blocked", cls:"bad", head:"Blocked: the payload doesn't match what it shows", needs:true, blocked:true};
+    if(c.status==="final") return {bucket:"settled", pill:"Final", cls:"done", head:`Paid ${c.amount} ${c.asset}`, needs:false};
+    if(c.status==="submitted") return {bucket:"waiting", pill:`${c.conf} of 3 confirmations`, cls:"out", head:"Submitted · settling on chain", needs:false};
+    if(c.status==="executable") return {bucket:"needs", pill:"Ready to submit", cls:"needs", head:"Ready to submit", needs:true};
+    if(!c.signed.includes("you")) return {bucket:"needs", pill:"Needs your approval", cls:"needs", head:`Approve ${c.amount} ${c.asset} from ${c.account}`, needs:true};
+    return {bucket:"waiting", pill:`${c.signed.length} of ${c.need}`, cls:"wait", head:"Waiting for another signer", needs:false};
+  }
+  if(c.kind==="xmr"){
+    if(c.status==="final") return {bucket:"settled", pill:"Received", cls:"done", head:"Received", needs:false};
+    return {bucket:"waiting", pill:`seen, ${c.seen} of ${c.need}`, cls:"wait", head:`Devon says he paid · your wallet sees it at ${c.seen} of ${c.need} confirmations`, needs:false};
+  }
+  return {bucket:"waiting", pill:"", cls:"wait", head:"", needs:false};
+}
+function roomCards(r){ return r.blocks.filter(b=>b.k==="card").map(b=>CARDS[b.id]); }
+function liveCard(r){
+  const cs = roomCards(r).filter(c=>cardState(c).bucket!=="settled");
+  return cs.find(c=>cardState(c).needs) || cs[cs.length-1] || null;
+}
+function roomStatus(r){
+  const pend = r.blocks.find(b=>b.k==="join" && b.state==="pending");
+  const c = liveCard(r);
+  const st = c ? cardState(c) : null;
+  if(st && st.needs) return {bucket:"needs", head:st.head, pill:st.pill, cls:st.cls};
+  if(pend) return {bucket:"needs", head:`${nm(pend.who)} asks to join`, pill:"Needs you", cls:"needs"};
+  if(st) return {bucket:st.bucket, head:st.head, pill:st.pill, cls:st.cls};
+  const any = roomCards(r).length;
+  if(any) return {bucket:"settled", head:"Everything here is settled", pill:"Settled", cls:"done"};
+  return {bucket:"idle", head:"Nothing proposed", pill:"", cls:"wait"};
+}
+function lastLine(r){
+  for(let i=r.blocks.length-1;i>=0;i--){
+    const b=r.blocks[i];
+    if(b.k==="msg") return `${b.who==="you"?"You":nm(b.who)}: ${b.t}`;
+  }
+  return "";
+}
+const needsCount = () => Object.values(ROOMS).filter(r=>roomStatus(r).bucket==="needs").length + S.invites.length;
+
+/* ===================================================================== layout */
+function appWidth(){ return S.sim.width - (S.sim.basecamp ? 60 : 0); }
+function sideMode(){
+  const w = appWidth();
+  if(w < 900) return "hidden";
+  if(S.sideMode) return S.sideMode;
+  return (S.sim.basecamp || w < 1180) ? "rail" : "full";   // decision §6.1: inside Basecamp, start as the rail
+}
+function detailsMode(){
+  const sideW = {full:248, rail:60, hidden:0}[sideMode()];
+  return (appWidth() - sideW - 360 >= 640) ? "dock" : "overlay";
+}
+
+/* ===================================================================== render */
+const $ = s => document.querySelector(s);
+function render(){
+  // keep focus and caret across re-renders
+  const ae = document.activeElement, keep = ae && ae.id ? {id:ae.id, s:ae.selectionStart, e:ae.selectionEnd} : null;
+  const scrolls = {}; ["#thread",".page",".drawer-b",".side-scroll",".sheet-b"].forEach(q=>{ const n = document.querySelector(q); if(n) scrolls[q] = n.scrollTop; });
+  const app = $("#app");
+  app.dataset.side = sideMode();
+  app.dataset.details = detailsMode();
+  app.classList.toggle("side-open", S.sideOpen);
+  app.innerHTML = renderSide() + `<main class="main" id="main">${renderMain()}</main>` +
+                  (S.view==="room" && S.details.open ? renderDrawer() : "") +
+                  (S.sideOpen && sideMode()==="hidden" ? `<div class="scrim" data-act="close-side" style="z-index:39"></div>` : "") +
+                  (S.view==="room" && S.details.open && detailsMode()==="overlay" ? `<div class="scrim" data-act="close-details" style="z-index:29"></div>` : "") +
+                  renderModal() + (S.toast ? `<div class="toast" role="status">${ic("check","sm")} ${esc(S.toast)}</div>` : "");
+  Object.keys(scrolls).forEach(q=>{ const n = document.querySelector(q); if(n) n.scrollTop = scrolls[q]; });
+  const pop = renderPopover(); if(pop) app.insertAdjacentHTML("beforeend", pop);
+  if(keep){ const n = document.getElementById(keep.id); if(n){ n.focus(); try{ n.setSelectionRange(keep.s, keep.e); }catch(e){} } }
+  const th = $("#thread"); if(th && S._scroll){ th.scrollTop = th.scrollHeight; S._scroll = false; }
+  if(S._flash){ const c = document.getElementById("card-"+S._flash); if(c){ c.scrollIntoView({block:"center"}); c.classList.add("flash"); } S._flash = null; }
+  sizeFrame();
+}
+
+function renderSide(){
+  const rooms = Object.values(ROOMS);
+  const rail = sideMode()==="rail";
+  const row = r => {
+    const st = roomStatus(r);
+    const cur = S.view==="room" && S.room===r.id;
+    return `<button class="room-row${r.unread?" unread":""}" data-act="open-room" data-arg="${r.id}" ${cur?'aria-current="page"':""} title="${esc(r.title)}">
+      <span class="av room">${esc(r.title[0])}</span>
+      <span class="meta"><span class="t"><b>${esc(r.title)}</b><span class="when">${esc(r.when)}</span></span>
+        <span class="pv${st.bucket==="needs"?" hot":""}">${esc(st.bucket==="needs"?st.head:lastLine(r))}</span></span>
+      ${st.bucket==="needs"?'<span class="dot-needs" aria-label="needs you"></span>':""}
+    </button>`;
+  };
+  const nav = (v, icon, label, extra) =>
+    `<button class="nav" data-act="view" data-arg="${v}" ${S.view===v?'aria-current="page"':""} title="${label}">${ic(icon)}<span class="txt">${label}</span>${extra||""}</button>`;
+  const n = needsCount();
+  return `<aside class="side" aria-label="Rooms and navigation">
+    <div class="side-top">
+      <span class="brand"><span class="mark">M</span><span class="word">Muster</span></span>
+      ${sideMode()==="hidden" ? `<button class="icon-btn" data-act="close-side" aria-label="Close">${ic("x")}</button>`
+        : `<button class="icon-btn" data-act="toggle-side" aria-label="${rail?"Expand":"Collapse"} the sidebar" title="${rail?"Expand":"Collapse"}">${ic("sidebar")}</button>`}
+    </div>
+    <div class="side-scroll">
+      <button class="search" data-act="switcher" title="Jump to a room (Ctrl K)">${ic("search","sm")}<span class="txt">Jump to…</span><span class="kbd">Ctrl K</span></button>
+      ${nav("needs","inbox","Needs you", n?`<span class="count">${n}</span>`:"")}
+      <div class="sec-h"><span class="txt">Rooms</span><button class="icon-btn sm" data-act="new-room" aria-label="New room" title="New room">${ic("plus","sm")}</button></div>
+      ${rooms.map(row).join("")}
+    </div>
+    <div class="side-foot">
+      ${nav("wallet","wallet","Wallet")}
+      ${nav("contacts","people","Contacts")}
+      ${nav("learn","book","Learn")}
+      ${nav("settings","gear","Settings")}
+      <button class="me" data-act="view" data-arg="settings" title="Your identity · logos.dev">
+        ${av("you")}
+        <span class="who"><b>${P.you.alias}</b> <span class="dim mono">${P.you.id}</span>
+          <span class="net"><span class="live-dot${S.sim.rpc?"":""}"></span>logos.dev · connected</span></span>
+      </button>
+    </div>
+  </aside>`;
+}
+
+function renderMain(){
+  if(S.view==="room" && ROOMS[S.room]) return renderRoom(ROOMS[S.room]);
+  const burger = `<button class="icon-btn burger" data-act="open-side" aria-label="Open the sidebar">${ic("menu")}</button>`;
+  const page = (title, sub, body, right) => `<div class="page"><div class="page-inner">
+      <div class="page-h"><div style="display:flex;gap:8px;align-items:flex-start">${burger}<div><h1>${title}</h1>${sub?`<p>${sub}</p>`:""}</div></div>${right||""}</div>${body}</div></div>`;
+  if(S.view==="needs") return renderNeeds(page);
+  if(S.view==="wallet") return page("Wallet", "Balances on the chains you set up. Each one says whether your client checked it.", renderWallet());
+  if(S.view==="contacts") return page("Contacts", "Names you give the ids you coordinate with. They stay on this device and never reach a room.", renderContacts(), `<button class="btn secondary">${ic("plus","sm")} Add a contact</button>`);
+  if(S.view==="learn") return page("Learn", "What Muster guarantees, what it doesn't yet, and what other stacks leak. Each card links here when it matters.", renderLearn());
+  if(S.view==="settings") return renderSettings(burger);
+  return "";
+}
+
+/* -------------------------------------------------------------- needs you */
+function renderNeeds(page){
+  const rooms = Object.values(ROOMS).map(r=>({r, st:roomStatus(r)}));
+  const by = {needs:[], waiting:[], settled:[]};
+  rooms.forEach(x=>{ (by[x.st.bucket]||by.waiting).push(x); });
+  const f = S.homeFilter;
+  const chips = [["all","All",rooms.length],["needs","Needs you",by.needs.length],["waiting","Waiting on others",by.waiting.length],["settled","Settled",by.settled.length]]
+    .map(([k,l,n])=>`<button class="chip" data-act="filter" data-arg="${k}" aria-pressed="${f===k}">${l} <span class="n">${n}</span></button>`).join("");
+  const row = ({r,st}) => `<button class="lrow" data-act="open-room" data-arg="${r.id}">
+      <span class="faces">${r.members.filter(m=>m!=="you").slice(0,3).map(m=>av(m,"sm")).join("")}</span>
+      <span class="body"><span class="t">${esc(r.title)}</span><span class="s">${esc(st.head)}</span></span>
+      ${st.pill?`<span class="pill ${st.cls}">${esc(st.pill)}</span>`:""}
+      <span class="when">${esc(r.when)}</span>${ic("chevr","sm")}</button>`;
+  const group = (k, title, hot) => (f==="all"||f===k) && by[k].length
+    ? `<div class="group-h${hot?" hot":""}">${title}</div><div class="list">${by[k].map(row).join("")}</div>` : "";
+  const invites = S.invites.map((v,i)=>`<div class="invite">${av(v.from)}<div class="body"><b>${nm(v.from)}</b> invited you to <b>${esc(v.title)}</b><div class="dim" style="font-size:12px;margin-top:2px">Sealed to you · ${v.when} ago. Joining lets the room's members see you're in.</div></div>
+      <button class="btn primary sm" data-act="accept-invite" data-arg="${i}">Join</button><button class="btn ghost sm" data-act="dismiss-invite" data-arg="${i}">Dismiss</button></div>`).join("");
+  const body = (invites?`<div class="group-h hot">Invitations</div>${invites}`:"") +
+    `<div class="chips" style="margin-top:${invites?"20px":"0"}">${chips}</div>` +
+    (group("needs","Needs you",true) + group("waiting","Waiting on others") + group("settled","Settled") ||
+      `<div class="empty"><p>Nothing here. Start something with someone.</p><button class="btn primary" data-act="new-room">Start something</button></div>`) +
+    `<div class="joinbox"><span class="lbl">Have a room code?</span><input class="field-in mono" id="join-code" placeholder="/muster/1/muster.room.…/proto"><button class="btn secondary" data-act="join-code">Join</button></div>`;
+  const n = needsCount();
+  return page("Needs you", n ? `${n} waiting on you` : "Nothing waiting on you", body,
+    `<button class="btn primary" data-act="new-room">${ic("plus","sm")} Start something</button>`);
+}
+
+/* -------------------------------------------------------------- room */
+function renderRoom(r){
+  const others = r.members.filter(m=>m!=="you");
+  const c = liveCard(r), st = c ? cardState(c) : null;
+  const pend = r.blocks.find(b=>b.k==="join" && b.state==="pending");
+  const title = S.rename
+    ? `<input class="rename" id="rename-in" value="${esc(r.title)}" aria-label="Room name (only you see it)">`
+    : `<button class="room-title" data-act="rename" title="Rename (only you see the name)">${esc(r.title)}</button>`;
+  const head = `<header class="room-head">
+      <button class="icon-btn burger" data-act="open-side" aria-label="Open the sidebar">${ic("menu")}</button>
+      ${title}
+      <span class="head-sp"></span>
+      <button class="people-btn" data-act="details" data-arg="people" title="${r.members.length} people can read this room">
+        <span class="faces">${r.members.slice(0,4).map(m=>av(m,"sm")).join("")}</span>${r.members.length}${pend?' <span class="dot-needs" title="someone asks to join"></span>':""}</button>
+      <button class="conn" data-act="pop" data-arg="conn" aria-expanded="${S.popover==="conn"}" title="Connections">
+        <span class="live-dot${S.sim.rpc?" warn":""}"></span>${S.sim.rpc?"degraded":"live"}</button>
+      <div class="head-actions">
+        <button class="btn secondary sm" data-act="pop" data-arg="invite" aria-expanded="${S.popover==="invite"}">${ic("link","sm")} Invite</button>
+        <button class="icon-btn" data-act="details" data-arg="${S.details.tab}" aria-pressed="${S.details.open}" aria-label="Room details" title="Room details">${ic("panel")}</button>
+        <button class="icon-btn" data-act="pop" data-arg="more" aria-label="More" title="More" aria-expanded="${S.popover==="more"}">${ic("more")}</button>
+      </div>
+    </header>`;
+  const pinned = c && st && st.bucket!=="settled"
+    ? `<div class="pinned${st.blocked?" bad":""}">${ic(st.blocked?"alert":kindIcon(c),"sm")}<span class="t"><b>${esc(st.pill)}</b> · ${esc(cardTitle(c))} · ${esc(cardAmount(c))}</span>
+        <button class="btn ${st.needs?"primary":"secondary"} sm" data-act="jump" data-arg="${c.id}">Review</button></div>` : "";
+  const banner = S.sim.rpc && r.id==="ops"
+    ? `<div class="banner">${ic("alert","sm")}<span class="t">Your Ethereum RPC for Sepolia isn't answering. Safe proposals here can't be checked against the chain until it does.</span><button class="btn secondary sm" data-act="view" data-arg="settings">Open Settings</button></div>` : "";
+  return head + pinned + banner +
+    `<div class="thread" id="thread"><div class="thread-inner">${renderBlocks(r)}</div></div>
+     <div class="composer"><div class="composer-inner">
+       ${S.popover==="actions" ? renderActions(r) : ""}
+       <div class="cbox">
+         <button class="plus" data-act="pop" data-arg="actions" aria-expanded="${S.popover==="actions"}" aria-label="Propose something" title="Propose something">${ic("plus")}</button>
+         <input id="msg" placeholder="Message ${esc(r.title)}" value="${esc(r.draft)}" autocomplete="off" aria-label="Message">
+         <button class="icon-btn" data-act="send" aria-label="Send" title="Send (Enter)">${ic("send")}</button>
+       </div>
+       <div class="scope"><span class="lock">${ic("lock","sm")}</span>end-to-end · ${r.members.length} can read${roomOut(r)} · <button data-act="details" data-arg="privacy">Who can see what</button></div>
+     </div></div>`;
+}
+function roomOut(r){
+  const out = roomCards(r).filter(c=>c.status==="final"||c.status==="submitted"||(c.kind==="split"&&c.shares.some(s=>s.st==="paid"||s.st==="received")));
+  return out.length ? ` · ${out.length} payment${out.length>1?"s":""} left the room` : " · nothing has left the room";
+}
+function kindIcon(c){ return {split:"split", safe:"safe", xmr:"coin"}[c.kind]||"coin"; }
+function cardTitle(c){ return {split:"Split a bill", safe:`Pay from ${c.account}`, xmr:"Payment request"}[c.kind]||"Proposal"; }
+function cardAmount(c){ return c.kind==="split" ? `${c.total} ${c.asset}` : `${c.amount} ${c.asset}`; }
+
+function renderBlocks(r){
+  let out = "", prevWho = null;
+  r.blocks.forEach(b=>{
+    if(b.k==="msg"){
+      const cont = prevWho===b.who;
+      out += cont
+        ? `<div class="msg cont"><span class="gut"></span><div class="body"><div class="tx">${esc(b.t)}</div></div></div>`
+        : `<div class="msg">${av(b.who)}<div class="body"><div class="hd"><b>${esc(nm(b.who))}</b><span>${esc(b.at||"")}</span></div><div class="tx">${esc(b.t)}</div></div></div>`;
+      prevWho = b.who; return;
+    }
+    prevWho = null;
+    if(b.k==="day") out += `<div class="day">${esc(b.t)}</div>`;
+    else if(b.k==="sys") out += `<div class="sys">${b.h}</div>`;
+    else if(b.k==="seam") out += `<div class="seam">${esc(b.t)}</div>`;
+    else if(b.k==="join"){
+      if(b.state==="pending") out += `<div class="notice info">${ic("people")}<div class="t"><b>${esc(nm(b.who))}</b> asks to join <span class="dim mono">${P[b.who].id}</span><br><span class="dim">Admitting re-keys the room forward: ${esc(nm(b.who))} reads from here on, never the messages above.</span></div>
+          <div class="acts"><button class="btn primary sm" data-act="admit" data-arg="${b.who}">Admit</button><button class="btn ghost sm" data-act="ignore" data-arg="${b.who}">Not now</button></div></div>`;
+    }
+    else if(b.k==="card") out += renderCard(CARDS[b.id]);
+    else if(b.k==="addr") out += `<div class="addr">${av(b.who)}<div class="body"><b>${esc(nm(b.who))}</b> shared an address · ${esc(b.chain)}<div class="mono muted">${esc(b.addr)}</div><div class="dim" style="font-size:12px">Anyone reading the chain can see what lands here.</div></div></div>`;
+  });
+  return out;
+}
+
+/* -------------------------------------------------------------- cards */
+function renderCard(c){
+  const st = cardState(c);
+  const head = `<div class="card-h"><span class="kind-ico">${ic(kindIcon(c))}</span>
+      <span class="k"><b>${esc(cardTitle(c))}</b><span>proposed by ${c.proposer==="you"?"you":esc(nm(c.proposer))} · ${esc(c.at)}${c.chain?` · ${esc(c.chain)}`:""}</span></span>
+      <span class="pill ${st.cls}">${esc(st.pill)}</span>
+      <button class="icon-btn sm" data-act="pop" data-arg="card:${c.id}" aria-label="More for this proposal">${ic("more","sm")}</button></div>`;
+  const verify = (S.sim.mismatch && c.id==="safe1" && c.status==="collecting")
+    ? `<button class="check bad" data-act="toggle-card" data-arg="${c.id}">${ic("x","sm")} what you'd sign is not what this says</button>`
+    : `<button class="check" data-act="toggle-card" data-arg="${c.id}" title="Your client rebuilt the bytes from the effect and they match">${ic("check","sm")} re-derived · matches</button>`;
+  const prov = `<span title="Provenance (F-10)">${ic("shield","sm")} verified members</span>`;
+  const whoSees = `<button class="link" data-act="who-sees" data-arg="${c.id}">Who sees this?</button>`;
+  const more = `<button class="btn ghost sm" data-act="toggle-card" data-arg="${c.id}" aria-expanded="${c.open}">Details ${ic(c.open?"chevu":"chevd","sm")}</button>`;
+
+  if(c.kind==="safe" && (c.status==="submitted"||c.status==="final")){
+    return `<div class="card public" id="card-${c.id}">${head}
+      <div class="card-b"><div class="amount">${c.amount}<small>${c.asset}</small></div><div class="memo">to ${esc(c.to)} (${esc(c.toLabel)}) · nonce ${c.nonce}</div></div>
+      <div class="card-meta"><span class="slots">${c.signed.map(s=>`<span class="slot">${av(s)}</span>`).join("")}</span>
+        <span>${c.status==="final"?`final · ${c.conf} confirmations`:`${c.conf} of 3 confirmations`}</span></div>
+      <div class="leftroom">This left the room. <b>${c.amount} ${c.asset}</b>, the recipient, the Safe and every signer's address are public and permanent. What was said to get here stayed inside.</div>
+      ${c.open?renderDetails(c):""}
+      <div class="card-a">${whoSees}<span class="sp"></span>${more}</div></div>`;
+  }
+
+  let body = "", meta = "", primary = "";
+  if(c.kind==="split"){
+    const rows = [{who:c.creditor, amt:"", st:"creditor · agreed by proposing"}].concat(c.shares).map(s=>{
+      const me = s.who==="you";
+      const cls = /agreed|paid|received/.test(s.st) && !/to pay/.test(s.st) ? "ok" : (me && (s.st==="to agree"||s.st==="agreed — to pay") ? "me" : "");
+      const label = me ? ({"to agree":"you · to agree","agreed — to pay":"you · to pay","paying":"paying…","received":"✓ received by Ana"}[s.st]||s.st) : s.st;
+      return `<div class="part">${av(s.who,"sm")}<span class="nm">${esc(nm(s.who))}${s.who===c.creditor?' <span class="tag">paid the bill</span>':""}</span>
+        <span class="amt">${s.amt?esc(s.amt)+" "+c.asset:"—"}</span><span class="st ${cls}">${esc(label)}</span></div>`;
+    }).join("");
+    body = `<div class="card-b"><div class="amount">${c.total}<small>${c.asset}</small></div><div class="memo">${esc(c.memo)} · paid to ${c.creditor==="you"?"your":esc(nm(c.creditor))+"'s"} address</div><div class="parts">${rows}</div></div>`;
+    if(c.status==="collecting") meta = `<span class="slots">${[c.creditor].concat(c.shares.map(s=>s.who)).map(w=>{
+        const ok = w===c.creditor || c.shares.find(s=>s.who===w).st!=="to agree";
+        return `<span class="slot">${ok?av(w):""}</span>`; }).join("")}</span><span>${st.agreed} of ${st.of} agreed · every party named must agree</span>`;
+    else meta = `<span>${c.shares.filter(s=>s.st==="received").length} of ${c.shares.length} shares received</span>`;
+    const mine = c.shares.find(s=>s.who==="you");
+    if(mine && mine.st==="to agree") primary = `<button class="btn primary sm" data-act="agree" data-arg="${c.id}">Agree to my share</button>`;
+    else if(mine && mine.st==="agreed — to pay") primary = `<button class="btn primary sm" data-act="pay" data-arg="${c.id}">Pay my share · ${mine.amt} ${c.asset}</button>`;
+  }
+  if(c.kind==="safe"){
+    const blocked = st.blocked;
+    body = `<div class="card-b"><div class="amount">${c.amount}<small>${c.asset}</small></div><div class="memo">to ${esc(c.to)} (${esc(c.toLabel)}) · from ${esc(c.account)} · nonce ${c.nonce}</div>
+      <div class="rail">${["proposed","collecting","executable","submitted","final"].map((s,i,a)=>`<span class="st${i<=a.indexOf(c.status)?" on":""}"></span>`).join("")}</div>
+      <div class="rail-l">${["proposed","collecting","ready","submitted","final"].map((l,i)=>`<span class="${["proposed","collecting","executable","submitted","final"][i]===c.status?"now":""}">${l}</span>`).join("")}</div></div>` +
+      (blocked ? `<div class="blocked"><b>Signing is off.</b> What this card shows and what you would sign differ. Your client rebuilt the bytes from the effect, compared, and refused. Nothing here can be fixed by reading more carefully: decline it and ask for a new one.</div>` : "");
+    meta = `<span class="slots">${Array.from({length:c.need}).map((_,i)=>`<span class="slot">${c.signed[i]?av(c.signed[i]):""}</span>`).join("")}</span><span>${c.signed.length} of ${c.need} signatures · ${c.policy} Safe</span>`;
+    if(!blocked && c.status==="collecting" && !c.signed.includes("you")) primary = `<button class="btn primary sm" data-act="approve" data-arg="${c.id}">Approve</button>`;
+    if(c.status==="executable") primary = `<button class="btn primary sm" data-act="submit" data-arg="${c.id}">Submit to the chain</button>`;
+  }
+  if(c.kind==="xmr"){
+    body = `<div class="card-b" style="display:flex;gap:14px;align-items:flex-start"><div style="flex:1"><div class="amount">${c.amount}<small>${c.asset}</small></div>
+      <div class="memo">You ask ${esc(nm(c.debtor))} for ${c.amount} XMR · to your subaddress <span class="mono">${esc(c.sub)}</span></div>
+      <div class="parts"><div class="part">${av(c.debtor,"sm")}<span class="nm">${esc(nm(c.debtor))}</span><span class="amt">${c.amount} XMR</span>
+        <span class="st">${c.status==="final"?'<span style="color:var(--success)">✓ received, your wallet saw it at 10 confirmations</span>':`says he paid · seen, ${c.seen} of ${c.need}`}</span></div></div>
+      <div class="dim" style="font-size:12px;margin-top:8px">"I paid" is a claim. Only your own wallet confirms a part: this subaddress, exactly the share, at least 10 confirmations.</div></div>
+      <span class="qr" title="monero: link as a QR code"></span></div>`;
+    meta = `<span style="display:inline-flex;gap:5px;align-items:center">${ic("clock","sm")} your wallet confirms it; nobody can by saying so</span>`;
+  }
+  return `<div class="card" id="card-${c.id}">${head}${body}<div class="card-meta">${meta}<span class="trust">${verify}${prov}</span></div>
+    ${c.open?renderDetails(c):""}
+    <div class="card-a">${primary}${whoSees}<span class="sp"></span>${more}</div></div>`;
+}
+
+function renderDetails(c){
+  const split = c.kind==="split", safe = c.kind==="safe", xmr = c.kind==="xmr";
+  const q = (k, v) => `<div class="q"><dt>${k}</dt><dd>${v}</dd></div>`;
+  const need = (s, t, rem) => `<div class="need"><span class="${s}">${{ok:"✓",no:"✗",unk:"?"}[s]}</span><span>${t}${rem?` <button class="link" data-act="view" data-arg="settings">${rem}</button>`:""}</span></div>`;
+  const cred = split ? (c.creditor==="you" ? "your" : nm(c.creditor)+"'s") : "";
+  const what = split ? `Each named person pays their own share from their own wallet to ${cred} address. No shared account.`
+    : safe ? `Ops Safe sends ${c.amount} ${c.asset} to ${esc(c.to)} once 2 of its 3 signers approve.`
+    : `Devon pays 0.8 XMR from any wallet to a subaddress your wallet minted for this request.`;
+  const needs = split ? need("ok","Your room key, to agree") + need(S.sim.rpc?"no":"ok", "An Ethereum RPC for Sepolia, to pay and to confirm", S.sim.rpc?"Repoint the RPC":"")
+    : safe ? need("ok","Your key is a signer of Ops Safe") + need(S.sim.rpc?"no":"ok","An Ethereum RPC for Sepolia", S.sim.rpc?"Repoint the RPC":"") + need("unk","tx_sender_module, to submit: unknown until the host answers")
+    : need("ok","Your Monero wallet, open (Monero Wallet)") ;
+  const touches = split ? "Each debtor's own account on Sepolia; Ana's address" : safe ? "Ops Safe (0x2b91…44ae) on Sepolia; the recipient" : "Your wallet's subaddress; Devon's wallet";
+  const happens = split ? "Payments go on chain one by one; each is final when Ana's own client reads it there." : safe ? "One transaction from the Safe; final at 3 confirmations." : "Final when your wallet sees exactly 0.8 XMR at the subaddress, 10 confirmations deep.";
+  const agree = split ? "Every party named: each debtor, and Ana as the creditor." : safe ? "2 of the 3 Safe signers; the Safe checks it on chain." : "Devon agrees with his room key; you agreed by proposing. The payment itself is confirmed by your wallet, never by a signature or a claim.";
+  const domain = safe ? `<div class="kv"><span>shown</span><span>${c.amount} ${c.asset} → ${esc(c.to)}</span><span>re-derived</span><span>0x4c1e…a92f</span><span>payload</span><span>${S.sim.mismatch&&c.id==="safe1"?"0x88d0…13b4":"0x4c1e…a92f"}</span><span>binds to</span><span>eip155:11155111 · 0x2b91…44ae · nonce ${c.nonce} · expires in 6 d</span></div>`
+    : split ? `<div class="kv"><span>shown</span><span>${c.total} ${c.asset}: you 0.04, Bob 0.04 → Ana</span><span>re-derived</span><span>0x9b07…e11c</span><span>payload</span><span>0x9b07…e11c</span><span>binds to</span><span>eip155:11155111 · room epoch 2 · expires in 3 d</span></div>`
+    : `<div class="kv"><span>request</span><span>monero:${esc(c.sub)}?tx_amount=0.8</span><span>network</span><span>Monero stagenet</span></div>`;
+  return `<div class="details">
+    ${q("What will it do", what)}
+    ${q("What is needed", needs)}
+    ${q("What will it touch", touches)}
+    ${q("What will happen", happens)}
+    ${q("How do we agree", agree)}
+    ${q("What you sign", domain)}
+    ${q("Where it came from", `Proposed by ${esc(nm(c.proposer))} in this room · log #${c.kind==="safe"?41:17} · sealed to the room · <button class="link" data-act="view" data-arg="learn">How is this kept private?</button>`)}
+  </div>`;
+}
+
+/* -------------------------------------------------------------- action picker */
+const ACTIONS = [
+  {id:"split", icon:"split", t:"Split a bill", d:"You paid; everyone named pays you back their share.", drv:"evm.split · lez.split · btc.split"},
+  {id:"xmr", icon:"coin", t:"Request a payment", d:"Ask someone for XMR. Your wallet confirms it.", drv:"monero.split"},
+  {id:"safe", icon:"safe", t:"Pay from a shared account", d:"A payment the account's signers approve.", drv:"safe@ (Safe)", needs:"safe"},
+  {id:"btc", icon:"btc", t:"Bitcoin payment", d:"Spend from a multisig or FROST account.", drv:"btc.p2wsh-sortedmulti · btc.frost-bip445", needs:"btc"},
+  {id:"lez", icon:"lambda", t:"LEZ transfer", d:"From a LEZ multisig or FROST group.", drv:"lez.multisig-program · lez.frost", needs:"lez"},
+  {id:"settle", icon:"check", t:"Settle up", d:"Net the room's open shares into fewer payments.", drv:"split families"},
+  {id:"ask", icon:"ask", t:"Ask for an address", d:"Someone shares where to be paid."},
+  {id:"call", icon:"code", t:"Call a module", d:"Coordinate any module method the room can run.", drv:"invoke"},
+];
+function renderActions(r){
+  const has = k => r.accounts.some(a=>k==="safe"?a.safe:false);
+  return `<div class="pop actions-pop" role="dialog" aria-label="Propose something">
+    <h4>Propose something <span class="dim" style="font-weight:400">· the room sees it the moment you do</span></h4>
+    <div class="agrid">${ACTIONS.map(a=>{
+      const missing = a.needs && !has(a.needs);
+      return `<button class="act" data-act="action" data-arg="${a.id}" ${a.id==="settle"&&!roomCards(r).some(c=>c.kind==="split")?"disabled":""}>
+        <span class="kind-ico">${ic(a.icon)}</span><span><div class="t">${a.t}</div><div class="d">${a.d}</div>
+        ${missing?`<div class="why">No account in this room yet: disclose one first</div>`:(a.drv?`<div class="drv">${a.drv}</div>`:"")}</span></button>`;
+    }).join("")}</div></div>`;
+}
+
+/* -------------------------------------------------------------- sheets */
+function renderModal(){
+  if(S.dialog==="leave"){
+    return `<div class="modal-wrap" data-act="close-modal"><div class="dlg" role="dialog" aria-label="Leave this room" data-stop>
+      <h2>Leave this room?</h2><p>It stops showing here, and this device stops following it. The others are not told and still count you in. Join it again with its room code.</p>
+      <div class="acts"><button class="btn secondary" data-act="close-modal">Stay</button><button class="btn danger" data-act="leave">Leave room</button></div></div></div>`;
+  }
+  if(S.dialog==="switcher"){
+    const q = (S.swq||"").toLowerCase();
+    const rs = Object.values(ROOMS).filter(r=>r.title.toLowerCase().includes(q));
+    S.swSel = Math.min(S.swSel||0, Math.max(0, rs.length-1));
+    return `<div class="modal-wrap" data-act="close-modal"><div class="switcher" role="dialog" aria-label="Jump to a room" data-stop>
+      <input id="sw-in" placeholder="Jump to a room…" value="${esc(S.swq||"")}" autocomplete="off">
+      <div class="res">${rs.map((r,i)=>`<button class="menu-i" data-act="open-room" data-arg="${r.id}" aria-selected="${i===S.swSel}"><span class="av room sm">${esc(r.title[0])}</span><span style="flex:1">${esc(r.title)}</span><span class="dim" style="font-size:12px">${esc(roomStatus(r).head)}</span></button>`).join("") || '<div class="dim" style="padding:10px">No room by that name.</div>'}</div></div></div>`;
+  }
+  if(S.dialog==="newroom"){
+    const f = S.nr || (S.nr = {verb:null, people:new Set()});
+    const verbs = [["split","Split a bill"],["xmr","Request a payment"],["safe","Pay from a shared account"],["talk","Just talk"]];
+    return `<div class="modal-wrap" data-act="close-modal"><div class="sheet" role="dialog" aria-label="Start something" data-stop>
+      <div class="sheet-h"><h2>Start something</h2><button class="icon-btn" data-act="close-modal" aria-label="Close">${ic("x")}</button></div>
+      <div class="sheet-b">
+        <div class="fld"><label>What do you want to do?</label><div class="pickers">${verbs.map(([k,l])=>`<button class="pick" style="padding-left:10px" data-act="nr-verb" data-arg="${k}" aria-pressed="${f.verb===k}">${l}</button>`).join("")}</div></div>
+        <div class="fld"><label>Who's doing it with you?</label><div class="pickers">${["ana","bob","carol","mira","dev","sol"].map(id=>`<button class="pick" data-act="nr-person" data-arg="${id}" aria-pressed="${f.people.has(id)}">${av(id)}${nm(id)}</button>`).join("")}</div>
+          <div class="hint">Only these people can read the room. Each is invited, and arrives a member. Add someone later and they read from that point on.</div></div>
+      </div>
+      <div class="sheet-f"><span class="scope">${ic("lock","sm")} ${f.people.size? `${f.people.size+1} people will be able to read this room. Nobody else.` : "Nothing is shared until the room opens."}</span>
+        <button class="btn secondary" data-act="close-modal">Cancel</button><button class="btn primary" data-act="nr-open" ${f.verb?"":"disabled"}>Open the room</button></div></div></div>`;
+  }
+  if(!S.sheet) return "";
+  const r = ROOMS[S.room], k = S.sheet.kind, f = S.sheet;
+  const A = ACTIONS.find(a=>a.id===k);
+  let body = "", cta = "Propose";
+  if(k==="split"){
+    const ppl = r.members.filter(m=>m!=="you");
+    if(!f.people) f.people = new Set(ppl);
+    if(f.meToo===undefined) f.meToo = false;
+    const n = f.people.size + (f.meToo?1:0);
+    const tot = parseFloat(f.total||"0") || 0;
+    const each = n ? (tot/n) : 0;
+    body = `<div class="fld"><label for="f-total">The bill</label><div class="row"><input class="field-in" id="f-total" data-bind="total" inputmode="decimal" placeholder="0.00" value="${esc(f.total||"")}">
+        <select aria-label="Asset"><option>ETH · Sepolia</option><option>USDC · Sepolia</option><option>BTC · regtest</option><option>LEZ · private</option></select></div>
+        <button class="disclose" style="margin-top:8px" data-act="noop">${ic("chevr","sm")} The bill is in another currency</button></div>
+      <div class="fld"><label>Who's in it</label><div class="pickers">${ppl.map(id=>`<button class="pick" data-act="sp-person" data-arg="${id}" aria-pressed="${f.people.has(id)}">${av(id)}${nm(id)}</button>`).join("")}
+        <button class="pick" style="padding-left:10px" data-act="sp-me" aria-pressed="${f.meToo}">I'm in it too</button></div></div>
+      <div class="fld"><label>What each owes</label><div class="shares">${[...f.people].map(id=>`<div class="part">${av(id,"sm")}<span class="nm">${nm(id)}</span><span class="amt">${each?each.toFixed(4):"—"} ETH</span></div>`).join("") || '<div class="part dim">Pick who is in it.</div>'}</div>
+        <div class="hint">Paid to your address, 0x91cd…7b02, the one you shared into this room. Exact to the wei.</div></div>`;
+    cta = "Propose the split";
+  } else if(k==="xmr"){
+    body = `<div class="fld"><label>Who pays</label><div class="pickers">${r.members.filter(m=>m!=="you").map(id=>`<button class="pick" aria-pressed="${id===r.members[1]}">${av(id)}${nm(id)}</button>`).join("")}</div></div>
+      <div class="fld"><label for="f-total">How much</label><div class="row"><input class="field-in" id="f-total" data-bind="total" placeholder="0.000" value="${esc(f.total||"")}"><select><option>XMR · stagenet</option></select></div>
+        <div class="hint">Your own Monero wallet mints a subaddress for this request. Muster holds no Monero key and never spends.</div></div>`;
+    cta = "Request it";
+  } else if(k==="safe"){
+    const has = r.accounts.some(a=>a.safe);
+    body = has ? `<div class="fld"><label>From</label><div class="acct" style="margin:0"><div class="t">${ic("safe","sm")} Ops Safe <span class="tag">2 of 3</span></div><div class="s">Sepolia · 0x2b91…44ae · nonce 15 next</div></div></div>
+      <div class="fld"><label for="f-total">Amount</label><div class="row"><input class="field-in" id="f-total" data-bind="total" placeholder="0.00" value="${esc(f.total||"")}"><select><option>ETH</option><option>USDC</option></select></div></div>
+      <div class="fld"><label>To</label><input class="field-in mono" placeholder="0x… or a name"></div>
+      <div class="fld"><label>Why</label><input class="field-in" placeholder="Stays in the room"></div>`
+      : `<div class="notice warn flat">${ic("alert")}<div class="t">No account to pay from in this room yet. A member discloses one, such as a Safe they sign for, and the room checks it against the chain.</div><div class="acts"><button class="btn secondary sm" data-act="disclose-from-sheet">Disclose an account</button></div></div>`;
+  } else {
+    body = `<div class="notice info flat">${ic("info")}<div class="t">${A?A.d:""} This form is the same shape as the others; the mockup only fills in Split, Request and Safe.</div></div>`;
+  }
+  const refusal = f.refused ? renderRefusal(k) : "";
+  return `<div class="modal-wrap" data-act="close-modal"><div class="sheet" role="dialog" aria-label="${A?A.t:""}" data-stop>
+    <div class="sheet-h"><span class="kind-ico">${ic(A?A.icon:"coin")}</span><h2>${A?A.t:""}</h2>${A&&A.drv?`<span class="tag mono">${A.drv.split(" ")[0]}</span>`:""}<button class="icon-btn" data-act="close-modal" aria-label="Close">${ic("x")}</button></div>
+    <div class="sheet-b">${body}${refusal}</div>
+    <div class="sheet-f"><span class="scope">${ic("lock","sm")} Visible to the ${r.members.length} people in this room. Nowhere else until it's paid.</span>
+      <button class="btn secondary" data-act="close-modal">Cancel</button><button class="btn primary" data-act="propose" title="Ctrl Enter">${cta}</button></div></div></div>`;
+}
+function renderRefusal(k){
+  if(k==="xmr") return `<div class="notice err flat">${ic("alert")}<div class="t"><b>Nothing was requested.</b> No Monero wallet is open. Open it in Monero Wallet.</div>
+      <div class="acts wrap"><button class="btn secondary sm" data-act="noop">Open Monero Wallet</button><button class="btn ghost sm" data-act="noop">Install monero_wallet_ui</button></div></div>`;
+  return `<div class="notice err flat">${ic("alert")}<div class="t"><b>Nothing was proposed.</b> No Ethereum RPC answers for Sepolia, so your client can't build what everyone would sign. Your entries are kept.</div>
+      <div class="acts"><button class="btn secondary sm" data-act="view" data-arg="settings">Open Settings</button></div></div>`;
+}
+
+/* -------------------------------------------------------------- popovers */
+function renderPopover(){
+  const p = S.popover;
+  if(!p || p==="actions") return "";
+  const anchor = document.querySelector(`[data-arg="${p}"][data-act="pop"]`);
+  const host = $("#app");
+  if(!anchor || !host) return "";
+  const a = anchor.getBoundingClientRect(), h = host.getBoundingClientRect(), sc = scale();
+  const top = (a.bottom - h.top)/sc + 6, right = (h.right - a.right)/sc;
+  const below = (h.bottom - a.bottom)/sc;
+  const pos = (w) => `style="${below < 260 ? `bottom:${(h.bottom - a.top)/sc + 6}px` : `top:${top}px`};right:${Math.max(8,right)}px${w?`;width:${w}px`:""}"`;
+  const r = ROOMS[S.room];
+  if(p==="conn") return `<div class="pop" ${pos(340)} role="dialog" aria-label="Connections">
+      <h4>What this room depends on</h4>
+      <div class="conn-row"><span class="live-dot" style="margin-top:6px"></span><div class="body"><b>Delivery · logos.dev</b><div class="s">The room's own transport · 6 peers · a message reaches the others in about a second</div></div></div>
+      <div class="conn-row"><span class="live-dot" style="margin-top:6px"></span><div class="body"><b>Store node</b><div class="s">Keeps the room's sealed messages for late readers. Sees which topic and when, never what (FS-9).</div></div></div>
+      ${r.id==="ops"||r.id==="dinner"?`<div class="conn-row"><span class="live-dot${S.sim.rpc?" warn":""}" style="margin-top:6px"></span><div class="body"><b>Ethereum RPC · Sepolia</b><div class="s">${S.sim.rpc?"Not answering: proposals here can't be checked against the chain":"Introduced by a proposal · your own endpoint"}</div></div></div>`:""}
+      <div class="conn-row"><span class="live-dot" style="margin-top:6px;background:var(--surface)"></span><div class="body"><b>Mixnet · off</b><div class="s">Hides which member sent a message. Turn it on in Settings › Privacy.</div></div></div>
+    </div>`;
+  if(p==="invite") return `<div class="pop" ${pos(380)} role="dialog" aria-label="Invite">
+      <h4>Invite someone</h4>
+      <div style="padding:0 8px 8px"><div class="dim" style="font-size:12px;margin-bottom:6px">Pick a contact: the invite admits them, so they arrive a member.</div>
+        <div class="pickers">${["carol","mira","sol"].filter(x=>!r.members.includes(x)).map(id=>`<button class="pick">${av(id)}${nm(id)}</button>`).join("")}</div></div>
+      <div class="menu-sep"></div>
+      <div style="padding:8px"><div class="dim" style="font-size:12px;margin-bottom:6px">Or share the room code. Whoever joins with it asks to join, and a member decides.</div>
+        <div style="display:flex;gap:6px"><input class="field-in mono" readonly value="${esc(r.code)}" style="font-size:11px"><button class="btn secondary sm" data-act="copy">${ic("copy","sm")} Copy</button></div></div>
+    </div>`;
+  if(p==="more") return `<div class="pop" ${pos()} role="menu">
+      <button class="menu-i" data-act="rename">${ic("edit","sm")} Rename</button>
+      <button class="menu-i" data-act="details" data-arg="people">${ic("panel","sm")} Room details</button>
+      <button class="menu-i" data-act="details" data-arg="history">${ic("clock","sm")} Room history</button>
+      <button class="menu-i" data-act="noop">${ic("out","sm")} Export the room's proof</button>
+      <div class="menu-sep"></div>
+      <button class="menu-i danger" data-act="leave-ask">${ic("door","sm")} Leave room…</button></div>`;
+  if(p.startsWith("card:")){
+    const id = p.slice(5);
+    return `<div class="pop" ${pos()} role="menu">
+      <button class="menu-i" data-act="who-sees" data-arg="${id}">${ic("eye","sm")} Who sees this</button>
+      <button class="menu-i" data-act="toggle-card" data-arg="${id}">${ic("info","sm")} Details</button>
+      <button class="menu-i" data-act="noop">${ic("copy","sm")} Copy the proposal id</button>
+      <button class="menu-i" data-act="noop">${ic("out","sm")} Download the signature audit</button>
+      <div class="menu-sep"></div>
+      <button class="menu-i danger" data-act="noop">${ic("x","sm")} Decline</button></div>`;
+  }
+  return "";
+}
+
+/* -------------------------------------------------------------- details drawer */
+function renderDrawer(){
+  const r = ROOMS[S.room], t = S.details.tab;
+  const tabs = [["people","People"],["accounts","Accounts"],["history","History"],["privacy","Privacy"]]
+    .map(([k,l])=>`<button class="tab" role="tab" aria-selected="${t===k}" data-act="tab" data-arg="${k}">${l}</button>`).join("");
+  let b = "";
+  if(t==="people"){
+    const pend = r.blocks.filter(x=>x.k==="join" && x.state==="pending");
+    b = (pend.length?`<div class="d-sec">Asking to join</div>${pend.map(x=>`<div class="mrow">${av(x.who)}<div class="body"><b>${nm(x.who)}</b><div class="s mono">${P[x.who].id}</div></div><button class="btn primary sm" data-act="admit" data-arg="${x.who}">Admit</button></div>`).join("")}`:"") +
+      `<div class="d-sec">In the room · ${r.members.length}</div>` +
+      r.members.map(m=>`<div class="mrow">${av(m)}<div class="body"><b>${m==="you"?P.you.alias:nm(m)}</b>${m==="you"?'<span class="tag">you</span>':""}${r.accounts.some(a=>a.safe)?'<span class="tag">Safe signer</span>':""}<div class="s mono">${P[m].id}</div></div></div>`).join("") +
+      `<button class="btn secondary sm" style="margin-top:10px" data-act="pop" data-arg="invite">${ic("plus","sm")} Invite someone</button>
+       <div class="d-sec">Security level</div><div class="acct">${[["Who is speaking","bound secp256k1 identity"],["Where it came from","signed hash-linked log"],["Who can read it",`ECIES epochs · epoch ${r.epoch}`]].map(([a,m])=>`<div class="mrow" style="padding:4px 0"><span class="live-dot"></span><div class="body"><b>${a}</b> <span class="dim">· real</span><div class="s">${m}</div></div></div>`).join("")}</div>
+       <div class="foot-note">Adding someone re-keys the room forward: they read from there on, never the messages before.</div>`;
+  }
+  if(t==="accounts"){
+    b = `<div class="d-sec">Disclosed into this room</div>` +
+      (r.accounts.length ? r.accounts.map(a=>`<div class="acct"><div class="t">${ic(a.safe?"safe":"wallet","sm")} ${esc(a.t)}</div><div class="s">${esc(a.s)}</div></div>`).join("")
+        : `<div class="dim" style="font-size:13px;margin-bottom:10px">No account yet. A member discloses one: the room checks it against the chain, and a proposal can then act from it.</div>`) +
+      `<div class="d-sec">Disclose an account</div>` +
+      [["safe","Safe on an EVM chain","An address you sign for; the room reads its owners and threshold"],["btc","Bitcoin multisig","k of n keys; the address is derived, no chain read needed"],["frost","FROST key ceremony","Make a threshold key with the room; one signature on chain"],["lez","LEZ multisig","A program account on the LEZ, checked by its config"]]
+      .map(([k,l,d])=>`<div class="acct" style="padding:0"><button class="menu-i" style="padding:10px 12px" data-act="disclose" data-arg="${k}" aria-expanded="${S.expandDisclose===k}">${ic(k==="safe"?"safe":k==="btc"?"btc":k==="lez"?"lambda":"key","sm")}<span style="flex:1"><b>${l}</b><div class="dim" style="font-size:12px;font-weight:400">${d}</div></span>${ic(S.expandDisclose===k?"chevu":"chevd","sm")}</button>
+        ${S.expandDisclose===k?`<div style="padding:0 12px 12px;display:flex;flex-direction:column;gap:8px"><select class="field-in"><option>Sepolia (11155111)</option><option>Ethereum (1)</option><option>anvil (31337)</option></select><input class="field-in mono" placeholder="0x… the account's address"><button class="btn primary sm" data-act="noop">Disclose and check</button><div class="dim" style="font-size:12px">The others see the address and that it came from you (inv 9).</div></div>`:""}</div>`).join("");
+  }
+  if(t==="history"){
+    b = `<div class="dim" style="font-size:13px;margin-bottom:14px">How this room reached its state, folded from the shared log as it happens.</div><div class="hist">${r.history.slice().reverse().map(h=>`<div class="hi ${h.c}">${esc(h.t)}<div class="s">${esc(h.s)}</div></div>`).join("")}</div>`;
+  }
+  if(t==="privacy"){
+    const c = S.details.filter ? CARDS[S.details.filter] : null;
+    const chip = c ? `<span class="filter-chip">${ic(kindIcon(c),"sm")} ${esc(cardTitle(c))} · ${esc(cardAmount(c))}<button class="icon-btn sm" style="width:20px;height:20px" data-act="clear-filter" aria-label="Show the whole room">${ic("x","sm")}</button></span>` : "";
+    const obs = ["the room","the store node","your RPC","the chain"];
+    const rows = c ? [
+        ["What was said", ["y","n","n","n"]],
+        ["Amounts", ["y","n",c.kind==="xmr"?"n":"m","y"]],
+        ["Who's in it", ["y","n","n",c.kind==="xmr"?"n":"y"]],
+        ["Who agreed", ["y","n","n",c.kind==="safe"?"y":"n"]],
+        ["When", ["y","m","m","y"]],
+      ] : [
+        ["What was said", ["y","n","n","n"]],
+        ["Who is in the room", ["y","n","n","n"]],
+        ["That the room is busy", ["y","m","n","n"]],
+        ["Payments that left", ["y","n","m","y"]],
+      ];
+    b = chip + `<table class="mx"><thead><tr><th></th>${obs.map(o=>`<th>${o}</th>`).join("")}</tr></thead><tbody>${rows.map(([f,v])=>`<tr><td>${f}</td>${v.map(x=>`<td><span class="cell ${x}" title="${{y:"sees it",m:"sees metadata about it",n:"doesn't see it"}[x]}"></span></td>`).join("")}</tr>`).join("")}</tbody></table>
+      <div class="dim" style="font-size:12px;margin:8px 0 16px;display:flex;gap:14px"><span><span class="cell y"></span> sees it</span><span><span class="cell m"></span> metadata</span><span><span class="cell n"></span> doesn't</span></div>
+      <div class="obs"><b>The room · ${r.members.length} people</b>Everything said here, every amount, who proposed, who agreed and who declined. Nobody outside, and no server copy.</div>
+      <div class="obs"><b>The store node</b>That this topic got sealed messages, how big, and when, and the network address each came from unless the mixnet is on. Never what they say. It is always listed, because it is always there (FS-9).</div>
+      ${c && c.kind!=="xmr" ? `<div class="obs out"><b>Anyone reading the chain</b>Once paid: ${c.kind==="safe"?"the amount, the recipient, the Safe and every signer's address":"each payment's amount, its sender and Ana's address"}. Public and permanent.</div>`:""}
+      <button class="link" data-act="view" data-arg="learn">What other stacks leak here →</button>`;
+  }
+  return `<aside class="drawer" aria-label="Room details">
+    <div class="drawer-h"><h3>Room details</h3><button class="icon-btn" data-act="close-details" aria-label="Close" title="Close (Esc)">${ic("x")}</button></div>
+    <div class="tabs" role="tablist">${tabs}</div><div class="drawer-b">${b}</div></aside>`;
+}
+
+/* -------------------------------------------------------------- other pages */
+function renderWallet(){
+  const rows = [["ETH","Sepolia","1.204 3","verified","checked with a proof against the state root (eth_getProof)"],
+    ["USDC","Sepolia","250.00","attested","read over your RPC; no proof"],
+    ["BTC","regtest","0.4210 0000","attested","read from your own bitcoind; no proof"],
+    ["λ","LEZ · public","1 200","attested","read from the zone's sequencer"],
+    ["λ","LEZ · private","300","attested","found by your own scan of the zone"],
+    ["XMR","stagenet","2.10","attested","your Monero wallet's balance, through Monero Wallet"]];
+  return `<div class="chips"><button class="chip" aria-pressed="true">Balances</button><button class="chip">Send on LEZ</button><button class="chip">Your addresses</button></div>
+    <div class="list">${rows.map(([a,ch,v,g,how])=>`<div class="bal"><span class="kind-ico">${ic(a==="BTC"?"btc":a==="λ"?"lambda":"coin")}</span><div class="body"><b>${a}</b> <span class="dim">· ${ch}</span><div class="dim" style="font-size:12px">${how}</div></div><span class="v">${v}</span><span class="pill ${g==="verified"?"done":"wait"}">${g}</span></div>`).join("")}</div>`;
+}
+function renderContacts(){
+  return `<div class="list">${["ana","bob","carol","mira","dev","sol"].map(id=>`<div class="bal">${av(id,"lg")}<div class="body"><b>${nm(id)}</b><div class="dim mono">${P[id].id}</div></div><button class="btn ghost sm">${ic("edit","sm")} Rename</button></div>`).join("")}</div>`;
+}
+function renderLearn(){
+  const cl = [["imperative","A later joiner cannot read earlier messages"],["imperative","You sign what you saw, not what a screen claimed"],["imperative","A signature is worthless anywhere but here"],["imperative","Nothing on the room's topic says who is in it"],["exposed","The store node still sees the conversation graph"],["motivational","Schema identity is ours until the platform's profile ratifies"],["others","A hosted chat backend sees the whole room"]];
+  return `<div class="list">${cl.map(([k,t])=>`<div class="claim"><span class="kind-ico">${ic(k==="imperative"?"shield":k==="others"?"eye":"alert")}</span><div class="body"><b>${t}</b><div class="dim" style="font-size:12px;margin-top:2px">${k==="others"?"what other stacks leak":k==="imperative"?"enforced by the code: a test fails if it stops being true":k==="exposed"?"a gap: someone can still see this":"a gap: it holds while people behave"}</div></div><span class="pill ${k==="imperative"?"done":k==="others"?"info":"wait"}">${k==="others"?"elsewhere":k}</span></div>`).join("")}</div>`;
+}
+function renderSettings(burger){
+  const sec = S.setSec || "identity";
+  const navs = [["identity","Identity"],["network","Network"],["chains","Chains"],["signer","Signer"],["privacy","Privacy"],["advanced","Advanced"]];
+  const row = (t, s, ctl) => `<div class="set-row"><div class="body"><b>${t}</b><div class="s">${s}</div></div>${ctl}</div>`;
+  const content = {
+    identity: row("Room identity", `<span class="mono">${P.you.id}</span> · Ed25519, for reading and writing rooms`, `<button class="btn ghost sm">${ic("copy","sm")} Copy</button>`) +
+      row("Signing identity", "secp256k1, bound to the room identity by a signed link statement", `<span class="pill done">bound</span>`) +
+      row("Keystore", "An encrypted keyfile on this device", `<button class="btn secondary sm">Change passphrase</button>`),
+    network: row("Fleet", "Where rooms travel. logos.test needs a funded RLN membership to send.", `<span class="seg2"><button aria-pressed="true">logos.dev</button><button>logos.test</button></span>`) +
+      row("Store nodes", "Untrusted, swappable. Muster rotates across them.", `<button class="btn secondary sm">Edit</button>`),
+    chains: row("Ethereum · Sepolia", S.sim.rpc?"<span style='color:var(--warning)'>Not answering</span> · https://sepolia.example/rpc":"https://sepolia.example/rpc · your own endpoint", `<button class="btn secondary sm">Edit</button>`) +
+      row("Bitcoin", "Your own node · regtest at 127.0.0.1:18453", `<button class="btn secondary sm">Edit</button>`) +
+      row("LEZ", "testnet.lez.logos.co", `<button class="btn secondary sm">Edit</button>`),
+    signer: row("Logos Signer", "Approvals for keys the platform holds go to Basecamp's Signer", `<span class="pill done">installed</span>`),
+    privacy: row("Mixnet for this room's sends", "Hides which member sent a message. Not who reads: reading is a store query from your own address.", `<span class="seg2"><button aria-pressed="true">Off</button><button>Preferred</button><button>Required</button></span>`),
+    advanced: row("Show the local test Safe dashboard", "The anvil Safe suggestion, for development (decision §6.3)", `<button class="toggle" aria-pressed="false" data-act="noop" aria-label="Show the dashboard"></button>`),
+  }[sec];
+  return `<div class="page"><div class="set-wrap"><nav class="set-nav">${navs.map(([k,l])=>`<button class="nav" data-act="set-sec" data-arg="${k}" ${sec===k?'aria-current="page"':""}><span class="txt">${l}</span></button>`).join("")}</nav>
+    <div class="set-body"><div class="page-inner" style="max-width:720px"><div class="page-h"><div style="display:flex;gap:8px">${burger}<div><h1>${navs.find(n=>n[0]===sec)[1]}</h1><p>Everything here is yours to configure. No server, no telemetry.</p></div></div></div>
+    <div class="set-card">${content}</div></div></div></div></div>`;
+}
+
+/* ===================================================================== actions */
+function toast(t){ S.toast = t; clearTimeout(S._tt); S._tt = setTimeout(()=>{ S.toast = null; render(); }, 2400); }
+function openRoom(id){
+  S.view = "room"; S.room = id; S.popover = null; S.dialog = null; S.rename = false; S.sideOpen = false;
+  ROOMS[id].unread = 0; S._scroll = true;
+  if(detailsMode()==="overlay") S.details.open = false;
+}
+function hist(r, c, t, s){ r.history.push({c, t, s:s||"just now"}); }
+function addBlock(r, b){ r.blocks.push(b); r.when = "now"; S._scroll = true; }
+
+const H = {
+  "view": a => { S.view = a; S.popover = null; S.sheet = null; S.dialog = null; S.sideOpen = false; },
+  "open-room": a => openRoom(a),
+  "filter": a => { S.homeFilter = a; },
+  "toggle-side": () => { S.sideMode = sideMode()==="rail" ? "full" : "rail"; },
+  "open-side": () => { S.sideOpen = true; },
+  "close-side": () => { S.sideOpen = false; },
+  "new-room": () => { S.dialog = "newroom"; S.nr = null; S.popover = null; },
+  "nr-verb": a => { S.nr.verb = a; },
+  "nr-person": a => { S.nr.people.has(a) ? S.nr.people.delete(a) : S.nr.people.add(a); },
+  "nr-open": () => {
+    const id = "r"+(++uid), people = [...S.nr.people];
+    const label = {split:"Split a bill", xmr:"Request a payment", safe:"Pay from a shared account", talk:"Talk"}[S.nr.verb];
+    ROOMS[id] = {id, title: label + (people.length?` with ${people.map(nm).join(", ")}`:""), code:`/muster/1/muster.room.${(Math.random()*1e16).toString(16).slice(0,16)}/proto`,
+      members:["you"].concat(people), epoch:1, when:"now", unread:0, accounts:[], draft:"",
+      blocks:[{k:"day", t:"Today"},{k:"sys", h:`<b>You</b> opened this room${people.length?` and invited ${people.map(p=>`<b>${nm(p)}</b>`).join(", ")}. Each arrives a member.`:"."}`}],
+      history:[{c:"key", t:"The room was opened · epoch 1", s:"You · just now"}]};
+    S.dialog = null; openRoom(id);
+    if(S.nr.verb && S.nr.verb!=="talk") S.sheet = {kind:S.nr.verb};
+  },
+  "accept-invite": a => { const v = S.invites.splice(+a,1)[0];
+    const id = "r"+(++uid);
+    ROOMS[id] = {id, title:v.title, code:"/muster/1/muster.room.e0a1…/proto", members:["you",v.from,"sol"], epoch:2, when:"now", unread:0, accounts:[], draft:"",
+      blocks:[{k:"day", t:"Today"},{k:"seam", t:"You can read from here · epoch 2"},{k:"msg", who:v.from, t:"Welcome! Prize pool details coming.", at:"now"}],
+      history:[{c:"key", t:"Mira invited you · re-keyed to epoch 2", s:"just now"}]};
+    openRoom(id); },
+  "dismiss-invite": a => { S.invites.splice(+a,1); },
+  "join-code": () => { toast("Asked to join — a member there decides"); },
+  "rename": () => { S.rename = true; S.popover = null; requestAnimationFrame(()=>{ const n=$("#rename-in"); if(n){ n.focus(); n.select(); } }); },
+  "pop": a => { S.popover = S.popover===a ? null : a; },
+  "details": a => { const close = S.details.open && S.details.tab===a && !S.details.filter; S.details = {open:!close, tab:a, filter:null}; S.popover = null; },
+  "tab": a => { S.details.tab = a; if(a!=="privacy") S.details.filter = null; },
+  "close-details": () => { S.details.open = false; },
+  "clear-filter": () => { S.details.filter = null; },
+  "who-sees": a => { S.details = {open:true, tab:"privacy", filter:a}; S.popover = null; },
+  "toggle-card": a => { CARDS[a].open = !CARDS[a].open; S.popover = null; },
+  "jump": a => { S._flash = a; },
+  "leave-ask": () => { S.dialog = "leave"; S.popover = null; },
+  "leave": () => { delete ROOMS[S.room]; S.dialog = null; S.view = "needs"; S.room = null; toast("You left the room"); },
+  "close-modal": () => { S.dialog = null; S.sheet = null; },
+  "switcher": () => { S.dialog = "switcher"; S.swq = ""; S.swSel = 0; requestAnimationFrame(()=>{ const n=$("#sw-in"); if(n) n.focus(); }); },
+  "copy": () => { toast("Room code copied"); S.popover = null; },
+  "send": () => { const r = ROOMS[S.room]; if(!r.draft.trim()) return; addBlock(r, {k:"msg", who:"you", t:r.draft.trim(), at:"now"}); r.draft = ""; },
+  "action": a => { S.popover = null; S.sheet = {kind:a}; },
+  "disclose-from-sheet": () => { S.sheet = null; S.details = {open:true, tab:"accounts", filter:null}; S.expandDisclose = "safe"; },
+  "disclose": a => { S.expandDisclose = S.expandDisclose===a ? null : a; },
+  "sp-person": a => { const p = S.sheet.people; p.has(a) ? p.delete(a) : p.add(a); },
+  "sp-me": () => { S.sheet.meToo = !S.sheet.meToo; },
+  "set-sec": a => { S.setSec = a; },
+  "propose": () => {
+    const k = S.sheet.kind, r = ROOMS[S.room];
+    if(S.sim.refusal && (k==="split"||k==="xmr"||k==="safe")){ S.sheet.refused = true; return; }
+    if(k==="split"){
+      const tot = parseFloat(S.sheet.total||"0.09") || 0.09, ppl = [...S.sheet.people], n = ppl.length + (S.sheet.meToo?1:0) || 1;
+      const id = "c"+(++uid);
+      CARDS[id] = {id, kind:"split", room:r.id, proposer:"you", creditor:"you", asset:"ETH", chain:"Sepolia", total:String(tot), memo:"Proposed just now",
+        at:"now", shares:ppl.map(w=>({who:w, amt:(tot/n).toFixed(4), st:"to agree"})), creditorAgreed:true, status:"collecting", open:false};
+      // you're the creditor here: swap the copy so the card reads from your side
+      CARDS[id].proposerYou = true;
+      addBlock(r, {k:"card", id}); hist(r, "act", `You proposed a split of ${tot} ETH`);
+      S.sheet = null; toast("Proposed — the room sees it now");
+    } else if(k==="xmr"){
+      toast("Requested — your wallet minted a subaddress"); S.sheet = null;
+    } else if(k==="safe" && r.accounts.some(a=>a.safe)){
+      toast("Proposed — the signers see it now"); S.sheet = null;
+    } else { S.sheet = null; }
+  },
+  "agree": a => { const c = CARDS[a]; c.shares.find(s=>s.who==="you").st = "agreed"; const r = ROOMS[c.room];
+    hist(r, "", "You agreed to your share (0.04 ETH)");
+    if(c.shares.every(s=>s.st!=="to agree")){
+      c.status = "paying";
+      c.shares.forEach(s=>{ s.st = s.who==="you" ? "agreed — to pay" : "paying"; });
+      addBlock(r, {k:"sys", h:"Everyone named agreed. Each of you pays your own share now; Ana's client confirms each one from its own read of the chain."});
+      setTimeout(()=>{ const b = c.shares.find(s=>s.who==="bob"); if(b){ b.st = "received"; hist(r,"","Ana's client confirmed Bob's payment"); render(); } }, 2500);
+    }
+    toast("Agreed — your room key signed it"); },
+  "pay": a => { const c = CARDS[a], me = c.shares.find(s=>s.who==="you"), r = ROOMS[c.room]; me.st = "paying"; toast("Sent from your wallet");
+    setTimeout(()=>{ me.st = "received"; hist(r,"act","Ana's client confirmed your payment");
+      if(c.shares.every(s=>s.st==="received")){ c.status = "final"; addBlock(r, {k:"sys", h:"<b>Settled.</b> Every share was paid and confirmed by Ana's own read of the chain."}); }
+      render(); }, 2800); },
+  "approve": a => { const c = CARDS[a], r = ROOMS[c.room]; c.signed.push("you"); hist(r,"","You approved · threshold met");
+    if(c.signed.length>=c.need) { c.status = "executable"; addBlock(r, {k:"sys", h:"Threshold met. Any signer can submit it now."}); }
+    toast("Approved — your signature is in the room"); },
+  "submit": a => { const c = CARDS[a], r = ROOMS[c.room]; c.status = "submitted"; c.conf = 0; hist(r,"act","Submitted to Sepolia");
+    const t = setInterval(()=>{ c.conf++; if(c.conf>=3){ c.status = "final"; clearInterval(t); hist(r,"act","Final at 3 confirmations"); } render(); }, 1200); },
+  "admit": a => { const r = ROOMS[S.room]; const j = r.blocks.find(b=>b.k==="join" && b.who===a && b.state==="pending"); if(j) j.state = "admitted";
+    r.members.push(a); r.epoch++; addBlock(r, {k:"seam", t:`${nm(a)} can read from here · the room re-keyed to epoch ${r.epoch}`});
+    hist(r,"key",`You admitted ${nm(a)} · re-keyed to epoch ${r.epoch}`); toast(`${nm(a)} is in`); },
+  "ignore": a => { const r = ROOMS[S.room]; const j = r.blocks.find(b=>b.k==="join" && b.who===a); if(j) j.state = "ignored"; },
+  "noop": () => {},
+};
+
+function onClick(ev){
+  const t = ev.target.closest("[data-act]");
+  // a click on the dialog body must not close it via the wrapper's data-act
+  if(t && t.classList.contains("modal-wrap") && ev.target.closest("[data-stop]")) return;
+  if(!t){ if(S.popover && !ev.target.closest(".pop")){ S.popover = null; render(); } return; }
+  const act = t.dataset.act, arg = t.dataset.arg;
+  if(!H[act]) return;
+  if(act!=="pop" && !t.closest(".pop") && S.popover && act!=="details") S.popover = null;
+  H[act](arg);
+  render();
+}
+
+/* ===================================================================== frame sizing */
+const SIZES = {1024:700, 1440:900, 1920:1080};
+function scale(){ const avail = window.innerWidth - 32; return Math.min(1, avail / S.sim.width); }
+function sizeFrame(){
+  const f = $("#frame"), w = S.sim.width, h = SIZES[w] || 900, sc = scale();
+  f.style.width = w+"px"; f.style.height = h+"px"; f.style.transform = sc<1 ? `scale(${sc})` : "";
+  $("#stage-inner").style.width = (w*sc)+"px"; $("#stage-inner").style.height = (h*sc)+"px";
+  f.classList.toggle("basecamp", S.sim.basecamp);
+}
+function mockBar(){
+  $("#mb-width").innerHTML = Object.keys(SIZES).map(w=>`<button class="seg" data-w="${w}" aria-pressed="${S.sim.width==w}">${w}×${SIZES[w]}</button>`).join("");
+  $("#mb-basecamp").checked = S.sim.basecamp; $("#mb-refusal").checked = S.sim.refusal; $("#mb-mismatch").checked = S.sim.mismatch; $("#mb-rpc").checked = S.sim.rpc;
+}
+
+/* ===================================================================== wiring */
+$("#app").addEventListener("click", onClick);
+$("#app").addEventListener("input", e => {
+  const t = e.target;
+  if(t.id==="msg"){ ROOMS[S.room].draft = t.value; return; }
+  if(t.dataset.bind && S.sheet){ S.sheet[t.dataset.bind] = t.value; if(S.sheet.kind==="split") render(); return; }
+  if(t.id==="sw-in"){ S.swq = t.value; S.swSel = 0; render(); }
+});
+$("#app").addEventListener("keydown", e => {
+  const t = e.target;
+  if(t.id==="msg" && e.key==="Enter"){ e.preventDefault(); H.send(); render(); }
+  if(t.id==="rename-in"){
+    if(e.key==="Enter"){ ROOMS[S.room].title = t.value.trim() || ROOMS[S.room].title; S.rename = false; render(); }
+    if(e.key==="Escape"){ S.rename = false; render(); e.stopPropagation(); }
+  }
+  if(t.id==="sw-in"){
+    const rs = Object.values(ROOMS).filter(r=>r.title.toLowerCase().includes((S.swq||"").toLowerCase()));
+    if(e.key==="ArrowDown"){ S.swSel = Math.min(rs.length-1, (S.swSel||0)+1); render(); e.preventDefault(); }
+    if(e.key==="ArrowUp"){ S.swSel = Math.max(0, (S.swSel||0)-1); render(); e.preventDefault(); }
+    if(e.key==="Enter" && rs[S.swSel||0]){ openRoom(rs[S.swSel||0].id); render(); }
+  }
+});
+$("#app").addEventListener("focusout", e => { if(e.target.id==="rename-in" && S.rename){ ROOMS[S.room].title = e.target.value.trim() || ROOMS[S.room].title; S.rename = false; setTimeout(render); } });
+document.addEventListener("keydown", e => {
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==="k"){ e.preventDefault(); H.switcher(); render(); return; }
+  if((e.ctrlKey||e.metaKey) && e.key==="Enter" && S.sheet){ e.preventDefault(); H.propose(); render(); return; }
+  if(e.key==="Escape"){
+    if(S.dialog||S.sheet){ S.dialog = null; S.sheet = null; }
+    else if(S.popover){ S.popover = null; }
+    else if(S.details.open){ S.details.open = false; }
+    else if(S.sideOpen){ S.sideOpen = false; }
+    else return;
+    render();
+  }
+});
+document.querySelector(".mock-bar").addEventListener("click", e => {
+  const w = e.target.closest("[data-w]"); if(w){ S.sim.width = +w.dataset.w; S.sideMode = null; mockBar(); render(); }
+  if(e.target.id==="mb-reset"){ const sim = S.sim; seed(); S.sim = sim; render(); }
+});
+[["mb-basecamp","basecamp"],["mb-refusal","refusal"],["mb-mismatch","mismatch"],["mb-rpc","rpc"]].forEach(([id,k])=>{
+  $("#"+id).addEventListener("change", e => { S.sim[k] = e.target.checked; if(k==="basecamp") S.sideMode = null; render(); });
+});
+window.addEventListener("resize", () => render());
+
+seed(); mockBar(); render();
+window.__mock = { S: () => S, H, render };   // for scripted screenshots
+})();
+</script>
+</body>
+</html>
