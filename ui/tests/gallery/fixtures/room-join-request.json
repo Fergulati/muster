@@ -1,0 +1,5 @@
+{
+  "about": "The founder's room while someone asks to join (Bob's instance: Alice asks).",
+  "snapshot": "data/split-bob-join-request.json",
+  "steps": [ {"view": "room"}, {"shot": ""} ]
+}

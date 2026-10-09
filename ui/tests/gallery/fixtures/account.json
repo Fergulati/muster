@@ -1,0 +1,5 @@
+{
+  "about": "The Account surface (the local test Safe dashboard).",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [ {"view": "dashboard"}, {"shot": ""} ]
+}

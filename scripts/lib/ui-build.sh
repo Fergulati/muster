@@ -32,6 +32,12 @@ case "$MUSTER_UI" in
   nim) RUNNER=".run/runner-nim/bin/muster-ui" ;;
   *) echo "MUSTER_UI must be cpp or nim, got '$MUSTER_UI'" >&2; exit 2 ;;
 esac
+# Two overrides for scripts/ui-screenshot.sh (exo-720.2), both unset in an ordinary run:
+#   MUSTER_RUNNER  another build meeting the contract above — a dev runner
+#                  (scripts/lib/ui-dev.sh): a runner's compiled code with this tree's QML
+#   MUSTER_QPA     the Qt platform instead of offscreen — xcb on an Xvfb display, where the
+#                  QML view IS instantiated (offscreen it never is), so it can be recorded
+RUNNER="${MUSTER_RUNNER:-$RUNNER}"
 
 # The delivery network a self-test's instances join:
 #   MUSTER_FLEET=logos.dev   (default) cluster 3, no RLN — a node starts with nothing more
@@ -114,7 +120,7 @@ UI_PIDS=()
 # ui_launch <user-dir> <log> [VAR=value …] — one offscreen instance in its own session.
 ui_launch() {
   local dir="$1" log="$2"; shift 2
-  env "$@" QT_QPA_PLATFORM=offscreen setsid "$RUNNER" --user-dir "$dir" >"$log" 2>&1 &
+  env "$@" QT_QPA_PLATFORM="${MUSTER_QPA:-offscreen}" setsid "$RUNNER" --user-dir "$dir" >"$log" 2>&1 &
   UI_PIDS+=("$!")
   disown "$!"
 }

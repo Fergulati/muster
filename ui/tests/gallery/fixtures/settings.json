@@ -1,0 +1,5 @@
+{
+  "about": "Settings, as a member with a joined room sees it.",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [ {"view": "settings"}, {"shot": ""} ]
+}

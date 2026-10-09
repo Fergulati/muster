@@ -1,0 +1,5 @@
+{
+  "about": "Home with one joined room whose split is final (Alice's instance, recorded from split-self-test.sh).",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [ {"view": "home"}, {"shot": ""} ]
+}

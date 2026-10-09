@@ -1,0 +1,5 @@
+{
+  "about": "Send on LEZ (Mode A).",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [ {"view": "lez"}, {"shot": ""} ]
+}

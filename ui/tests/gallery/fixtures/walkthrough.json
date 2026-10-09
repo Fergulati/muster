@@ -1,0 +1,5 @@
+{
+  "about": "The walkthrough (the claims registry).",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [ {"view": "walkthrough"}, {"shot": ""} ]
+}

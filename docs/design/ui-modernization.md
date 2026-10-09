@@ -1,6 +1,6 @@
 # Modernizing Muster's UI: a chat client first, the lifecycle on demand
 
-**Status:** plan agreed 2026-10-09 (§6). U0d, the desktop mockup, in progress: `ui/prototype/desktop-v3.html`.
+**Status:** plan agreed 2026-10-09 (§6). U0b (the screenshot harness) done; U0a (control census, lint gate) done in the runner, Basecamp and the Nim host still to check; U0d (the desktop mockup, `ui/prototype/desktop-v3.html`) awaiting review. §7 has what U0 found.
 **Reads with:** `docs/01-furps.md` (U-1 to U-10), `ui/prototype/coordination-prototype-v2.html` (the reference build), `docs/labbook/qml-errors-are-invisible-to-nix-build.md`, `docs/design/seaqt-ui.md` (the QML is kept when the backend moves to Nim, so this work carries over).
 
 ## 1. What was asked
@@ -220,3 +220,18 @@ Fold in the open exo-408 card items: #2, #5, #8, and #13.
 2. **Mock up first or build first?** Mock up first (U0d): settle the look in HTML, then port it.
 3. **The anvil Safe dashboard ("Account").** Hidden behind a dev setting once the Wallet exists.
 4. **The Walkthrough.** "Learn" in the sidebar, with its claims also reachable from cards in context ("How is this kept private?").
+
+## 7. What U0 found (2026-10-09)
+
+Details, and the traps behind them: `docs/labbook/screenshots-of-the-qml-that-hold-still.md`.
+
+- **The harness.** `scripts/ui-screenshot.sh gallery` renders the real `Main.qml` with recorded module output, at three sizes, in about a minute, identical run to run. `record` makes the fixtures from a real self-test; `compare` pixel-diffs two sets; `census` shows the design-system controls in the real runner. `scripts/ui-lint.sh` gates new QML errors against a baseline.
+- **Every control the plan names renders in the runner,** with zero QML warnings (17 of them, Drawer, Menu, Dialog and ToolTip included). So the "LogosText and LogosButton only" rule can go once Basecamp and the Nim host agree.
+- **Icons need GL.** `LogosIcon` tints through `MultiEffect`, which draws nothing under the software renderer. Design rule for U1–U6: an icon-only button always has a tooltip or a label.
+- **Four silent bugs in today's QML,** none caught by any build:
+  - `Theme.typography.mono` does not exist (136 uses): no "monospace" text is monospace.
+  - `LogosButton.Variant.Tertiary` does not exist (4 uses).
+  - `Theme.palette.borderDefault` (6) and `textPrimary` (1) do not exist.
+
+  They are the lint baseline (147 findings); U1 removes them.
+- **The baseline shows the problem the plan names.** At 1440×900, a room's join request and its Admit button sit below the fold of the right panel. At the runner's default 1024×768, the top bar of seven buttons wraps to two rows.
