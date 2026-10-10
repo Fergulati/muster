@@ -1,6 +1,6 @@
 # Modernizing Muster's UI: a chat client first, the lifecycle on demand
 
-**Status:** plan agreed 2026-10-09 (§6). U0b (the screenshot harness) and U0c (the decomposition) done; U0a (control census, lint gate) done in the runner, Basecamp and the Nim host still to check; U0d (the desktop mockup, `ui/prototype/desktop-v3.html`) awaiting review. §7 has what U0 found.
+**Status:** plan agreed 2026-10-09 (§6). Done: U0b, U0c, U1 (style, components), U2 (the sidebar), U3 (the room's chrome), U4 (room details in a drawer); U0a done in the runner (Basecamp and the Nim host still to check). Next: U5 (proposing in sheets), U6 (compact cards), U7, U8. §7 has what each slice found.
 **Reads with:** `docs/01-furps.md` (U-1 to U-10), `ui/prototype/coordination-prototype-v2.html` (the reference build), `docs/labbook/qml-errors-are-invisible-to-nix-build.md`, `docs/design/seaqt-ui.md` (the QML is kept when the backend moves to Nim, so this work carries over).
 
 ## 1. What was asked
@@ -238,3 +238,15 @@ Details, and the traps behind them: `docs/labbook/screenshots-of-the-qml-that-ho
 - **The decomposition (U0c), a pure move.** `Room.qml` 3,738 → 1,321 lines (RoomHeader, RoomThread, RoomComposer, RoomDetails); `MusterCard.qml` 2,543 → 810 (CardProposal, CardNeeds, CardReceipt, CardAddressShare, CardAddressRequest, CardUnknownSchema); `RoomComposer.qml` 1,505 → 1,170 (the kind row, policy picker, needs, account picker, attest identity). All 66 gallery shots identical before and after, runtime warnings identical, `split-self-test.sh` green with the new QML live. Two things stay for later slices:
   - The payment, statement, action and split forms share their fields with one Propose row, so they move in U5, when each form gets its own sheet and Propose.
   - Sibling groups (the card's heading and actions, the composer's notices) stay where they are. Wrapping them would add layout spacing when all are hidden, which is a pixel change. U5 and U6 replace them.
+
+## 8. U1–U4 as built (2026-10-10)
+
+- **U1.** `MusterStyle` (a singleton in the `qmldir` we now ship) adds what Logos.Theme lacks: DM Mono, bundled; a type scale (24/16/14/12, and 11 for pills); status tints; `icon(name)` for the 33 icons in `ui/src/qml/icons/`. The shared components are `Avatar`, `StatusPill`, `SectionHeader`, `Surface`, `IconAction`, `ActionButton`, `InlineNotice`, `EmptyState` and `Toast`; the gallery's `components` fixture shows them. The 147 lint findings are fixed and the lint baseline is empty. The gallery's runtime QML warnings went from 17,181 to 0.
+- **`ActionButton`** exists because LogosButton is 200×50 by default, and its Primary label is white on orange, about 2.6:1 against AA's 4.5:1. ActionButton is sized to its label, with a dark label on Primary.
+- **U2.** `Sidebar` has three modes: full, a rail, and a drawer under 900 px. Until the person chooses, a window under 1180 px starts with the rail. The old nav buttons' objectNames ride on the rows that do their job.
+- **U3/U4.** The room is now one header line, the pinned proposal, the thread, join requests with Admit, the composer and the scope line. `RoomDetails` is a drawer with four tabs, docked when the thread keeps 640 px or more.
+- **Deferred:**
+  - membership seams in the thread (U-6);
+  - Privacy filtered to one proposal, and a card's own "Who sees this?" (U6);
+  - which labels are monospace (the surface slices decide).
+- **Not yet checked:** all of this in Basecamp 0.3.2, and in the Nim host.
