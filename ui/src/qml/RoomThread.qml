@@ -16,19 +16,38 @@ import Logos.Controls
 Rectangle {
     required property var room   // the Room this piece belongs to (Room.qml's roomItem)
 
+    id: threadRoot
     visible: room.joined
     Layout.fillWidth: true
     Layout.fillHeight: true
-    radius: Theme.spacing.radiusMedium
-    color: Theme.palette.surface
-    border.width: 1
-    border.color: Theme.palette.borderSubtle
+    // the page itself, not a box on it: the conversation owns the screen (exo-720.7)
+    color: "transparent"
+
+    // the pinned line's Review (RoomPinned): scroll to that proposal's card
+    Connections {
+        target: threadRoot.room
+        function onJumpRequested(intentId) {
+            var msgs = threadRoot.room.messages;
+            for (var i = 0; i < msgs.length; ++i) {
+                try {
+                    var o = JSON.parse(msgs[i].body);
+                    if (o && String(o.kind || "") === "intent-ref" && String(o.intentId || "") === intentId) {
+                        thread.positionViewAtIndex(i, ListView.Center);
+                        return;
+                    }
+                } catch (e) {}
+            }
+        }
+    }
 
     ListView {
         id: thread
         objectName: "messageThread"
         anchors.fill: parent
-        anchors.margins: Theme.spacing.medium
+        anchors.leftMargin: Theme.spacing.xlarge
+        anchors.rightMargin: Theme.spacing.xlarge
+        anchors.topMargin: Theme.spacing.medium
+        anchors.bottomMargin: Theme.spacing.medium
         clip: true
         spacing: Theme.spacing.small
         model: room.messages

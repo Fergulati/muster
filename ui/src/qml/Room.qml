@@ -1,7 +1,9 @@
 import QtQuick
 import QtQuick.Layouts
+import QtCore as Prefs   // qualified: a stored preference, not our Settings.qml surface
 
 import Logos.Theme
+import Logos.Controls
 
 // The room / conversation surface — the substrate of the spec-first client. ONE
 // timeline: chat text and cards interleave in the order they were sent, because a
@@ -35,6 +37,89 @@ Item {
     // and a card's "Use as recipient" write to them through these.
     readonly property Item proposeTo: composerPanel.proposeToField
     readonly property Item proposeValue: composerPanel.proposeValueField
+
+    // ── the room's chrome (exo-720.7, exo-720.8) ──────────────────────────
+    // Room details is a drawer, closed by default; whether it is open, and on which tab, is
+    // the person's choice, kept on this device (never in the room).
+    Prefs.Settings {
+        id: roomPrefs
+        category: "MusterUi"
+        property bool detailsOpen: false
+        property string detailsTab: "people"
+    }
+    property alias detailsOpen: roomPrefs.detailsOpen
+    property alias detailsTab: roomPrefs.detailsTab
+    function openDetails(tab) { if (tab) room.detailsTab = tab; room.detailsOpen = true; }
+    function closeDetails() { room.detailsOpen = false; }
+    // The pinned line's Review: the thread scrolls to that proposal's card.
+    signal jumpRequested(string intentId)
+
+    // Admit someone who asked to join — from the notice in the thread, or People.
+    function admitMember(identityHex) {
+        if (!room.backend) return;
+        room.backend.admit(identityHex);
+        // The admit re-keyed the room to a new epoch the joiner now shares. Anything from
+        // before their epoch is unreadable to them (F-16), so re-send it into the new
+        // epoch: an unanswered address request, and any open proposal (its card) —
+        // otherwise a payment proposed before they joined never reaches them to approve.
+        room.resendOutstandingAsk();
+        room.backend.reannounce();
+    }
+    // "Not now" on a join request hides its notice, this session only: the request stays,
+    // and People still offers Admit. The module has no "refuse": nobody is told anything.
+    property var dismissedRequests: ({})
+    function dismissRequest(identityHex) {
+        var m = Object.assign({}, room.dismissedRequests); m[identityHex] = true; room.dismissedRequests = m;
+    }
+    readonly property var visibleRequests: room.pending.filter(function (p) { return !room.dismissedRequests[String(p.identity || "")]; })
+
+    // This room's line from coordinate_conversations: what waits on YOU here (F-18).
+    readonly property var conversation: {
+        try {
+            var convs = JSON.parse(room.backend ? room.backend.conversationsJson : "[]");
+            for (var i = 0; i < convs.length; ++i)
+                if (String(convs[i].topic || "") === room.topic) return convs[i];
+        } catch (e) {}
+        return null;
+    }
+    function needsWord(what) {
+        return what === "agree" ? qsTr("Needs your agreement") : what === "pay" ? qsTr("Pay your share")
+             : what === "approve" ? qsTr("Needs your approval") : what === "submit" ? qsTr("Ready to settle")
+             : qsTr("Waiting on you");
+    }
+    function stateWord(st) {
+        return st === "proposed" ? qsTr("Proposed") : st === "collecting" ? qsTr("Collecting")
+             : st === "executable" ? qsTr("Ready") : st === "submitted" ? qsTr("Submitted")
+             : st === "settling" ? qsTr("Settling") : st === "final" ? qsTr("Final") : String(st || "");
+    }
+    // The pinned proposal (U-3): what waits on you first, else the latest still under way.
+    readonly property var liveProposal: {
+        var ns = (room.conversation && Array.isArray(room.conversation.needs)) ? room.conversation.needs : [];
+        for (var i = 0; i < ns.length; ++i) {
+            var it = room.intentById(String(ns[i].id || ""));
+            return { id: String(ns[i].id || ""), needsYou: true, label: room.needsWord(String(ns[i].what || "")),
+                     text: String(ns[i].text || (it && it.summary && it.summary.text) || "") };
+        }
+        for (var j = room.intents.length - 1; j >= 0; --j) {
+            var x = room.intents[j], st = String(x.state || "");
+            if (st !== "final" && st !== "declined" && st !== "expired")
+                return { id: String(x.id || ""), needsYou: false, label: room.stateWord(st),
+                         text: String((x.summary && x.summary.text) || "") };
+        }
+        return null;
+    }
+    // How many proposals reached a chain: only a driver that settles outside the room
+    // counts (profile.settlement), so a ratified statement — final in the room — does not.
+    readonly property int settledOutside: room.intents.filter(function (x) {
+        var how = String((x.profile && x.profile.settlement) || "none");
+        var st = String(x.state || "");
+        return how !== "none" && how !== "stub" && (st === "submitted" || st === "settling" || st === "final");
+    }).length
+    // The scope line (U-1): always on screen in a room.
+    readonly property string scopeLine: qsTr("end-to-end · %1 can read").arg(room.members.length)
+        + (room.settledOutside === 0 ? qsTr(" · nothing has settled outside the room")
+           : room.settledOutside === 1 ? qsTr(" · 1 proposal settled outside the room")
+           : qsTr(" · %1 proposals settled outside the room").arg(room.settledOutside))
 
     readonly property string topic: backend ? backend.roomTopic : ""
     // What this instance knows the room as (Main's session-only title), shown instead of
@@ -291,7 +376,13 @@ Item {
         if (room.requestedPolicy.length > 0) room.pickedKind = room.requestedPolicy.split("@")[0];
         if (room.backend && room.requestedPolicy.length > 0) room.backend.setPolicy(room.requestedPolicy);
     }
-    onPolicyErrorChanged: room.requestedPolicy = ""
+    onPolicyErrorChanged: {
+        room.requestedPolicy = "";
+        // refused for want of an account this kind acts from: open the form that discloses
+        // one (exo-dcc.30), in Room details › Accounts
+        var e = room.policyError || {};
+        if (e.error === "no-account" && room.kindNeedsAccount(room.policyKind)) room.openDetails("accounts");
+    }
     // The outcome of the last room-side submit (coordinate_submit): {id, state,
     // onchain, txHash} or {id, error, ...}. Matched to a card by its intent id.
     readonly property var roomSubmit: {
@@ -1245,32 +1336,119 @@ Item {
         room.composing = false;
     }
 
-    RowLayout {
-        anchors.fill: parent
-        anchors.margins: Theme.spacing.large
-        spacing: Theme.spacing.medium
+    // ── the room's layout (exo-720.7, exo-720.8) ──────────────────────────
+    // The conversation owns the screen: the header, the pinned proposal, the thread, the
+    // join requests, the composer, the scope line. Room details is a drawer: beside the
+    // thread when the room is wide enough to keep the thread at 640 px or more, over it
+    // when not.
+    readonly property bool detailsDocked: room.width - 360 >= 640
+    readonly property bool detailsShown: room.joined && room.detailsOpen
 
-        // Left: the conversation (header, join, proposals, thread, composer).
+    Item {
+        id: mainColumn
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: room.detailsShown && room.detailsDocked ? details.left : parent.right
+
         ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: Theme.spacing.medium
+            anchors.fill: parent
+            spacing: 0
 
-        // ── header: title, rename, leave, room code, join (RoomHeader.qml) ──
-        RoomHeader { room: roomItem }
+            RoomHeader { room: roomItem }
+            RoomPinned { room: roomItem }
+            RoomThread { room: roomItem }
 
-        // ── the conversation (RoomThread.qml) ──────────────────────────────
-        RoomThread { room: roomItem }
+            // someone asks to join: said where the conversation is, with Admit (U3)
+            Repeater {
+                model: room.joined ? room.visibleRequests : []
+                delegate: InlineNotice {
+                    required property var modelData
+                    readonly property string who: String(modelData.alias || "").length > 0 ? String(modelData.alias)
+                        : (String(modelData.identity || "").slice(0, 6) + "…" + String(modelData.identity || "").slice(-4))
+                    objectName: "roomJoinRequest"
+                    Layout.leftMargin: Theme.spacing.xlarge
+                    Layout.rightMargin: Theme.spacing.xlarge
+                    Layout.bottomMargin: Theme.spacing.small
+                    tone: "info"
+                    title: qsTr("%1 asks to join").arg(who)
+                    text: qsTr("Admitting re-keys the room forward: they read from here on, never the messages before.")
+                    ActionButton {
+                        objectName: "roomJoinAdmit"
+                        text: qsTr("Admit")
+                        variant: LogosButton.Variant.Primary
+                        onClicked: room.admitMember(String(modelData.identity || ""))
+                    }
+                    ActionButton {
+                        text: qsTr("Not now")
+                        quiet: true
+                        onClicked: room.dismissRequest(String(modelData.identity || ""))
+                    }
+                }
+            }
 
-        // ── composer: chat + propose (RoomComposer.qml) ────────────────────
-        RoomComposer {
-            id: composerPanel
-            room: roomItem
+            RoomComposer {
+                id: composerPanel
+                room: roomItem
+                Layout.leftMargin: Theme.spacing.xlarge
+                Layout.rightMargin: Theme.spacing.xlarge
+                Layout.topMargin: Theme.spacing.small
+            }
+
+            // the scope line (U-1): who can read this room, always on screen in it
+            RowLayout {
+                objectName: "roomScopeLine"
+                visible: room.joined
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.spacing.xlarge
+                Layout.rightMargin: Theme.spacing.xlarge
+                Layout.topMargin: Theme.spacing.small
+                Layout.bottomMargin: Theme.spacing.medium
+                spacing: Theme.spacing.small
+                LogosIcon {
+                    Layout.preferredWidth: 14
+                    Layout.preferredHeight: 14
+                    source: MusterStyle.icon("lock")
+                    color: MusterStyle.settled
+                }
+                LogosText {
+                    text: room.scopeLine
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: MusterStyle.caption
+                }
+                LogosText {
+                    objectName: "roomScopeWhoSees"
+                    text: qsTr("Who can see what")
+                    color: whoHover.hovered ? Theme.palette.text : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    font.underline: true
+                    HoverHandler { id: whoHover; cursorShape: Qt.PointingHandCursor }
+                    TapHandler { onTapped: room.openDetails("privacy") }
+                }
+                Item { Layout.fillWidth: true }
+            }
         }
-        }
+    }
 
-        // Right: the room's meta-state (RoomDetails.qml)
-        RoomDetails { room: roomItem }
+    // over the thread, a tap outside the drawer closes it
+    Rectangle {
+        visible: room.detailsShown && !room.detailsDocked
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.45)
+        z: 4
+        TapHandler { onTapped: room.closeDetails() }
+    }
+
+    // Room details (RoomDetails.qml)
+    RoomDetails {
+        id: details
+        room: roomItem
+        visible: room.detailsShown
+        width: 360
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        z: 5
     }
 
     // Live refresh while a room is open. Delivery is polled (inbound arrives on the

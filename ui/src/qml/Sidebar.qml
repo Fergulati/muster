@@ -254,8 +254,12 @@ Rectangle {
             SidebarRow {
                 objectName: "sidebarIdentity"
                 readonly property string me: {
-                    try { return String(((JSON.parse(side.app.backend ? side.app.backend.settingsJson : "{}").identity) || {}).ed25519 || ""); }
-                    catch (e) { return ""; }
+                    // ed25519 then x25519: the room identity as the member list carries it, so
+                    // your face here is the one the room shows
+                    try {
+                        var id = (JSON.parse(side.app.backend ? side.app.backend.settingsJson : "{}").identity) || {};
+                        return String(id.ed25519 || "") + String(id.x25519 || "");
+                    } catch (e) { return ""; }
                 }
                 visible: me.length > 0
                 Layout.topMargin: Theme.spacing.tiny
