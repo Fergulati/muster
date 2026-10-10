@@ -9,6 +9,7 @@ import QtQuick
 //   { "about": "...",
 //     "snapshot": "data/<file>.json",   // optional: PROPs recorded from a real run
 //     "load": "Components.qml",          // optional: a page in ui/tests/gallery/ instead of Main.qml
+//     "sizes": ["800x700"],              // optional: these sizes instead of the script's
 //     "props": { "<PROP>": <string, or any JSON value, which is stringified> },
 //     "steps": [ {"view": "room"}, {"set": ["<objectName>", "<prop>", <value>]},
 //                {"click": "<objectName>"}, {"props": {...}}, {"wait": 300},

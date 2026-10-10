@@ -18,6 +18,10 @@
 #       .run/screens/record/<test>-<time>/; a fixture's "snapshot" names one of them,
 #       copied into ui/tests/gallery/fixtures/data/. Real module output, never hand-typed.
 #
+#   scripts/ui-screenshot.sh runner [--size WxH] [--wait S] [VAR=value …]
+#       This tree's QML in the real runner, a fresh profile, on Xvfb (GL via the host's
+#       Mesa); a capture of the display after it settles. The real backend, no fixtures.
+#
 #   scripts/ui-screenshot.sh compare DIR_A DIR_B
 #       Pixel-diffs every PNG the two sets share; exit 1 if any differs (U0c: a refactor
 #       that moves code only must leave every picture identical).
@@ -74,9 +78,16 @@ cmd_gallery() {
   export QT_HASH_SEED=0
   [ -n "${GALLERY_BACKEND:-}" ] && export QT_QUICK_BACKEND="$GALLERY_BACKEND"
   : >"$out/warnings.txt"
+  # a private config dir: a fixture that toggles a stored preference (the sidebar's rail)
+  # must not leak it into the next run
+  export XDG_CONFIG_HOME="$out/.config"
+  local fsizes
   for f in "${fixtures[@]}"; do
     name=$(basename "$f" .json)
-    for s in ${sizes//,/ }; do
+    rm -rf "$XDG_CONFIG_HOME"
+    # a fixture may name its own sizes (a narrow window, for the drawer)
+    fsizes=$(python3 -c "import json,sys; print(','.join(json.load(open(sys.argv[1])).get('sizes', [])))" "$f")
+    for s in $(echo "${fsizes:-$sizes}" | tr , ' '); do
       w=${s%x*}; h=${s#*x}
       log="$out/$name-$s.log"
       timeout 60 "$QML_BIN" ui/tests/gallery/Gallery.qml -- "$(realpath "$f")" "$(realpath -m "$out")/$name-$s" "$w" "$h" >"$log" 2>&1
@@ -165,8 +176,45 @@ cmd_census() {
   echo "  QML warnings: $(grep -c '\.qml:[0-9]' "$out/runner.log")  ·  screenshots: $out"
 }
 
+# runner: this tree's QML in the real runner (a dev runner), a fresh profile, on Xvfb; the X
+# display captured after it settles. What the gallery cannot show: the real backend.
+cmd_runner() {
+  local size="1440x900" wait=15 XV IM XDO disp out dev ud w h
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --size) size="$2"; shift 2 ;;
+      --wait) wait="$2"; shift 2 ;;
+      *) break ;;
+    esac
+  done
+  need_base
+  XV=$(ls -d /nix/store/*-xvfb-21*/bin 2>/dev/null | head -1)/Xvfb
+  IM=$(ls -d /nix/store/*-imagemagick-7*/bin 2>/dev/null | head -1)
+  XDO=$(ls -d /nix/store/*-xdotool-*/bin 2>/dev/null | head -1)/xdotool
+  [ -x "$XV" ] && [ -n "$IM" ] && [ -x "$XDO" ] || { echo "needs Xvfb, ImageMagick and xdotool"; exit 1; }
+  w=${size%x*}; h=${size#*x}
+  dev="$ROOT/.run/dev-runner"; out="$ROOT/.run/screens/runner"
+  ui_dev_runner "$BASE" "$dev" || exit 1
+  mkdir -p "$out"
+  for disp in $(seq 140 199); do [ -e "/tmp/.X11-unix/X$disp" ] || break; done
+  setsid bash -c 'echo $$ >"$1"; exec "$2" ":$3" -screen 0 "$4x$5x24" -nolisten tcp' _ "$out/xvfb.pid" "$XV" "$disp" "$w" "$h" >/dev/null 2>&1 &
+  sleep 1
+  ud=$(mktemp -d -p "$ROOT/.run")
+  setsid bash -c 'echo $$ >"$1"; shift; exec "$@"' _ "$out/runner.pid" \
+      env -u WAYLAND_DISPLAY DISPLAY=":$disp" QT_QPA_PLATFORM=xcb QT_FORCE_STDERR_LOGGING=1 \
+      XDG_CONFIG_HOME="$ud/.config" "$@" "$dev/bin/muster-ui" --user-dir "$ud" >"$out/runner.log" 2>&1 &
+  RUNNER_PIDFILES="$out/runner.pid $out/xvfb.pid"
+  trap 'for f in $RUNNER_PIDFILES; do pkill -9 -s "$(cat "$f" 2>/dev/null)" 2>/dev/null; done' EXIT
+  sleep 4
+  DISPLAY=":$disp" "$XDO" search --onlyvisible --name . windowsize %@ "$w" "$h" >/dev/null 2>&1
+  sleep "$wait"
+  "$IM/import" -display ":$disp" -window root "$out/runner-$size.png"
+  echo "  $out/runner-$size.png  ·  QML lines in its log: $(grep -cE '\.qml:[0-9]+' "$out/runner.log")"
+}
+
 case "${1:-}" in
   census)  shift; cmd_census "$@" ;;
+  runner)  shift; cmd_runner "$@" ;;
   gallery) shift; cmd_gallery "$@" ;;
   record)  shift; [ $# -ge 1 ] || { echo "usage: $0 record <self-test> [VAR=value …]"; exit 2; }; cmd_record "$@" ;;
   compare) shift; [ $# -eq 2 ] || { echo "usage: $0 compare DIR_A DIR_B"; exit 2; }; cmd_compare "$@" ;;

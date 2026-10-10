@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtCore as Prefs   // qualified: Settings here is also our own Settings.qml surface
 
 import Logos.Theme
 import Logos.Controls
@@ -278,7 +279,8 @@ Item {
     Timer {
         interval: 2000
         repeat: true
-        running: root.view === "home" && root.backend !== null
+        // the sidebar shows every room and what waits on you, on every view (exo-720.6)
+        running: root.backend !== null
         onTriggered: root.backend.loadConversations()
     }
 
@@ -298,97 +300,90 @@ Item {
         color: Theme.palette.background
     }
 
-    // ── top nav bar ──────────────────────────────────────────────────────
-    // Occupies its own strip at the top with a solid ground, so it never overlaps
-    // the surface below it. Every surface anchors under `navBar.bottom`.
+    // ── the sidebar (Sidebar.qml), and in a narrow window the strip that opens it ──
+    // It replaces the top bar of seven buttons (exo-720.6). Where it sits is the person's
+    // choice, kept on this device only: collapsed to a rail or full. Until they choose, a
+    // window under 1180 px (Basecamp's, beside its own sidebar) starts with the rail
+    // (decision §6.1); under 900 px it is a drawer, opened from the strip.
+    Prefs.Settings {
+        id: uiPrefs
+        category: "MusterUi"
+        property int sidebarCollapsed: -1      // -1: not chosen yet · 0: full · 1: rail
+    }
+    property bool sidebarOpen: false           // the drawer, in a narrow window
+    readonly property string sideMode: root.width < 900 ? "drawer"
+        : uiPrefs.sidebarCollapsed === 1 ? "rail"
+        : uiPrefs.sidebarCollapsed === 0 ? "full"
+        : root.width < 1180 ? "rail" : "full"
+
     Rectangle {
-        id: navBar
+        id: drawerStrip
+        visible: root.sideMode === "drawer"
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: navRow.implicitHeight + 2 * Theme.spacing.small
-        color: Theme.palette.background
-        z: 10
-
-        Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: 1
-            color: Theme.palette.borderSubtle
-        }
-
-        // A Flow (not a right-anchored RowLayout): the buttons wrap to a second row
-        // when the window is too narrow to hold them, instead of the leftmost ones
-        // running off the left edge. navBar's height tracks the wrapped height, so the
-        // surfaces below always start under the real bottom of the nav.
-        Flow {
-            id: navRow
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.topMargin: Theme.spacing.small
-            anchors.leftMargin: Theme.spacing.medium
+        height: visible ? 48 : 0
+        color: Theme.palette.backgroundTertiary
+        z: 5
+        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.palette.borderSubtle }
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Theme.spacing.small
             anchors.rightMargin: Theme.spacing.medium
             spacing: Theme.spacing.small
-
-            // The current surface reads as filled (Primary); the rest stay neutral
-            // (Secondary), so "where am I" is answered without a second glance.
-            // Compose is a sub-flow of Home, so Home stays lit through it.
-            LogosButton {
-                objectName: "homeToggle"; text: qsTr("Home")
-                variant: (root.view === "home" || root.view === "compose")
-                         ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "home";
-                    if (root.backend) root.backend.loadConversations();   // refresh the room list
-                }
+            IconAction {
+                objectName: "sidebarOpen"
+                label: qsTr("Open the sidebar")
+                icon: MusterStyle.icon("menu")
+                onClicked: root.sidebarOpen = true
             }
-            LogosButton {
-                objectName: "roomToggle"; text: qsTr("Room")
-                variant: root.view === "room" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: root.view = "room"
-            }
-            LogosButton {
-                objectName: "dashboardToggle"; text: qsTr("Account")
-                variant: root.view === "dashboard" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "dashboard";
-                    // Re-read the account + balances on entry, so the card recovers even
-                    // if the one-shot load at startup ran before the module was ready.
-                    if (root.backend) { root.backend.loadAccount(); root.backend.loadBalances(); }
-                }
-            }
-            LogosButton {
-                objectName: "walkthroughToggle"; text: qsTr("Walkthrough")
-                variant: root.view === "walkthrough" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: root.view = (root.view === "walkthrough" ? "home" : "walkthrough")
-            }
-            LogosButton {
-                objectName: "settingsToggle"; text: qsTr("Settings")
-                variant: root.view === "settings" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "settings";
-                    if (root.backend) root.backend.loadSettings();
-                }
-            }
-            LogosButton {
-                objectName: "contactsToggle"; text: qsTr("Contacts")
-                variant: root.view === "contacts" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "contacts";
-                    if (root.backend) root.backend.loadContacts();
-                }
-            }
-
-            LogosButton {
-                objectName: "lezToggle"; text: qsTr("Send λ")
-                variant: root.view === "lez" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "lez";
-                    if (root.backend) root.backend.loadWalletAccounts();
-                }
+            LogosText {
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+                text: root.view === "room" ? (root.titleOf(root.roomTopic) || (root.roomTopic.length > 0 ? root.shortRoom(root.roomTopic) : qsTr("Join a room")))
+                    : root.view === "home" || root.view === "compose" ? qsTr("Needs you")
+                    : root.view === "dashboard" ? qsTr("Wallet")
+                    : root.view === "lez" ? qsTr("Send λ")
+                    : root.view === "contacts" ? qsTr("Contacts")
+                    : root.view === "walkthrough" ? qsTr("Learn")
+                    : root.view === "settings" ? qsTr("Settings") : ""
+                color: Theme.palette.text
+                font.pixelSize: MusterStyle.subtitle
+                font.weight: Theme.typography.weightBold
             }
         }
+    }
+
+    // Every surface fills this, beside the sidebar (or under the strip).
+    Item {
+        id: contentArea
+        anchors.top: drawerStrip.visible ? drawerStrip.bottom : parent.top
+        anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+    }
+
+    // the drawer's scrim: a tap outside closes it
+    Rectangle {
+        visible: root.sideMode === "drawer" && root.sidebarOpen
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.45)
+        z: 19
+        TapHandler { onTapped: root.sidebarOpen = false }
+    }
+
+    Sidebar {
+        id: sidebar
+        objectName: "sidebar"
+        app: mainItem
+        mode: root.sideMode
+        z: root.sideMode === "drawer" ? 20 : 10
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        x: root.sideMode !== "drawer" || root.sidebarOpen ? 0 : -width
+        width: implicitWidth
+        onCollapseToggled: uiPrefs.sidebarCollapsed = (root.sideMode === "rail" ? 0 : 1)
+        onCloseRequested: root.sidebarOpen = false
     }
 
     // ── the product surfaces (one shown at a time), below the nav bar ─────
@@ -396,8 +391,8 @@ Item {
     // goes to the composer.
     Home {
         objectName: "homeSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "home"
@@ -438,7 +433,8 @@ Item {
     // store, ~1s) shows up without a manual refresh. Cheap: one module read per tick.
     Timer {
         interval: 2000
-        running: root.view === "home" && root.backend !== null
+        // the sidebar counts invitations on every view (exo-720.6)
+        running: root.backend !== null
         repeat: true
         onTriggered: if (root.backend) root.backend.loadInvites()
     }
@@ -446,8 +442,8 @@ Item {
     // Compose: create a room from an action (what → who). "who" can be a tap on an
     // address-book name, fed in here from the host's contactsJson.
     Composer {
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "compose"
@@ -493,8 +489,8 @@ Item {
         moneroWallet: root.moneroWallet
         onMoneroWalletRequested: function (wallet) { root.openMoneroWallet(wallet); }
         objectName: "roomSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "room"
@@ -503,8 +499,8 @@ Item {
 
     // The teaching surface (ADR-012 claims registry).
     Walkthrough {
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "walkthrough"
@@ -513,8 +509,8 @@ Item {
     // The config-shell start: identity + user-configurable infrastructure (inv 8).
     Settings {
         objectName: "settingsSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "settings"
@@ -532,8 +528,8 @@ Item {
     // roster and the join prompt).
     AddressBook {
         objectName: "addressBookSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "contacts"
@@ -543,8 +539,8 @@ Item {
     // Send assets via Logos (the LEZ) — Mode A: request → share → send.
     LezSend {
         objectName: "lezSendSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "lez"
@@ -554,8 +550,8 @@ Item {
     // The Account surface (AccountPage.qml).
     AccountPage {
         root: mainItem
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
     }
