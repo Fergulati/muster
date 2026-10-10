@@ -8,6 +8,7 @@ import QtQuick
 // A fixture is JSON:
 //   { "about": "...",
 //     "snapshot": "data/<file>.json",   // optional: PROPs recorded from a real run
+//     "load": "Components.qml",          // optional: a page in ui/tests/gallery/ instead of Main.qml
 //     "props": { "<PROP>": <string, or any JSON value, which is stringified> },
 //     "steps": [ {"view": "room"}, {"set": ["<objectName>", "<prop>", <value>]},
 //                {"click": "<objectName>"}, {"props": {...}}, {"wait": 300},
@@ -132,7 +133,8 @@ Item {
                 if (snap.ui && snap.ui.view) view = snap.ui.view;
             }
             applyProps(fx.props || {});
-            steps = fx.steps || [{ view: view }, { shot: "" }];
+            if (fx.load) { app.source = Qt.resolvedUrl(fx.load); if (!fx.steps) view = ""; }
+            steps = fx.steps || (view ? [{ view: view }, { shot: "" }] : [{ shot: "" }]);
         } catch (e) { fail(String(e)); return; }
         app.active = true;
         if (app.status === Loader.Error || !app.item) { fail("Main.qml did not load"); return; }

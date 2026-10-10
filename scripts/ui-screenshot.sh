@@ -85,7 +85,7 @@ cmd_gallery() {
         echo "  ok   $name $s ($(grep -c GALLERY-SHOT "$log") shot(s), $warns QML warning(s))"
         grep '\.qml:[0-9]' "$log" | sed "s|file://$ROOT/||; s|^|$name $s: |" >>"$out/warnings.txt"
       else
-        echo "  FAIL $name $s — $(grep -m1 -E 'GALLERY-ERROR|Error|error' "$log" || echo 'no GALLERY-DONE')"
+        echo "  FAIL $name $s — $(grep -v libEGL "$log" | grep -m1 -E 'GALLERY-ERROR|Error|error|No such' || echo 'no GALLERY-DONE')"
         rc=1
       fi
     done

@@ -36,4 +36,23 @@ QtObject {
     readonly property color info: Theme.palette.info                // what left the room (U-2)
     readonly property color infoSoft: tint(Theme.palette.info, 0.16)
     readonly property color neutralSoft: tint(Theme.colors.white, 0.07)
+
+    // ── icons: icons/<name>.svg, stroke icons in the grey LogosIcon tints ─────
+    // For what Logos.Icons lacks (more, close, copy, search, warning come from there).
+    // An icon draws only where Qt Quick renders with GL (MultiEffect): an icon-only
+    // control always carries a label or a tooltip (IconAction does).
+    function icon(name) { return Qt.resolvedUrl("icons/" + name + ".svg"); }
+
+    // ── a member's colour: from their id, so it says nothing they did not disclose
+    // (invariant 9) and stays the same in every room and on every device ──────
+    readonly property var avatarColors: [Theme.colors.orange300, Theme.colors.yellow400, Theme.colors.green400,
+                                         Theme.colors.blue400, Theme.colors.cyan400, Theme.colors.red400,
+                                         Theme.colors.peach100, Theme.colors.green700]
+    function colorFor(id) {
+        // FNV-1a, then a final avalanche, so ids that differ in one character spread out
+        var s = String(id || "").toLowerCase().replace(/^0x/, ""), h = 0x811c9dc5;
+        for (var i = 0; i < s.length; ++i) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+        h ^= h >>> 16; h = Math.imul(h, 0x45d9f3b); h ^= h >>> 16;
+        return avatarColors[(h >>> 0) % avatarColors.length];
+    }
 }
