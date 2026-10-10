@@ -158,8 +158,8 @@ Item {
                                 LogosText {
                                     text: walkthrough.kindLabel(modelData.kind)
                                     color: walkthrough.kindColor(modelData.kind)
-                                    font.family: Theme.typography.mono
-                                    font.pixelSize: Theme.typography.badgeText
+                                    font.family: MusterStyle.mono
+                                    font.pixelSize: MusterStyle.caption
                                     font.weight: Theme.typography.weightMedium
                                 }
 
@@ -184,7 +184,7 @@ Item {
                                     Layout.fillWidth: true
                                     text: walkthrough.evidenceOf(modelData)
                                     color: Theme.palette.textTertiary
-                                    font.family: Theme.typography.mono
+                                    font.family: MusterStyle.mono
                                     font.pixelSize: Theme.typography.secondaryText
                                     wrapMode: Text.WrapAnywhere
                                 }
@@ -195,7 +195,7 @@ Item {
                                     Layout.fillWidth: true
                                     text: walkthrough.credibilityOf(modelData)
                                     color: walkthrough.credibilityColor(modelData)
-                                    font.pixelSize: Theme.typography.badgeText
+                                    font.pixelSize: MusterStyle.caption
                                     font.weight: Theme.typography.weightMedium
                                     wrapMode: Text.WordWrap
                                 }

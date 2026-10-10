@@ -134,15 +134,15 @@ Item {
                         Layout.fillWidth: true
                         text: modelData.detail
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                         wrapMode: Text.WrapAnywhere
                     }
                     LogosText {
                         Layout.fillWidth: true
                         text: modelData.why
                         color: Theme.palette.textSecondary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                         wrapMode: Text.WordWrap
                     }
                     LogosText {
@@ -150,7 +150,7 @@ Item {
                         visible: modelData.remedy.length > 0
                         text: modelData.remedy
                         color: Theme.palette.warning
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                         wrapMode: Text.WordWrap
                     }
                 }
@@ -163,7 +163,7 @@ Item {
             visible: conn.baselineOnly
             text: qsTr("Nothing outside the room yet. A proposal brings in what its driver needs, such as an RPC for a Safe payment.")
             color: Theme.palette.textTertiary
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
             wrapMode: Text.WordWrap
         }
     }

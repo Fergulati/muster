@@ -37,6 +37,6 @@ ColumnLayout {
                  + "it is not.").arg(cardRoot.schemaId.length > 0 ? cardRoot.schemaId
                                                                   : qsTr("an unknown effect"))
         color: Theme.palette.textSecondary
-        font.pixelSize: Theme.typography.badgeText
+        font.pixelSize: MusterStyle.caption
     }
 }

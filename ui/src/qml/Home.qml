@@ -69,7 +69,7 @@ Item {
             return Theme.palette.warning;
         if (state === "settled")
             return Theme.palette.success;
-        return Theme.palette.borderDefault;
+        return Theme.palette.borderSubtle;
     }
 
     ColumnLayout {

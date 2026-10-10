@@ -41,15 +41,15 @@ Rectangle {
                      + "same key that signs Safe transactions, not your room "
                      + "encryption identity.")
             color: Theme.palette.textSecondary
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
         }
         LogosText {
             Layout.fillWidth: true
             text: qsTr("signing as %1")
                   .arg(String((room.roomAccount && room.roomAccount.actingAs) || "…"))
             color: Theme.palette.textTertiary
-            font.family: Theme.typography.mono
-            font.pixelSize: Theme.typography.badgeText
+            font.family: MusterStyle.mono
+            font.pixelSize: MusterStyle.caption
             elide: Text.ElideMiddle
         }
         LogosText {
@@ -66,8 +66,8 @@ Rectangle {
             }
             color: (room.roomAccount && room.roomAccount.isSigner)
                    ? Theme.palette.success : Theme.palette.warning
-            font.family: Theme.typography.mono
-            font.pixelSize: Theme.typography.badgeText
+            font.family: MusterStyle.mono
+            font.pixelSize: MusterStyle.caption
         }
     }
 }

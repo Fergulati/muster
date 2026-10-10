@@ -610,8 +610,8 @@ Rectangle {
             color: cardRoot.kind === "send-receipt"
                 ? Theme.palette.textSecondary
                 : Theme.palette.textTertiary
-            font.family: Theme.typography.mono
-            font.pixelSize: Theme.typography.badgeText
+            font.family: MusterStyle.mono
+            font.pixelSize: MusterStyle.caption
             font.weight: Theme.typography.weightMedium
         }
 
@@ -661,7 +661,7 @@ Rectangle {
                           if (n.length > 0) return n;
                           var x = String(d.who || ""); return x.length > 12 ? x.slice(0, 6) + "…" + x.slice(-4) : x; }).join(", "))
             color: Theme.palette.warning
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
         }
 
         // what this needs (CardNeeds.qml)
@@ -767,7 +767,7 @@ Rectangle {
                   : cardRoot.split.private ? qsTr("Expired: no share of it can be paid now. A private split is not renewed — propose it again.")
                   : qsTr("Expired: no share of it can be paid now. Its unpaid shares are already in a renewal or a settle-up.")
             color: Theme.palette.warning
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
         }
         LogosButton {
             objectName: "cardRenewSplit"
@@ -784,7 +784,7 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: cardRoot.splitNote
             color: cardRoot.splitNote.indexOf("⚠") === 0 ? Theme.palette.warning : Theme.palette.textSecondary
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
         }
 
         // Download audit trail (exo-403): one self-verifying file of everything this
@@ -804,7 +804,7 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: cardRoot.auditStatus
             color: Theme.palette.textSecondary
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
         }
     }
 }

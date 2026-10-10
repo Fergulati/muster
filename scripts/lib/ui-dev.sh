@@ -47,9 +47,13 @@ ui_dev_runner() {
       *) ln -s "$f" "$out/plugin/$(basename "$f")" ;;
     esac
   done
-  # the builder's generated qmldir (one per-module URI, mkLogosQmlModule), then this tree's QML
-  cp "$plugin/qml/qmldir" "$out/plugin/qml/qmldir"
+  # this tree's qmldir when it ships one (it declares MusterStyle), else the builder's
+  # generated one (one per-module URI, mkLogosQmlModule); then this tree's QML and its
+  # asset directories (fonts/, icons/)
+  if [ -f "$root/ui/src/qml/qmldir" ]; then cp "$root/ui/src/qml/qmldir" "$out/plugin/qml/qmldir"
+  else cp "$plugin/qml/qmldir" "$out/plugin/qml/qmldir"; fi
   for f in "$root"/ui/src/qml/*.qml; do ln -s "$f" "$out/plugin/qml/$(basename "$f")"; done
+  for f in "$root"/ui/src/qml/*/; do [ -d "$f" ] && ln -s "${f%/}" "$out/plugin/qml/$(basename "$f")"; done
   if [ -n "$view" ]; then
     ln -s "$(realpath "$view")" "$out/plugin/qml/$(basename "$view")"
     ln -s "$root/ui/tests/gallery/FakeBackend.qml" "$out/plugin/qml/FakeBackend.qml"

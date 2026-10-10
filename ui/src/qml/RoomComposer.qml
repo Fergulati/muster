@@ -94,8 +94,8 @@ ColumnLayout {
                     LogosText {
                         text: qsTr("Sending")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightMedium
                     }
                     LogosText {
@@ -109,8 +109,8 @@ ColumnLayout {
                                    .arg(String(room.roomAsset.raw || "0"));
                         }
                         color: (room.roomAsset && room.roomAsset.error) ? Theme.palette.warning : Theme.palette.textSecondary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                         wrapMode: Text.WrapAnywhere
                     }
                 }
@@ -120,8 +120,8 @@ ColumnLayout {
                     Layout.fillWidth: true
                     text: qsTr("from Safe %1").arg(String((room.roomAccount && room.roomAccount.account) || "…"))
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                     elide: Text.ElideMiddle
                 }
 
@@ -140,8 +140,8 @@ ColumnLayout {
                                             : qsTr("⚠ not a Safe owner — your approval won't count on-chain"));
                     }
                     color: (room.roomAccount && room.roomAccount.isOwner) ? Theme.palette.success : Theme.palette.warning
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WrapAnywhere
                 }
 
@@ -152,8 +152,8 @@ ColumnLayout {
                     visible: room.overSends(proposeValue.text)
                     text: qsTr("⚠ more than the Safe holds — Propose is off until the amount fits")
                     color: Theme.palette.warning
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WordWrap
                 }
             }
@@ -177,8 +177,8 @@ ColumnLayout {
                       : qsTr("No coordinatable actions — set MUSTER_INVOKE_MODULES "
                            + "or the invoke allowlist to expose a module's methods.")
                 color: Theme.palette.textTertiary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
             }
 
             // one selectable row per available action.
@@ -217,8 +217,8 @@ ColumnLayout {
                             return mod + "." + sig + mark;
                         }
                         color: Theme.palette.text
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     MouseArea {
@@ -237,7 +237,7 @@ ColumnLayout {
                 visible: room.chosenAction !== null
                 Layout.fillWidth: true
                 placeholderText: qsTr("args as a JSON array, e.g. [\"/room\",\"hello\"]")
-                font.family: Theme.typography.mono
+                font.family: MusterStyle.mono
             }
 
             // Mode B (exo-45e): mark this action as a COORDINATED TRANSFER, where the
@@ -254,7 +254,7 @@ ColumnLayout {
                     ? qsTr("✓ Coordinated transfer — recipient shares their address")
                     : qsTr("Make it a coordinated transfer (ask the recipient)")
                 variant: room.modeB ? LogosButton.Variant.Secondary
-                                    : LogosButton.Variant.Tertiary
+                                    : LogosButton.Variant.Secondary
                 onClicked: room.modeB = !room.modeB
             }
             ColumnLayout {
@@ -270,14 +270,14 @@ ColumnLayout {
                     // address lands in (e.g. "to"). The room then asks the recipient.
                     placeholderText: qsTr("recipient arg name (e.g. to)")
                     text: "to"
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                 }
                 LogosTextField {
                     id: proposeChain
                     objectName: "roomProposeChain"
                     Layout.fillWidth: true
                     placeholderText: qsTr("chain (e.g. lez:testnet)")
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                 }
             }
         }
@@ -305,7 +305,7 @@ ColumnLayout {
                                                                                : room.splitUnit)
                                      : qsTr("total (%1)").arg(room.splitFiat ? String(room.splitFiatCurrency).toUpperCase()
                                                                              : room.splitUnit)
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                 }
                 LogosTextField {
                     id: splitMemo
@@ -343,7 +343,7 @@ ColumnLayout {
                     objectName: "roomSplitFiatRate"
                     Layout.preferredWidth: 200
                     placeholderText: qsTr("1 %1 = ? %2").arg(room.splitFiatCurrency || "EUR").arg(room.splitUnit)
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                     onTextChanged: room.splitFiatRate = String(text).trim()
                 }
                 LogosTextField {
@@ -369,7 +369,7 @@ ColumnLayout {
                             .arg(room.splitUnit)
                 color: conv.length > 0 && String(room.splitFiatSource).trim().length > 0
                        ? Theme.palette.textSecondary : Theme.palette.warning
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
 
             LogosTextField {
@@ -377,7 +377,7 @@ ColumnLayout {
                 visible: !room.splitPrivate && !room.splitBitcoin && !room.splitMonero
                 Layout.fillWidth: true
                 placeholderText: qsTr("pay in a token instead of ETH: its address (0x…), or leave empty")
-                font.family: Theme.typography.mono
+                font.family: MusterStyle.mono
                 onTextChanged: {
                     var t = String(text).trim().toLowerCase();
                     room.splitToken = /^0x[0-9a-f]{40}$/.test(t) ? t : (t.length > 0 ? t : "");
@@ -398,7 +398,7 @@ ColumnLayout {
                       ? qsTr("⚠ A token is named by its address: 0x and 40 hex characters.")
                       : qsTr("⚠ Your RPC could not read that token (no decimals()) — is it on this chain?")
                 color: room.splitTokenInfo ? Theme.palette.textSecondary : Theme.palette.warning
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
 
             // settle up instead (exo-3c6): net the room's agreed, unpaid shares on this rail
@@ -446,7 +446,7 @@ ColumnLayout {
                     text: qsTr("Paid in %1. Give a rate for each other asset the room owes in: the shares in it are converted at your rate, rounded down. Everyone the shares name must agree, and agreeing means trusting your rates.")
                           .arg(room.splitUnit)
                     color: Theme.palette.textSecondary
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                 }
                 Repeater {
                     // only while open: closing destroys the fields, so what they show is
@@ -490,7 +490,7 @@ ColumnLayout {
                     wrapMode: Text.WordWrap
                     text: qsTr("The room owes in no other asset and on no other chain right now.")
                     color: Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                 }
                 LogosTextField {
                     id: acrossSource
@@ -534,7 +534,7 @@ ColumnLayout {
                          && room.members.length > 1 && !room.acrossOpen
                 text: qsTr("Who paid the bill?")
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             Flow {
                 visible: !room.splitPrivate && !room.splitBitcoin && !room.splitRequest
@@ -572,7 +572,7 @@ ColumnLayout {
                       : qsTr("⚠ %1 hasn't shared an address in this room: ask them to share one (the Pay composer's “Ask the room”), then split it for them.")
                             .arg(room.memberLabel(room.splitFor))
                 color: addr.length > 0 ? Theme.palette.textSecondary : Theme.palette.warning
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             // ask them for one (exo-dcc.20): an address-request of them alone, for a
             // Monero address on this chain — answered by "Share my Monero address"
@@ -604,7 +604,7 @@ ColumnLayout {
                          : qsTr("Who owes you a share — tap to leave someone out:"))
                       : qsTr("Nobody here owes you yet: invite and admit the people who shared it, then split.")
                 color: room.members.length > 1 ? Theme.palette.textTertiary : Theme.palette.warning
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
             }
@@ -698,7 +698,7 @@ ColumnLayout {
                          ? qsTr(" Each share is exactly %1 sat.").arg(pv.each) : "")
                 color: (pv === null || room.splitDust(pv))
                        ? Theme.palette.warning : Theme.palette.textSecondary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
 
             // where a Monero request is paid: an address your own wallet makes for it
@@ -714,7 +714,7 @@ ColumnLayout {
                       : qsTr("On %1. Proposing asks your open Monero wallet for a new address for this request; your wallet confirms each payment at 10 confirmations. Muster never sends Monero.")
                             .arg(room.moneroChainLabel(room.splitMoneroChain))
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
         }
 
@@ -733,7 +733,7 @@ ColumnLayout {
                 placeholderText: room.shownLez ? qsTr("recipient token holding (base58 or hex)")
                                : room.shownBtc ? qsTr("recipient Bitcoin address (bc1… / tb1… / bcrt1…)")
                                : qsTr("recipient (0x…)")
-                font.family: Theme.typography.mono
+                font.family: MusterStyle.mono
             }
 
             // Post an address-request card into the thread. A room member (the
@@ -785,7 +785,7 @@ ColumnLayout {
                      + "then Propose. (%2 here now.)")
                   .arg(room.requiredToPropose).arg(room.members.length)
             color: Theme.palette.warning
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
         }
 
         // a Bitcoin payment's fee rate: sat/vB over an upper bound of its signed size,
@@ -798,7 +798,7 @@ ColumnLayout {
             LogosText {
                 text: qsTr("Fee rate")
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             LogosTextField {
                 id: proposeFeeRate
@@ -806,13 +806,13 @@ ColumnLayout {
                 Layout.preferredWidth: 90
                 placeholderText: qsTr("2")
                 text: "2"
-                font.family: Theme.typography.mono
+                font.family: MusterStyle.mono
                 validator: IntValidator { bottom: 1 }
             }
             LogosText {
                 text: qsTr("sat/vB, paid from the account's own coins")
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             Item { Layout.fillWidth: true }
         }
@@ -833,7 +833,7 @@ ColumnLayout {
                 // shown in ETH and in wei so the unit you type against is explicit.
                 // A Bitcoin payment is in satoshis.
                 placeholderText: qsTr("amount (%1)").arg(room.payUnit)
-                font.family: Theme.typography.mono
+                font.family: MusterStyle.mono
                 // Any run of digits: amounts are arbitrary precision (wei exceeds
                 // 32 bits: 0.001 ETH is 10^15). IntValidator capped input at
                 // 2147483647 (exo-4da).
@@ -942,7 +942,7 @@ ColumnLayout {
                        .arg(r.detail ? ": " + String(r.detail) : "");
         }
         color: room.noAddressAnswered ? Theme.palette.textSecondary : Theme.palette.warning
-        font.pixelSize: Theme.typography.badgeText
+        font.pixelSize: MusterStyle.caption
     }
 
     // a Monero refusal's remedies (exo-dcc.5): open the wallet, or install it
@@ -993,7 +993,7 @@ ColumnLayout {
         wrapMode: Text.WordWrap
         text: room.moneroWalletNote() + (room.moneroRefusalResolved ? qsTr(" Try again.") : "")
         color: String((room.moneroWallet || {}).state || "") === "open" ? Theme.palette.textSecondary : Theme.palette.warning
-        font.pixelSize: Theme.typography.badgeText
+        font.pixelSize: MusterStyle.caption
     }
 
     // a settle-up across chains needs an address the recipient shared (exo-a90.17): ask
@@ -1029,8 +1029,8 @@ ColumnLayout {
               .arg(String((room.btcPropose && room.btcPropose.error) || ""))
               .arg(room.btcPropose && room.btcPropose.detail ? ": " + String(room.btcPropose.detail) : "")
         color: Theme.palette.warning
-        font.family: Theme.typography.mono
-        font.pixelSize: Theme.typography.badgeText
+        font.family: MusterStyle.mono
+        font.pixelSize: MusterStyle.caption
     }
 
     // a LEZ multisig proposal is sent at once and appears once the chain has it;
@@ -1048,8 +1048,8 @@ ColumnLayout {
                     .arg(String((room.lezPropose && room.lezPropose.index) || "?"))
                     .arg(String((room.lezPropose && room.lezPropose.tx) || "").slice(0, 12))
         color: room.lezPropose && room.lezPropose.error ? Theme.palette.warning : Theme.palette.textSecondary
-        font.family: Theme.typography.mono
-        font.pixelSize: Theme.typography.badgeText
+        font.family: MusterStyle.mono
+        font.pixelSize: MusterStyle.caption
     }
     RowLayout {
         objectName: "roomLezVaultInit"
@@ -1061,7 +1061,7 @@ ColumnLayout {
             objectName: "roomLezDefinition"
             Layout.fillWidth: true
             placeholderText: qsTr("token definition account — to set up the vault to hold it")
-            font.family: Theme.typography.mono
+            font.family: MusterStyle.mono
         }
         LogosButton {
             objectName: "roomLezVaultInitPropose"
@@ -1084,7 +1084,7 @@ ColumnLayout {
         wrapMode: Text.WordWrap
         text: qsTr("⏳ Your vote is on its way to the chain — it counts once a block includes it.")
         color: Theme.palette.textSecondary
-        font.pixelSize: Theme.typography.badgeText
+        font.pixelSize: MusterStyle.caption
     }
 
     // approval feedback — an in-app Approve that didn't count says WHY, right
@@ -1124,8 +1124,8 @@ ColumnLayout {
             return qsTr("⚠ Approval didn't count — %1").arg(reason);
         }
         color: Theme.palette.warning
-        font.family: Theme.typography.mono
-        font.pixelSize: Theme.typography.badgeText
+        font.family: MusterStyle.mono
+        font.pixelSize: MusterStyle.caption
     }
 
     // the message row.

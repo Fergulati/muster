@@ -26,8 +26,8 @@ ColumnLayout {
         LogosText {
             text: qsTr("From")
             color: Theme.palette.textTertiary
-            font.family: Theme.typography.mono
-            font.pixelSize: Theme.typography.badgeText
+            font.family: MusterStyle.mono
+            font.pixelSize: MusterStyle.caption
         }
         Repeater {
             model: room.accountsForKind(room.policyKind)
@@ -60,7 +60,7 @@ ColumnLayout {
             return e.error ? String(e.error) : "";
         }
         color: Theme.palette.warning
-        font.pixelSize: Theme.typography.badgeText
+        font.pixelSize: MusterStyle.caption
         wrapMode: Text.WordWrap
     }
 }

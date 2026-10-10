@@ -55,7 +55,7 @@ Item {
             LogosText {
                 text: feed.collapsed ? "▸" : "▾"
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             LogosText {
                 Layout.fillWidth: true
@@ -69,16 +69,14 @@ Item {
             LogosText {
                 text: qsTr("%1").arg(feed.list.length)
                 color: Theme.palette.textTertiary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
                 font.weight: Theme.typography.weightMedium
             }
 
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: feed.collapsed = !feed.collapsed
-            }
+            // handlers, not a MouseArea: an Item here would be a layout cell (and a spacing gap)
+            TapHandler { onTapped: feed.collapsed = !feed.collapsed }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
 
         LogosText {
@@ -86,7 +84,7 @@ Item {
             Layout.fillWidth: true
             text: qsTr("How this room reached its state — folded from the shared log, as it happens.")
             color: Theme.palette.textTertiary
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
             wrapMode: Text.WordWrap
         }
 
@@ -163,8 +161,8 @@ Item {
                                 visible: String((modelData && modelData.detail) || "").length > 0
                                 text: String((modelData && modelData.detail) || "")
                                 color: Theme.palette.textTertiary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                                 wrapMode: Text.WrapAnywhere
                             }
                         }

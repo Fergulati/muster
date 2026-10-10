@@ -1,0 +1,2 @@
+module com.logos.module.muster_ui
+singleton MusterStyle 1.0 MusterStyle.qml

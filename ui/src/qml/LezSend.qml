@@ -110,7 +110,7 @@ Item {
                          + "for the recipient's address and send. What they share decides how "
                          + "much is revealed.")
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
 
             // ── your addresses to be paid ──────────────────────────────────────
@@ -120,8 +120,8 @@ Item {
                     Layout.fillWidth: true
                     text: qsTr("YOUR ADDRESSES — SHARE ONE TO BE PAID")
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                     font.weight: Theme.typography.weightMedium
                 }
                 LogosButton {
@@ -142,8 +142,8 @@ Item {
                          + "to use the funded demo wallet, or check the sequencer/network.")
                     .arg(lez.lezError)
                 color: Theme.palette.warning
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
             }
             LogosText {
                 visible: lez.lezError.length === 0 && lez.lezAccounts.length === 0
@@ -191,8 +191,8 @@ Item {
                                 readonly property string bal: lez.balanceOf(shareRow.modelData.id)
                                 text: bal.length > 0 ? qsTr("balance: %1").arg(bal) : qsTr("balance: —")
                                 color: Theme.palette.textSecondary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                             }
                         }
                         LogosText {
@@ -200,7 +200,7 @@ Item {
                             wrapMode: Text.WordWrap
                             text: lez.shareHint(shareRow.form)
                             color: shareRow.form === "shielded" ? Theme.palette.success : Theme.palette.textTertiary
-                            font.pixelSize: Theme.typography.badgeText
+                            font.pixelSize: MusterStyle.caption
                         }
                         RowLayout {
                             Layout.fillWidth: true
@@ -213,8 +213,8 @@ Item {
                                 wrapMode: TextEdit.WrapAnywhere
                                 text: shareRow.share
                                 color: Theme.palette.textSecondary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                             }
                             LogosButton {
                                 text: qsTr("Copy")
@@ -230,8 +230,8 @@ Item {
             LogosText {
                 text: qsTr("SEND")
                 color: Theme.palette.textTertiary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
                 font.weight: Theme.typography.weightMedium
             }
             // which of your accounts funds it (public or shielded — sets the rail)
@@ -241,8 +241,8 @@ Item {
                 LogosText {
                     text: qsTr("from")
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                 }
                 Repeater {
                     model: lez.lezAccounts
@@ -260,7 +260,7 @@ Item {
                 objectName: "lezDest"
                 Layout.fillWidth: true
                 placeholderText: qsTr("their LEZ address — a public id, or priv:npk:vpk")
-                font.family: Theme.typography.mono
+                font.family: MusterStyle.mono
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -270,7 +270,7 @@ Item {
                     objectName: "lezAmount"
                     Layout.fillWidth: true
                     placeholderText: qsTr("amount (base units)")
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                     validator: IntValidator { bottom: 0 }
                 }
                 LogosButton {
@@ -300,8 +300,8 @@ Item {
                            .arg(String(p.rail || "?")).arg(what).arg(String(p.note || ""));
                 }
                 color: (lez.preview && lez.preview.error !== undefined) ? Theme.palette.warning : Theme.palette.textSecondary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
             }
 
             LogosButton {
@@ -325,8 +325,8 @@ Item {
                            .arg(String(r.rail || "?")).arg(String(r.txId || ""));
                 }
                 color: (lez.sendResult && lez.sendResult.error !== undefined) ? Theme.palette.warning : Theme.palette.success
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
             }
         }
     }

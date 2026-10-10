@@ -277,7 +277,7 @@ Item {
                           : qsTr("That isn't a chat id, so no invite can reach them. A chat id is 128 hex characters: "
                                  + "they copy theirs from Settings (Your chat id) and send it to you, or pick them from your contacts.")
                     color: composer.peerIsChatId ? Theme.palette.textTertiary : Theme.palette.warning
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                 }
 
                 // …or tap a name from your address book instead of pasting.
@@ -285,7 +285,7 @@ Item {
                     visible: (composer.contacts || []).length > 0
                     text: qsTr("or pick from your contacts")
                     color: Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                 }
                 Flow {
                     Layout.fillWidth: true
@@ -313,7 +313,7 @@ Item {
                                       ? String(modelData.alias)
                                       : String(modelData.identity || "").substring(0, 10) + "…"
                                 color: Theme.palette.textSecondary
-                                font.pixelSize: Theme.typography.badgeText
+                                font.pixelSize: MusterStyle.caption
                             }
                         }
                     }
@@ -400,7 +400,7 @@ Item {
                     visible: composer.assetCandidates().length === 0
                     text: qsTr("(no holdings to send from this account yet)")
                     color: Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                 }
 
                 LogosTextField {

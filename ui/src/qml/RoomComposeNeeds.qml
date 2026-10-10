@@ -37,7 +37,7 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
                 text: room.composeNeedLine(composeNeed.modelData)
                 color: Theme.palette.warning
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             // no Install button (installed but not running, starting,
             // failed, or nothing to install): the module's own remedy
@@ -47,7 +47,7 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
                 text: qsTr("To fix: ") + String(composeNeed.modelData.remedy || "")
                 color: Theme.palette.textSecondary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             RowLayout {
                 visible: composeNeed.installable || !!(composeNeed.req && composeNeed.req.state === "failed")
@@ -77,7 +77,7 @@ ColumnLayout {
                 text: composeNeed.note
                 color: (composeNeed.req && (composeNeed.req.state === "open" || composeNeed.req.state === "asking"))
                        ? Theme.palette.textSecondary : Theme.palette.warning
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             LogosText {
                 visible: !!(composeNeed.req && composeNeed.req.state === "failed" && composeNeed.req.showError)
@@ -89,7 +89,7 @@ ColumnLayout {
                       : qsTr("Package Manager could not be opened (%1). Open it from Basecamp.")
                         .arg(String((composeNeed.req && composeNeed.req.showError) || ""))
                 color: Theme.palette.warning
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
         }
     }
@@ -104,6 +104,6 @@ ColumnLayout {
                     .arg(room.composeBlockers.map(function (n) { return String(n.name || ""); }).join(", "))
               : qsTr("You can still propose.")
         color: room.composeBlocked ? Theme.palette.warning : Theme.palette.textTertiary
-        font.pixelSize: Theme.typography.badgeText
+        font.pixelSize: MusterStyle.caption
     }
 }

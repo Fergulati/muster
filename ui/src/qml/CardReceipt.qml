@@ -29,11 +29,11 @@ ColumnLayout {
 
     LogosText {
         Layout.fillWidth: true
-        visible: cardRoot.card && cardRoot.card.rail
+        visible: !!(cardRoot.card && cardRoot.card.rail)
         text: String((cardRoot.card && cardRoot.card.rail) || "")
         color: Theme.palette.textSecondary
-        font.family: Theme.typography.mono
-        font.pixelSize: Theme.typography.badgeText
+        font.family: MusterStyle.mono
+        font.pixelSize: MusterStyle.caption
     }
 
     // ── what left the room ─────────────────────────────────────────
@@ -46,8 +46,8 @@ ColumnLayout {
         Layout.topMargin: Theme.spacing.tiny
         text: qsTr("WHAT LEFT THE ROOM")
         color: Theme.palette.textTertiary
-        font.family: Theme.typography.mono
-        font.pixelSize: Theme.typography.badgeText
+        font.family: MusterStyle.mono
+        font.pixelSize: MusterStyle.caption
         font.weight: Theme.typography.weightMedium
     }
 
@@ -76,8 +76,8 @@ ColumnLayout {
             LogosText {
                 text: modelData.k
                 color: Theme.palette.textTertiary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
             }
 
             Item { Layout.fillWidth: true }
@@ -87,8 +87,8 @@ ColumnLayout {
                 color: modelData.withheld
                     ? Theme.palette.success : Theme.palette.textSecondary
                 horizontalAlignment: Text.AlignRight
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
                 font.weight: Theme.typography.weightMedium
             }
         }
@@ -98,12 +98,12 @@ ColumnLayout {
     // explorer, and the least interesting fact on the card.
     LogosText {
         Layout.fillWidth: true
-        visible: cardRoot.card && cardRoot.card.tx
+        visible: !!(cardRoot.card && cardRoot.card.tx)
         wrapMode: Text.WrapAnywhere
         elide: Text.ElideRight
         text: String((cardRoot.card && cardRoot.card.tx) || "")
         color: Theme.palette.textTertiary
-        font.family: Theme.typography.mono
-        font.pixelSize: Theme.typography.badgeText
+        font.family: MusterStyle.mono
+        font.pixelSize: MusterStyle.caption
     }
 }

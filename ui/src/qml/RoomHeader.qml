@@ -73,8 +73,8 @@ ColumnLayout {
             visible: room.joined
             text: qsTr("%1 in the room").arg(room.members.length)
             color: Theme.palette.textTertiary
-            font.family: Theme.typography.mono
-            font.pixelSize: Theme.typography.badgeText
+            font.family: MusterStyle.mono
+            font.pixelSize: MusterStyle.caption
         }
     }
 
@@ -116,7 +116,7 @@ ColumnLayout {
         LogosText {
             text: qsTr("Room code")
             color: Theme.palette.textTertiary
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
         }
         TextEdit {
             id: roomCode
@@ -128,8 +128,8 @@ ColumnLayout {
             text: room.topic
             color: Theme.palette.textSecondary
             selectionColor: Theme.palette.primary
-            font.family: Theme.typography.mono
-            font.pixelSize: Theme.typography.badgeText
+            font.family: MusterStyle.mono
+            font.pixelSize: MusterStyle.caption
         }
         LogosButton {
             id: copyCode

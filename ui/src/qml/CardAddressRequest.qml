@@ -18,7 +18,7 @@ ColumnLayout {
     spacing: 2
 
     LogosText {
-        visible: cardRoot.card && cardRoot.card.purpose
+        visible: !!(cardRoot.card && cardRoot.card.purpose)
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         text: qsTr("For: %1").arg(String((cardRoot.card && cardRoot.card.purpose) || ""))

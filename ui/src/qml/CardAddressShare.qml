@@ -48,7 +48,7 @@ ColumnLayout {
                 + (shown.length > 0 ? "  ·  " + shown : "");
         }
         color: Theme.palette.textTertiary
-        font.family: Theme.typography.mono
+        font.family: MusterStyle.mono
         font.pixelSize: Theme.typography.secondaryText
     }
 
@@ -68,7 +68,7 @@ ColumnLayout {
               ? qsTr("Anyone reading the zone can see what lands here.")
               : qsTr("Anyone reading the chain can see what lands here.")
         color: Theme.palette.textTertiary
-        font.pixelSize: Theme.typography.badgeText
+        font.pixelSize: MusterStyle.caption
     }
 
     // Close the loop: use the address the counterparty just disclosed as the

@@ -603,8 +603,8 @@ Item {
                 LogosText {
                     text: qsTr("LOCAL TEST SAFE · disclose it into a room to use it")
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                     font.weight: Theme.typography.weightMedium
                 }
 
@@ -615,7 +615,7 @@ Item {
                         ? qsTr("Safe %1").arg(String(root.account.safe))
                         : qsTr("account not loaded")
                     color: Theme.palette.text
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                     font.pixelSize: Theme.typography.secondaryText
                 }
 
@@ -629,8 +629,8 @@ Item {
                             .arg(String(root.account.environment))
                         : ""
                     color: Theme.palette.textSecondary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                 }
 
                 // ── owners (dive in) ─────────────────────────────────────────
@@ -651,8 +651,8 @@ Item {
                             : qsTr("Owners — tap to see all %1  +")
                                 .arg(root.account && root.account.owners ? root.account.owners.length : 0)
                         color: Theme.palette.textSecondary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightMedium
                     }
 
@@ -674,8 +674,8 @@ Item {
                         wrapMode: Text.WrapAnywhere
                         text: "· " + String(modelData)
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
                 }
             }
@@ -690,7 +690,7 @@ Item {
             radius: Theme.spacing.radiusMedium
             color: Theme.palette.surface
             border.width: 1
-            border.color: Theme.palette.borderDefault
+            border.color: Theme.palette.borderSubtle
 
             ColumnLayout {
                 id: composeCol
@@ -712,7 +712,7 @@ Item {
                              + "collect signatures, settle on-chain. To decide it with people in "
                              + "a conversation instead, open a Room.")
                     color: Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                 }
 
                 LogosTextField {
@@ -720,7 +720,7 @@ Item {
                     objectName: "proposeTo"
                     Layout.fillWidth: true
                     placeholderText: qsTr("to (0x…)")
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                 }
 
                 RowLayout {
@@ -732,7 +732,7 @@ Item {
                         objectName: "proposeValue"
                         Layout.fillWidth: true
                         placeholderText: qsTr("value")
-                        font.family: Theme.typography.mono
+                        font.family: MusterStyle.mono
                         validator: IntValidator { bottom: 0 }
                     }
 
@@ -741,7 +741,7 @@ Item {
                         objectName: "proposeNonce"
                         Layout.preferredWidth: 120
                         placeholderText: qsTr("nonce")
-                        font.family: Theme.typography.mono
+                        font.family: MusterStyle.mono
                         validator: IntValidator { bottom: 0 }
                     }
                 }
@@ -775,7 +775,7 @@ Item {
             radius: Theme.spacing.radiusMedium
             color: Theme.palette.surfaceRaised
             border.width: 1
-            border.color: Theme.palette.borderDefault
+            border.color: Theme.palette.borderSubtle
 
             ColumnLayout {
                 id: intentCol
@@ -800,8 +800,8 @@ Item {
                         .arg(root.intentId)
                         .arg(root.effect && root.effect.nonce !== undefined ? String(root.effect.nonce) : "0")
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                 }
 
                 // ── status rail ──────────────────────────────────────────────
@@ -837,14 +837,14 @@ Item {
                                 implicitWidth: 6
                                 implicitHeight: 6
                                 radius: 3
-                                color: step.lit ? Theme.palette.success : Theme.palette.borderDefault
+                                color: step.lit ? Theme.palette.success : Theme.palette.borderSubtle
                             }
 
                             LogosText {
                                 text: step.modelData.t
                                 color: step.lit ? Theme.palette.textSecondary : Theme.palette.textTertiary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                             }
                         }
                     }
@@ -908,8 +908,8 @@ Item {
                                     Layout.preferredWidth: 72
                                     text: modelData.k
                                     color: Theme.palette.textTertiary
-                                    font.family: Theme.typography.mono
-                                    font.pixelSize: Theme.typography.badgeText
+                                    font.family: MusterStyle.mono
+                                    font.pixelSize: MusterStyle.caption
                                 }
 
                                 LogosText {
@@ -917,8 +917,8 @@ Item {
                                     wrapMode: Text.WrapAnywhere
                                     text: modelData.v
                                     color: Theme.palette.textSecondary
-                                    font.family: Theme.typography.mono
-                                    font.pixelSize: Theme.typography.badgeText
+                                    font.family: MusterStyle.mono
+                                    font.pixelSize: MusterStyle.caption
                                 }
                             }
                         }
@@ -942,7 +942,7 @@ Item {
                         objectName: "approveSig"
                         Layout.fillWidth: true
                         placeholderText: qsTr("paste an owner signature (65-byte hex)")
-                        font.family: Theme.typography.mono
+                        font.family: MusterStyle.mono
                     }
 
                     LogosButton {
@@ -966,7 +966,7 @@ Item {
                             .arg(root.account ? Number(root.account.threshold) : 2)
                             .arg(root.account && root.account.owners ? root.account.owners.length : 3)
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                 }
 
@@ -987,7 +987,7 @@ Item {
                         wrapMode: Text.WordWrap
                         text: qsTr("✓ threshold met — the owner signatures are collected. Submit assembles the Safe execTransaction and sends it through your RPC.")
                         color: Theme.palette.success
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightMedium
                     }
 
@@ -1010,7 +1010,7 @@ Item {
                         wrapMode: Text.WordWrap
                         text: qsTr("submitting… waiting for the receipt")
                         color: Theme.palette.textSecondary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     LogosText {
@@ -1020,7 +1020,7 @@ Item {
                         wrapMode: Text.WordWrap
                         text: qsTr("✓ executed on-chain — final. The transfer settled through the Safe; finality was read from the chain, not asserted by a service.")
                         color: Theme.palette.success
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightMedium
                     }
 
@@ -1062,7 +1062,7 @@ Item {
                     wrapMode: Text.WordWrap
                     text: root.lastError
                     color: Theme.palette.error
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                 }
 
                 // Recovery from any error — including a submit that never landed.
@@ -1099,8 +1099,8 @@ Item {
                 LogosText {
                     text: qsTr("WALLET")
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                     font.weight: Theme.typography.weightMedium
                 }
 
@@ -1114,14 +1114,14 @@ Item {
                         LogosText {
                             text: (modelData.asset || "?") + "  " + (modelData.chain || "")
                             color: Theme.palette.text
-                            font.family: Theme.typography.mono
+                            font.family: MusterStyle.mono
                             font.pixelSize: Theme.typography.secondaryText
                         }
                         Item { Layout.fillWidth: true }
                         LogosText {
                             text: modelData.error ? qsTr("unavailable") : (modelData.display || "")
                             color: modelData.error ? Theme.palette.warning : Theme.palette.text
-                            font.family: Theme.typography.mono
+                            font.family: MusterStyle.mono
                             font.pixelSize: Theme.typography.secondaryText
                         }
                         Rectangle {
@@ -1137,8 +1137,8 @@ Item {
                                 text: modelData.grade === "verified-locally"
                                       ? qsTr("verified") : qsTr("attested")
                                 color: Theme.palette.background
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                                 font.weight: Theme.typography.weightMedium
                             }
                         }
@@ -1149,7 +1149,7 @@ Item {
                     visible: root.balances.length === 0
                     text: qsTr("no balances yet")
                     color: Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                 }
 
                 LogosButton {
@@ -1179,8 +1179,8 @@ Item {
                 text: root.ready ? qsTr("module.health() → %1").arg(root.health)
                                  : qsTr("connecting to backend…")
                 color: Theme.palette.textTertiary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
             }
         }
     }
@@ -1377,7 +1377,7 @@ Item {
             LogosText {
                 text: root.signerNote
                 color: Theme.palette.textSecondary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             LogosButton {
                 objectName: "signerInstall"

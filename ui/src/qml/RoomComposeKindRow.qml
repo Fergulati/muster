@@ -18,8 +18,8 @@ RowLayout {
     LogosText {
         text: qsTr("Kind")
         color: Theme.palette.textTertiary
-        font.family: Theme.typography.mono
-        font.pixelSize: Theme.typography.badgeText
+        font.family: MusterStyle.mono
+        font.pixelSize: MusterStyle.caption
         font.weight: Theme.typography.weightMedium
     }
 

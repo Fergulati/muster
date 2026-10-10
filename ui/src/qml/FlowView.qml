@@ -61,7 +61,7 @@ Item {
             LogosText {
                 text: flowView.collapsed ? "▸" : "▾"
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             LogosText {
                 Layout.fillWidth: true
@@ -74,13 +74,11 @@ Item {
                 objectName: "flowRowCount"
                 text: qsTr("%1 actions").arg(flowView.rows.length)
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: flowView.collapsed = !flowView.collapsed
-            }
+            // handlers, not a MouseArea: an Item here would be a layout cell (and a spacing gap)
+            TapHandler { onTapped: flowView.collapsed = !flowView.collapsed }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
 
         // ── the expandable body, bounded + scrollable ─────────────────────
@@ -115,7 +113,7 @@ Item {
                             Layout.alignment: Qt.AlignTop
                             text: modelData.label
                             color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
-                            font.pixelSize: Theme.typography.badgeText
+                            font.pixelSize: MusterStyle.caption
                             font.weight: Theme.typography.weightMedium
                         }
                         LogosText {
@@ -123,8 +121,8 @@ Item {
                             wrapMode: Text.WordWrap
                             text: modelData.fields
                             color: Theme.palette.text
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
                     }
                 }
@@ -151,8 +149,8 @@ Item {
                             + " · epoch " + String(modelData.epoch)
                             + (modelData.declared === false ? qsTr("  ⚠ undeclared") : "")
                         color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
                 }
             }

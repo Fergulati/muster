@@ -75,8 +75,8 @@ Item {
                     LogosText {
                         text: qsTr("ADD SOMEONE")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightMedium
                     }
                     LogosText {
@@ -84,14 +84,14 @@ Item {
                         wrapMode: Text.WordWrap
                         text: qsTr("Paste the chat id they shared with you and give them a name.")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                     LogosTextField {
                         id: newIdField
                         objectName: "contactIdField"
                         Layout.fillWidth: true
                         placeholderText: qsTr("their chat id (128 hex)")
-                        font.family: Theme.typography.mono
+                        font.family: MusterStyle.mono
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -182,8 +182,8 @@ Item {
                             Layout.fillWidth: true
                             text: book.shortId(row.modelData.identity)
                             color: Theme.palette.textTertiary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
                     }
                 }

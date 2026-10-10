@@ -219,7 +219,7 @@ Rectangle {
                                  + "materialization. It counts only if it comes from a signer this "
                                  + "intent's policy recognizes (a Safe owner, or a room member).")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     RowLayout {
@@ -231,7 +231,7 @@ Rectangle {
                             objectName: "roomApproveSig"
                             Layout.fillWidth: true
                             placeholderText: qsTr("signature (hex)")
-                            font.family: Theme.typography.mono
+                            font.family: MusterStyle.mono
                         }
 
                         // Enter adds the signature (paste, then Enter).
@@ -299,7 +299,7 @@ Rectangle {
                                  + "an in-app one, counts toward the threshold, and is shown as signed outside "
                                  + "muster — it commits to the transaction, nothing more.")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     LogosText {
@@ -308,7 +308,7 @@ Rectangle {
                         wrapMode: Text.WordWrap
                         text: qsTr("⚠ No PSBT — %1").arg(String((outsideBox.exp && outsideBox.exp.error) || ""))
                         color: Theme.palette.warning
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     Rectangle {
@@ -330,8 +330,8 @@ Rectangle {
                             wrapMode: TextEdit.WrapAnywhere
                             text: String((outsideBox.exp && outsideBox.exp.encoded) || "")
                             color: Theme.palette.textSecondary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
                     }
 
@@ -350,7 +350,7 @@ Rectangle {
                             objectName: "roomOutsideImport"
                             Layout.fillWidth: true
                             placeholderText: qsTr("the signed PSBT (base64)")
-                            font.family: Theme.typography.mono
+                            font.family: MusterStyle.mono
                         }
                         LogosButton {
                             objectName: "roomOutsideImportSubmit"
@@ -389,7 +389,7 @@ Rectangle {
                                    + "  " + qsTr("State: %1").arg(String(r.state || ""));
                         }
                         color: (outsideBox.imp && outsideBox.imp.error) ? Theme.palette.warning : Theme.palette.textSecondary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                 }
 
@@ -548,8 +548,8 @@ Rectangle {
                             return (o.error !== undefined || String(o.onchain || "") === "failed")
                                    ? Theme.palette.warning : Theme.palette.textSecondary;
                         }
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     // honest invoke-execute outcome (executed/detail, or an error).
@@ -585,8 +585,8 @@ Rectangle {
                             return (o.error !== undefined) ? Theme.palette.warning
                                                            : Theme.palette.textSecondary;
                         }
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
                 }
 
@@ -597,8 +597,8 @@ Rectangle {
                     Layout.fillWidth: true
                     text: qsTr("· a proposal")
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                 }
 
                 // ── other typed cards (address-share / receipt) ────────────
@@ -648,8 +648,8 @@ Rectangle {
                         text: msg.authorName
                               + (modelData.ts ? "  ·  " + modelData.ts : "")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
                     LogosText {
                         Layout.fillWidth: true
