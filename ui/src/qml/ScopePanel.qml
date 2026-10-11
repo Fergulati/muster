@@ -315,6 +315,10 @@ Item {
                            + "sealed to it, so only members can read who is asking. Asking again in a moment.")
                       : scope.joinStatus === "ok"
                         ? qsTr("Your ask is sealed and sent — a member here can admit you.")
+                      : scope.joinStatus === "invited"
+                        ? qsTr("You were invited, so you're already let in: the room's key is on its way. Nothing was sent.")
+                      : scope.joinStatus === "already-a-member"
+                        ? qsTr("You're already in this room. Nothing was sent.")
                         : qsTr("Ask: %1").arg(scope.joinStatus)
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.caption

@@ -4077,13 +4077,34 @@ proc musterCoordinateAvailableActions(): string =
   if gInvoker == nil: gInvoker = newLpInvoker("muster_module")
   $discoverAcross(gInvoker, modules, allow)
 
+proc invitedTo(ctopic: string): bool =
+  ## Whether an invite to this room (its content topic) reached our inbox: the inviter
+  ## admitted us when they sent it (exo-dcc.29), so our grant waits in the store.
+  if gInbox == nil: return false
+  let ks = moduleKeystore()
+  for raw in gInbox.receivedInvites():
+    try:
+      let opened = ks.sealOpen(raw)
+      var s = ""
+      for b in opened: s.add char(b)
+      let t = parseJson(s){"topic"}.getStr()
+      if t.len > 0 and toContentTopic(t) == ctopic: return true
+    except CatchableError: discard
+  false
+
 proc musterCoordinateRequestJoin(): string =
   if gSession == nil: return "not-joined"
+  gSession.poll()
+  # Ask only when there is no other way in (exo-b75). A request goes to every join key
+  # announced on the topic, a stranger's included, so it is sent only when needed: not by
+  # a member of a room that already holds others, and not by someone an invite to this
+  # room already admitted (the grant follows from the store).
+  if gSession.members().len > 1: return "already-a-member"
+  if invitedTo(gSession.topic): return "invited"
   # A join request names our encryption identity, signed by it for this room, and
   # nothing else (exo-a87): no secp key, so asking discloses no address. Our address
   # reaches the room only through an act (an approval, an address share, an account).
   # Sealed to the room's announced join key (exo-661.7): only its members read who asks.
-  gSession.poll()
   if gSession.requestJoin(moduleKeystore().joinRequestFor(
       gSession.topic, uint64(epochTime()) + 86_400)):
     "ok"
