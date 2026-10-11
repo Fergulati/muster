@@ -500,3 +500,18 @@ proc approvedByMe*(events: seq[Event], intentId: string, approvers: seq[string],
       if who.len == 66 and addressOfCompressed(hexToBytes(who)) == signer: return true
     except CatchableError: discard
   false
+
+proc bindingLink*(e: Event): tuple[ok: bool, who, member: string] =
+  ## A key-binding event's link, verified (the room map, exo-dde): `who` is the
+  ## authorization key it names, `member` the encryption identity it vouches for, as
+  ## lowercase hex. ok only when the statement's signer IS `who`, the same check
+  ## approvedByMe makes, so no one can bind their own key to another member.
+  let p = e.key.split('/')
+  if p.len != 4 or p[0] != "intent" or p[2] != "binding": return
+  try:
+    let st = decodeLink(hexToBytes(e.value))
+    let signer = bindingSigner(st, 0)          # expiry is not the question here
+    let who = p[3].toLowerAscii()
+    if who == "0x" & lowHex(signer) or (who.len == 66 and addressOfCompressed(hexToBytes(who)) == signer):
+      return (true, who, lowHex(st.enc.toBytes()))
+  except CatchableError: discard

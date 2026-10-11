@@ -154,6 +154,13 @@ method open*(cc: EpochCrypto, envelope: seq[byte]): seq[byte] =
     except SodiumError: discard
   raise newException(SodiumError, "no epoch key we hold opens this envelope")
 
+method openedEpoch*(cc: EpochCrypto, envelope: seq[byte]): tuple[epoch: int, plain: seq[byte]] =
+  ## The same search as `open`; the key whose MAC verifies names the envelope's epoch.
+  for e in cc.epochsNewestFirst():
+    try: return (e, secretboxOpen(cc.keys[e], envelope))
+    except SodiumError: discard
+  raise newException(SodiumError, "no epoch key we hold opens this envelope")
+
 method members*(cc: EpochCrypto): seq[Member] = cc.memberSets.getOrDefault(cc.cur)
 method epoch*(cc: EpochCrypto): int = cc.cur
 

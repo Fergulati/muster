@@ -33,6 +33,7 @@ type
     lastBeacon: seq[byte]        ## the join key we last announced
     lastBeaconAt: float          ## when (epoch seconds) — answers to beacon requests are rate-limited
     answered: HashSet[string]    ## beacon-request nonces already answered (a store catchup window re-delivers them)
+    sealedIn*: Table[string, int] ## event id → the earliest epoch whose key opened (or sealed) it here; log + keys, never position (exo-dde)
     authorChecked*: Table[string, bool]  ## exo-f76: event id → its author signature verifies (authorship.nim). A pure function of (topic, event), so safe to cache
 
 # Every frame on the topic carries a 1-byte kind, so the membership handshake
@@ -97,7 +98,11 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
   try:
     case kind
     of FrameData:
-      s.log.ingest(decodeEvent(s.crypto.open(body)))
+      let (ep, plain) = s.crypto.openedEpoch(body)
+      let ev = decodeEvent(plain)
+      s.log.ingest(ev)
+      let id = eventId(ev)
+      if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
     of FrameJoinRequest:
       let st = decodeLink(s.crypto.openJoinRequest(body))   # sealed to a join key; only a member opens it
       let m = st.enc
@@ -134,6 +139,9 @@ proc topic*(s: CoordinationSession): string = s.topic
 proc publish*(s: CoordinationSession, e: Event) =
   ## Record locally, then broadcast the sealed event to the room.
   s.log.ingest(e)
+  let id = eventId(e)
+  let ep = (try: s.crypto.epoch() except CatchableError: -1)
+  if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
   discard s.transport.publish(s.topic, @[FrameData] & s.crypto.seal(encodeEvent(e)))
 
 # ── membership handshake ───────────────────────────────────────────────────────

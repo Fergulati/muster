@@ -64,6 +64,7 @@ import ../src/hashing/sha256
 import ../src/log/proof                # exportable, self-verifying log proofs (M4)
 import ../src/coordination/audit       # the signature-audit file (exo-403)
 import ../src/coordination/flow        # the information-flow view (M5)
+import ../src/coordination/room_graph  # the room map (exo-dde)
 import ../src/coordination/room_infra  # the infrastructure the room's proposals introduce (exo-428)
 import ../src/intents/authorization    # muster-issued authorizations for the host hook (M7)
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
@@ -3032,24 +3033,36 @@ proc musterCoordinateVerifyAudit(fileHex: string): string =
        "issuer": v.issuer, "digest": v.digest, "firstEpoch": v.firstEpoch,
        "approvals": apps, "settlement": st})
 
+proc roomFounders(s: CoordinationSession, events: seq[Event]): seq[string] =
+  ## A room's founders (flow.foundersOf over its current roster).
+  var roster: seq[string]
+  for mem in s.members(): roster.add toHex(mem.toBytes())
+  foundersOf(events, roster)
+
 proc musterCoordinateFlow(): string =
-  ## Who could see what, per action (M5). Founders = the current roster minus every
-  ## joiner the log admits — the log names admits, not the founding set.
+  ## Who could see what, per action (M5).
   if gSession == nil: return $(%*{"rows": [], "matrix": {}})
   gSession.poll()
   let events = gSession.roomEvents()
-  var admitted = initHashSet[string]()
-  for e in events:
-    let p = e.key.split('/')
-    if p.len >= 4 and p[0] == "membership" and p[2] == "admit": admitted.incl p[3]
-  var founders: seq[string]
-  for mem in gSession.members():
-    let hexId = toHex(mem.toBytes())
-    if hexId notin admitted: founders.add hexId
-  let rows = reduceFlow(events, driverFor, founders)
+  let rows = reduceFlow(events, driverFor, gSession.roomFounders(events))
   result = $(%*{"rows": rows.toJson(),
                  "matrix": rows.observerMatrix(introducedObservers(events, driverFor))})
   if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)
+
+proc musterCoordinateGraph(roomTopic: string): string =
+  ## The room map (exo-dde): a joined room as nodes and edges, from the authenticated
+  ## log this instance holds (room_graph.nim). An empty topic is the current room, so a
+  ## view outside muster_ui is never tied to which room muster_ui last opened.
+  var s = gSession
+  if roomTopic.len > 0:
+    let ctopic = toContentTopic(roomTopic)
+    s = (if ctopic in gSessions and ctopic notin gInboxTopics: gSessions[ctopic] else: nil)
+  if s == nil: return $(%*{"error": "not-joined"})
+  s.poll()
+  let events = s.roomEvents()
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  result = $reduceRoomGraph(events, driverFor, s.roomFounders(events), me, s.sealedIn).toJson()
+  if gLpDebug: stderr.writeLine("MUSTER-LP graph " & result)
 
 proc musterCoordinateAuthorization(intentId: string): string =
   ## The grant a host hook checks before dispatch (M7). Only for an EXECUTABLE

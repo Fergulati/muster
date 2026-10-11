@@ -50,6 +50,12 @@ method open*(cc: ConversationCrypto, envelope: seq[byte]): seq[byte] {.base.} =
   ## an earlier epoch — F-16). The caller treats a raise as "not for me / not yet".
   raise newException(CatchableError, "ConversationCrypto.open is abstract")
 
+method openedEpoch*(cc: ConversationCrypto, envelope: seq[byte]): tuple[epoch: int, plain: seq[byte]] {.base.} =
+  ## `open`, also naming the epoch whose key opened the envelope (-1 when the backend
+  ## cannot say). An entry's epoch is a fact of log + keys, not of its log position:
+  ## events without parents sort by content id, so position says nothing about epoch.
+  (-1, cc.open(envelope))
+
 method addMember*(cc: ConversationCrypto, member: Member) {.base.} =
   ## Re-key forward: open a new epoch the added member receives. They get only the
   ## new epoch key, never the prior ones — so they cannot decrypt earlier messages

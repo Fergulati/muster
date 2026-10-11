@@ -542,6 +542,12 @@ proc countedPartsAt(ordered: seq[Event], folded: Table[string, Intent],
     if drv.settlementParts(it.effect).len == 0: continue
     result[id] = countedParts(ordered, drv, it.effect, id).at
 
+proc countedPartIndexes*(events: seq[Event], driverFor: DriverFor): Table[string, Table[string, int]] =
+  ## The counted part reports, as `countedPartsAt` reads them: intent id → "<part>/<step>"
+  ## → its index in canonicalOrder(events). For the flow view (exo-c7c): a payment leaves
+  ## the room at a COUNTED settled report, never at one the fold refused.
+  countedPartsAt(canonicalOrder(events), reduceIntents(events, driverFor), driverFor, events)
+
 proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntry] =
   ## The room's coordination history as reduce(log). See the section note above.
   let ordered = canonicalOrder(events)
