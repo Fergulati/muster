@@ -1,0 +1,40 @@
+{
+  "about": "Rename keeps this member's own name for the room.",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomRenameButton",
+        "triggered"
+      ]
+    },
+    {
+      "set": [
+        "roomRenameField",
+        "text",
+        "Dinner"
+      ]
+    },
+    {
+      "click": "roomRenameSave"
+    },
+    {
+      "expect": {
+        "slot": "setRoomTitle",
+        "args": [
+          "~split-1791572356",
+          "Dinner"
+        ]
+      }
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

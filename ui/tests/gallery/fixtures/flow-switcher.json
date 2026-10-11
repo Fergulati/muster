@@ -1,0 +1,36 @@
+{
+  "about": "The room switcher opens the room picked.",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "home"
+    },
+    {
+      "click": "sidebarJump"
+    },
+    {
+      "click": "roomSwitcherRow"
+    },
+    {
+      "expect": {
+        "slot": "joinRoom",
+        "args": [
+          "~/muster/1/split-1791572356/proto"
+        ]
+      }
+    },
+    {
+      "expectProp": [
+        "roomSurface",
+        "visible",
+        true
+      ]
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

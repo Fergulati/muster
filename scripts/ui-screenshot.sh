@@ -4,7 +4,7 @@
 # (docs/labbook/qml-errors-are-invisible-to-nix-build.md), so this is how a change to the
 # QML is SEEN: screenshots at three sizes, and a pixel diff between two sets.
 #
-#   scripts/ui-screenshot.sh gallery [--out DIR] [--sizes WxH,…] [fixture …]
+#   scripts/ui-screenshot.sh gallery [--out DIR] [--sizes WxH,…] [--main Main.qml] [fixture …]
 #       The real Main.qml against ui/tests/gallery/FakeBackend.qml, one PNG per fixture
 #       per size (ui/tests/gallery/fixtures/*.json; all of them by default). The runner's
 #       own Qt 6.9.2 and Logos design system, on a private Xvfb display with Mesa GL; no
@@ -44,11 +44,12 @@ need_base() {
 qt_env() { ui_qt_env "$BASE" || exit 1; }
 
 cmd_gallery() {
-  local out=".run/screens/gallery" sizes="$SIZES_DEFAULT" fixtures=() f s w h name log rc=0 warns
+  local out=".run/screens/gallery" sizes="$SIZES_DEFAULT" fixtures=() f s w h name log rc=0 warns main_qml=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --out) out="$2"; shift 2 ;;
       --sizes) sizes="$2"; shift 2 ;;
+      --main) main_qml="$(realpath "$2")"; shift 2 ;;
       *) fixtures+=("$1"); shift ;;
     esac
   done
@@ -62,7 +63,8 @@ cmd_gallery() {
   local XV disp
   XV=$(ls -d /nix/store/*-xvfb-21*/bin 2>/dev/null | head -1)/Xvfb
   [ -x "$XV" ] || { echo "needs Xvfb (nix build nixpkgs#xvfb-run)"; exit 1; }
-  for disp in $(seq 140 199); do [ -e "/tmp/.X11-unix/X$disp" ] || break; done
+  # its own display range, clear of record/census/runner and ui-parity's (140–199)
+  for disp in $(seq 200 259); do [ -e "/tmp/.X11-unix/X$disp" ] || break; done
   setsid bash -c 'echo $$ >"$1"; exec "$2" ":$3" -screen 0 1920x1080x24 -nolisten tcp' _ "$out/xvfb.pid" "$XV" "$disp" >/dev/null 2>&1 &
   XVFB_PIDFILE="$out/xvfb.pid"
   trap 'pkill -9 -s "$(cat "$XVFB_PIDFILE" 2>/dev/null)" 2>/dev/null' EXIT
@@ -91,10 +93,10 @@ cmd_gallery() {
     for s in $(echo "${fsizes:-$sizes}" | tr , ' '); do
       w=${s%x*}; h=${s#*x}
       log="$out/$name-$s.log"
-      timeout 60 "$QML_BIN" ui/tests/gallery/Gallery.qml -- "$(realpath "$f")" "$(realpath -m "$out")/$name-$s" "$w" "$h" >"$log" 2>&1
+      timeout 60 "$QML_BIN" ui/tests/gallery/Gallery.qml -- "$(realpath "$f")" "$(realpath -m "$out")/$name-$s" "$w" "$h" ${main_qml:+"$main_qml"} >"$log" 2>&1
       if grep -q "GALLERY-DONE" "$log"; then
         warns=$(grep -c '\.qml:[0-9]' "$log")
-        echo "  ok   $name $s ($(grep -c GALLERY-SHOT "$log") shot(s), $warns QML warning(s))"
+        echo "  ok   $name $s ($(grep -c GALLERY-SHOT "$log") shot(s), $(grep -c GALLERY-PASS "$log") check(s), $warns QML warning(s))"
         grep '\.qml:[0-9]' "$log" | sed "s|file://$ROOT/||; s|^|$name $s: |" >>"$out/warnings.txt"
       else
         echo "  FAIL $name $s — $(grep -v libEGL "$log" | grep -m1 -E 'GALLERY-ERROR|Error|error|No such' || echo 'no GALLERY-DONE')"

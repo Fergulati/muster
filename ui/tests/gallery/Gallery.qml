@@ -13,7 +13,14 @@ import QtQuick
 //     "props": { "<PROP>": <string, or any JSON value, which is stringified> },
 //     "steps": [ {"view": "room"}, {"set": ["<objectName>", "<prop>", <value>]},
 //                {"click": "<objectName>"}, {"props": {...}}, {"wait": 300},
-//                {"shot": "<suffix>"} ] }
+//                {"shot": "<suffix>"},
+//                {"expect": {"slot": "<SLOT>", "args": [...]}}   // the UI made this module call
+//                                       //   (an arg "~text" matches any argument containing it)
+//                {"expectProp": ["<objectName>", "<prop>", <value>]}
+//                {"emit": ["<objectName>", "<signal>"]}         // e.g. a MenuItem's triggered
+//                {"dumpCalls": true} ] }                        // print every call (GALLERY-CALLS)
+// A failed expectation is a GALLERY-ERROR: the fixture fails. Arguments after the size:
+// an optional path to another Main.qml (an older tree's), to compare what the UI asks.
 // With no steps: show the snapshot's recorded view (else home) and shoot once.
 // Each shot is <out-prefix>[-<suffix>].png. Prints GALLERY-SHOT / GALLERY-ERROR /
 // GALLERY-DONE lines; the script reads them.
@@ -40,7 +47,8 @@ Item {
     }
 
     Rectangle { anchors.fill: parent; color: "#000000" }
-    Loader { id: app; anchors.fill: parent; active: false; source: Qt.resolvedUrl("../../src/qml/Main.qml") }
+    Loader { id: app; anchors.fill: parent; active: false
+             source: argv[4] ? Qt.resolvedUrl("file://" + argv[4]) : Qt.resolvedUrl("../../src/qml/Main.qml") }
 
     property var steps: []
     property int stepAt: 0
@@ -108,6 +116,38 @@ Item {
             return true;
         }
         if (step.wait !== undefined) { pause.interval = step.wait; pause.start(); return false; }
+        if (step.emit !== undefined) {     // a signal other than clicked (a MenuItem's triggered)
+            var e = find(app.item, step.emit[0]);
+            if (!e) { fail("no object named " + step.emit[0]); return false; }
+            e[step.emit[1]]();
+            return true;
+        }
+        if (step.expect !== undefined) {
+            var want = step.expect, args = want.args || [];
+            var hit = fake.calls.some(function (c) {
+                if (c.slot !== want.slot) return false;
+                for (var a = 0; a < args.length; ++a) {
+                    var got = String(c.args[a]), exp = String(args[a]);
+                    if (exp.charAt(0) === "~" ? got.indexOf(exp.slice(1)) < 0 : got !== exp) return false;
+                }
+                return true;
+            });
+            if (!hit) { fail("expected the call " + JSON.stringify(want) + "; the UI made " + JSON.stringify(fake.calls.map(function (c) { return c.slot; }))); return false; }
+            console.log("GALLERY-PASS " + JSON.stringify(want));
+            return true;
+        }
+        if (step.expectProp !== undefined) {
+            var o = find(app.item, step.expectProp[0]);
+            if (!o) { fail("no object named " + step.expectProp[0]); return false; }
+            var v = o[step.expectProp[1]];
+            if (JSON.stringify(v) !== JSON.stringify(step.expectProp[2])) { fail(step.expectProp.join(".") + " is " + JSON.stringify(v)); return false; }
+            console.log("GALLERY-PASS " + JSON.stringify(step.expectProp));
+            return true;
+        }
+        if (step.dumpCalls !== undefined) {
+            console.log("GALLERY-CALLS " + JSON.stringify(fake.calls));
+            return true;
+        }
         if (step.shot !== undefined) { settle.start(); return false; }
         fail("unknown step " + JSON.stringify(step));
         return false;

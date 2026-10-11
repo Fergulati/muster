@@ -1,0 +1,32 @@
+{
+  "about": "Leave, confirmed, makes the module leave the room.",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "leaveRoomButton",
+        "triggered"
+      ]
+    },
+    {
+      "click": "leaveRoomConfirm"
+    },
+    {
+      "expect": {
+        "slot": "leaveRoom",
+        "args": [
+          "~/muster/1/split-1791572356/proto"
+        ]
+      }
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

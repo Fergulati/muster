@@ -1,0 +1,38 @@
+{
+  "about": "Joining with a room code from Needs you joins it and asks to be let in.",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "home"
+    },
+    {
+      "set": [
+        "homeRoomCodeField",
+        "text",
+        "/muster/1/gallery-code/proto"
+      ]
+    },
+    {
+      "click": "homeJoinCodeButton"
+    },
+    {
+      "expect": {
+        "slot": "joinRoom",
+        "args": [
+          "/muster/1/gallery-code/proto"
+        ]
+      }
+    },
+    {
+      "expect": {
+        "slot": "requestJoin"
+      }
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

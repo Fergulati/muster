@@ -1,0 +1,32 @@
+{
+  "about": "A card's Who sees this? opens Room details at Privacy.",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "cardWhoSees"
+    },
+    {
+      "expectProp": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "roomSurface",
+        "detailsTab",
+        "privacy"
+      ]
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

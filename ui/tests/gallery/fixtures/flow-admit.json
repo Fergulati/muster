@@ -1,0 +1,31 @@
+{
+  "about": "Admit on a join request admits that member and re-announces the room.",
+  "snapshot": "data/split-bob-join-request.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomJoinAdmit"
+    },
+    {
+      "expect": {
+        "slot": "admit",
+        "args": [
+          "~cd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d"
+        ]
+      }
+    },
+    {
+      "expect": {
+        "slot": "reannounce"
+      }
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}
