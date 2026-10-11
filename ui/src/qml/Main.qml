@@ -383,9 +383,17 @@ Item {
     // A Shortcut fires only while Qt counts the window active, which a host embedding this
     // view may not report; the key itself still reaches the focused item and bubbles up
     // here, so take it then too (whichever comes first consumes it).
+    // the default receiver of keys: with nothing else focused (a click on empty space
+    // focuses nothing), Main holds focus, so its handler sees Ctrl+K
+    focus: true
     Keys.onPressed: function (event) {
         if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
             roomSwitcher.opened ? roomSwitcher.close() : roomSwitcher.open();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Escape && root.view === "room"
+                   && (roomSurface.detailsShown || roomSurface.composing)) {
+            // Esc in a room, when Main holds focus: the drawer, else the proposal panel
+            roomSurface.detailsShown ? roomSurface.closeDetails() : (roomSurface.composing = false);
             event.accepted = true;
         }
     }

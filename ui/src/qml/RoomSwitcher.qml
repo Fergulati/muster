@@ -17,6 +17,7 @@ Popup {
     y: parent ? Math.round(parent.height * 0.12) : 0
     width: parent ? Math.min(520, parent.width - 32) : 520
     modal: true
+    focus: true          // a Popup's content takes keyboard focus only when the Popup does
     padding: 0
     background: Surface { level: 2 }
 
@@ -35,7 +36,7 @@ Popup {
         return out;
     }
     onRoomsChanged: selected = Math.min(selected, Math.max(0, rooms.length - 1))
-    onOpened: { field.text = ""; selected = 0; field.forceActiveFocus(); }
+    onOpened: { field.text = ""; selected = 0; field.textInput.forceActiveFocus(); }   // LogosTextField does not pass focus to its input
 
     function openSelected() {
         var r = switcher.rooms[switcher.selected];

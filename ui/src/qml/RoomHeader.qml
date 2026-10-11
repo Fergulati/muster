@@ -23,7 +23,7 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: 0
 
-    function startRename() { renameField.text = header.room.roomTitle; renameRow.open = true; renameField.forceActiveFocus(); }
+    function startRename() { renameField.text = header.room.roomTitle; renameRow.open = true; renameField.textInput.forceActiveFocus(); }
 
     // worst of the room's connections: down > warn > ok (the dot's colour)
     readonly property string connLevel: {
