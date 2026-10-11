@@ -184,9 +184,9 @@ What happens underneath:
 2. **Alice:** go **Home** at once, then back into the new room by its row. Re-entering
    clears the auto-admit.
 3. **Bob:** **Join** the new invitation.
-4. **Alice:** under **Waiting to join**, Bob appears by alias. The row adds **· owner**
-   if his signed binding names a signer of an account disclosed in the room. Click
-   **Admit**.
+4. **Alice:** under **Waiting to join**, Bob appears by alias. His request names his
+   encryption identity and nothing else, so nothing says whether he holds an account
+   (exo-a87). Click **Admit**.
 5. If Bob's ask ever stalls, **Ask to join this room** (Bob's scope panel) re-sends it.
 
 While Bob's ask waits for the room's join key, his scope panel says so: *Waiting for

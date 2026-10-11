@@ -10,6 +10,7 @@ import ../src/transport/transport
 import ../src/crypto/epoch_crypto
 import ../src/crypto/keystore
 import ../src/crypto/binding
+import ../src/crypto/join_request
 import ../src/coordination/session
 
 proc key(hex: string): array[32, byte] =
@@ -25,10 +26,6 @@ let bobKs   = newInMemoryKeystore(key("0x59c6995e998f97a5a0044966f0945389dc9e86d
 let malKs   = newInMemoryKeystore(key("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6"), seed(3))
 let bobPub = bobKs.encIdentity()
 
-# F-9 owner set: Bob is a Safe owner, Mallory is not.
-let owners = @[bobKs.address()]
-let ctx = LinkContext(account: "room-safe", slot: "0", expiry: high(uint64))
-
 const topic = "/muster/1/handshake/proto"
 let net = newLocalNetwork()
 
@@ -41,23 +38,34 @@ alice.publish(Event(key: "msg/1", value: "before-bob"))
 doAssert bob.log.allEvents().len == 0, "Bob holds no key yet — cannot read epoch 0"
 echo "1. outsider cannot read the room OK"
 
-# Bob asks to join, carrying his binding. The request carries no authority; Alice
-# sees it as pending and can VERIFY it (F-9) before deciding.
-bob.requestJoin(bobKs.bindingFor(ctx))
+# Bob asks to join as his encryption identity, signed by it for this room. The request
+# carries no authority and no secp key (exo-a87); Alice sees it as pending.
+bob.requestJoin(bobKs.joinRequestFor(topic, high(uint64)))
 doAssert bobPub in alice.pendingJoins(), "Alice sees Bob's join-request as pending"
 doAssert bob.log.allEvents().len == 0, "a join-request alone admits nobody"
 echo "2. join-request is discovery, not entry OK"
 
-# F-9: Bob's binding proves his encryption identity belongs to a Safe owner; a
-# non-owner's binding for the same room does not bind against the owner set.
+# exo-a87: Bob's request names his encryption identity and nothing else, signed by that
+# identity. Asking in someone else's name is refused: Mallory sends a request naming Carol,
+# signed with Mallory's key, and Alice never sees Carol pending. A request for another room
+# is dropped too.
 block:
-  var bobBinding: LinkStatement
-  for st in alice.pendingBindings():
-    if st.enc == bobPub: bobBinding = st
-  doAssert bindingBinds(bobBinding, owners, now = 0), "Bob's binding proves Safe ownership (F-9)"
-  doAssert not bindingBinds(malKs.bindingFor(ctx), owners, now = 0),
-           "a non-owner's binding must not satisfy the owner check"
-echo "3. F-9 binding verified before admission OK"
+  let carolPub = newInMemoryKeystore(seed(9), seed(4)).encIdentity()
+  let mallory = newCoordinationSession(newLocalTransport(net), newEpochJoiner(malKs), topic)
+  var forged = malKs.joinRequestFor(topic, high(uint64))
+  forged.enc = carolPub
+  mallory.requestJoin(forged)
+  doAssert carolPub notin alice.pendingJoins(), "a request in another's name is dropped"
+  mallory.requestJoin(malKs.joinRequestFor("/muster/1/elsewhere/proto", high(uint64)))
+  doAssert malKs.encIdentity() notin alice.pendingJoins(), "a request for another room is dropped"
+  var bobReq: JoinRequest
+  for r in alice.pendingRequests():
+    if r.enc == bobPub: bobReq = r
+  doAssert joinRequestValid(bobReq, topic, 0), "Bob's own request verifies"
+  let wire = encodeJoinRequest(bobReq)
+  doAssert decodeJoinRequest(wire) == bobReq and wire.len == 64 + 2 + topic.len + 8 + 64,
+    "the request is the identity, the room, an expiry and one Ed25519 signature: no secp key"
+echo "3. a request is signed by the identity it names, and names nothing else OK"
 
 # Alice admits Bob: re-key forward, grants published on the topic. Bob ingests his.
 alice.admit(bobPub)

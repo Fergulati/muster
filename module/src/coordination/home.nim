@@ -59,7 +59,7 @@ proc homeItems*(events: seq[Event], driverFor: DriverFor, me: EncIdentity,
   let covered = coverIndex(events, driverFor, views, nowSec)
   for v in views:
     var it = HomeItem(id: v.id, state: v.state, cls: hcWaiting, policy: v.policy, effectJson: v.effectJson)
-    if v.state == "final":
+    if v.state in ["final", "declined"]:      # done: settled, or closed by declines (exo-720)
       it.cls = hcSettled
       result.add it
       continue

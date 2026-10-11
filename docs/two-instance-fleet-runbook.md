@@ -97,9 +97,9 @@ epoch.)* The backend re-announces every ~5s until admitted.
 ### 5. Alice admits Bob
 
 Within a second or two (store poll) Bob appears under **"Waiting to join"** in Alice's scope
-panel (`· owner` if his binding recovers to a Safe owner, F-9, advisory). Alice clicks
-**Admit** — admission follows *"a member decides"*: any **valid** binding is admitted, not only
-Safe owners. This re-keys the room forward (epoch 1 = {Alice, Bob}); Bob gets only the new
+panel. His request names his encryption identity, signed by it, and nothing else: no address
+(exo-a87). Alice clicks **Admit** — admission follows *"a member decides"*: any **valid**
+request is admitted. This re-keys the room forward (epoch 1 = {Alice, Bob}); Bob gets only the new
 epoch, never Alice's earlier lineage (F-16). **Both rosters now show two members — this is the
 working two-instance proof.**
 

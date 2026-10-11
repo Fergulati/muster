@@ -1053,7 +1053,7 @@
       "name": "Decline a proposal (Deny)",
       "area": "room",
       "status": "built",
-      "summary": "The card's Deny. Publishes a signed decline so the room sees who is out. It is informational: the driver's threshold and the lifecycle are untouched. Nothing is agreed.",
+      "summary": "The card's Deny. Publishes a signed decline so the room sees who is out. It is final (exo-720): the decliner's approval counts for nothing, whichever arrived first, and once too many of the signers the driver names have declined for the threshold to be reached, the intent is declined. After the room has submitted it, a decline changes nothing. Nothing is agreed.",
       "requirements": [
         {
           "kind": "authority",
@@ -1147,10 +1147,10 @@
           ]
         },
         {
-          "what": "a decline moving the threshold or the lifecycle",
-          "why": "declines are informational; dropping an intent is driver policy, not core policy",
+          "what": "a decline by someone who is not a signer closing an intent, or a decline undoing what the room already submitted",
+          "why": "a decline closes an intent only once the signers left cannot reach the threshold, and who counts as a signer is the driver's (mayContribute); after a submit, a decline changes nothing (exo-720)",
           "evidence": [
-            "module/tests/decline_test.nim"
+            "module/tests/decline_final_test.nim"
           ]
         }
       ],

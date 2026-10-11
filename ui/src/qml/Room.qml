@@ -177,7 +177,7 @@ Item {
             if (arr[i] && arr[i].self) return String(arr[i].identity || "");
         return "";
     }
-    // Join-requests not yet admitted: [{ identity, bindsOwner }]. The scope panel
+    // Join-requests not yet admitted: [{ identity, alias }]. The scope panel
     // lists these with an Admit action (the membership handshake).
     readonly property var pending: {
         try { return JSON.parse(backend ? backend.pendingJson : "[]"); }
@@ -748,7 +748,9 @@ Item {
         // settling (some of a split's shares confirmed, exo-a90) is past agreement, like submitted
         var cardState = (st === "executable" || st === "submitted" || st === "settling") ? "ready"
                       : st === "final" ? "paid"
-                      : st === "collecting" ? "collecting" : "proposed";
+                      : st === "collecting" ? "collecting"
+                      // closed without settling: said as such, never as "Proposed" (exo-720)
+                      : st === "declined" || st === "expired" ? st : "proposed";
         var eff = (it && it.effect) ? it.effect : ({});
         var effKind = eff ? String(eff.effect || "") : "";
         var isStatement = effKind === "statement";

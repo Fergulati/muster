@@ -22,6 +22,7 @@ import ./secp256k1
 import ./sodium
 import ./curve25519
 import ./binding
+import ./join_request
 import ../bitcoin/keys as btckeys   # DER ECDSA + BIP-340 over the same secret (exo-a50.2.4)
 import nimcrypto/[hmac, sha2]      # HMAC-SHA256: derived LEZ member keys (exo-3c9)
 import std/options
@@ -227,6 +228,11 @@ proc makeBinding(ks: Keystore, ctx: LinkContext): LinkStatement =
   ## secret never leaves the keystore (issueBinding takes a closure, not a key).
   issueBinding((proc(h: array[32, byte]): Signature65 = ks.sign(h)),
                ks.encIdentity(), ctx)
+
+proc joinRequestFor*(ks: Keystore, room: string, expiry: uint64): JoinRequest =
+  ## Ask to join `room` as our encryption identity, signed by it (exo-a87). It names no
+  ## secp key: asking to join discloses the encryption identity and nothing else.
+  issueJoinRequest((proc(m: seq[byte]): Ed25519Sig = ks.edSign(m)), ks.encIdentity(), room, expiry)
 
 # ── FileKeystore — the Argon2id-encrypted-keyfile stopgap ──────────────────────
 
