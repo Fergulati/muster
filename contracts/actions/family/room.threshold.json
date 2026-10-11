@@ -45,7 +45,7 @@
         {
           "step": "approve",
           "who": "each member",
-          "does": "Re-derives the materialization from the logged effect — dCBOR ['muster.threshold.v1', 'muster.effect.statement.v1', {text}] — and approves in-app: the keystore signs it with the member's Ed25519 room identity and signs the attestation over P with the same key. The driver counts a signature only if it verifies under one of the roster's keys; the fold reaches executable at k. A member may Deny instead: named, informational, the threshold unchanged.",
+          "does": "Re-derives the materialization from the logged effect — dCBOR ['muster.threshold.v1', 'muster.effect.statement.v1', {text}] — and approves in-app: the keystore signs it with the member's Ed25519 room identity and signs the attestation over P with the same key. The driver counts a signature only if it verifies under one of the roster's keys; the fold reaches executable at k. A member may Deny instead: named and final — their approval then counts for nothing, and once too many signers have declined for k to be reached the intent is declined.",
           "signs": "an Ed25519 signature by the member's room identity (their encryption identity's Ed25519 key, held in the keystore) over the materialization: the dCBOR array [serialization domain, schema id, {field: value…}] (CDE map order, shortest integers); plus a muster attestation by the same key over P = (context, the materialization, the provenance record)",
           "reveals": [
             {

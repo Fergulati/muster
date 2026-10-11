@@ -20,6 +20,7 @@ import ../drivers/kinds      # supported(): refuse a kind this client has no dri
 import ../drivers/profile    # the family profile: what settles, and where
 import ../drivers/inapp      # in-app signing as a driver hook (exo-a50.2.4)
 import ../drivers/interop    # signers outside muster (exo-a50.2.6)
+import ../drivers/frost_group  # frostGroupOf: a FROST group's rounds are frostPump's, not liveNextRounds'
 import ../intents/materialization
 import ../intents/lifecycle
 import ../intents/signing_payload
@@ -363,3 +364,39 @@ proc liveReannounce*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
     let (_, ev) = newMessageEvent(author, nowSec, refBody, msgSeq)
     s.publishAuthored(ks, ev)
     inc result
+
+
+proc liveNextRounds*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
+                     ctxFor: proc(intentId: string): LinkContext,
+                     nowSec: uint64): seq[tuple[id, outcome: string]] =
+  ## A member approves a multi-round decision once (exo-720): when a round they approved
+  ## has closed and the next is open, their contribution to it follows here, on the
+  ## intents tick, signed in-app as their first was. The room FROST policy runs two rounds;
+  ## its card offers Approve only until the member has approved, and nothing contributed
+  ## round 2 for them, so a proposal stalled at "round 2 of 2 (0 of 2 this round)" (seen
+  ## 2026-10-11). Never for a member who declined, never past collecting, and never for a
+  ## FROST group, whose two rounds frostPump runs from the keystore's own nonces. Returns
+  ## (intent id, outcome) for each contribution it sent.
+  s.poll()
+  let events = s.roomEvents()
+  let mine = bareNames(myContributorNames(ks))
+  let meHex = block:
+    const d = "0123456789abcdef"
+    var h = ""
+    for b in ks.encIdentity().toBytes(): (h.add d[int(b shr 4)]; h.add d[int(b and 0x0F)])
+    h
+  var declinedByMe: seq[string]
+  for e in events:
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "intent" and p[2] == "decline" and bareNames([p[3]])[0] == meHex:
+      declinedByMe.add p[1]
+  for id, it in reduceIntents(events, driverFor):
+    if it.state != lsCollecting or it.collection.round <= 1 or id in declinedByMe: continue
+    if driverFor(intentPolicyOf(events, id)).frostGroupOf().ok: continue
+    var approvedBefore, approvedNow = false
+    for g in approvalGrades(events, driverFor, id):
+      if g.grade == agRejected or bareNames([g.who])[0] notin mine: continue
+      if g.round < it.collection.round: approvedBefore = true
+      if g.round == it.collection.round: approvedNow = true
+    if approvedBefore and not approvedNow:
+      result.add (id: id, outcome: liveContribute(s, ks, driverFor, id, "", "", ctxFor(id), nowSec))

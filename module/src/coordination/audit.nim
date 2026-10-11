@@ -91,7 +91,7 @@ proc auditDigest*(bytes: seq[byte]): string =
   ## The content address of a whole file — what the report carries and a person cites.
   toHex(@(digest(hashInput("muster.signature-audit.file.v1", @[("file", cbBytes(bytes))]))))
 
-proc bodyDigest(body: CborValue): array[32, byte] =
+proc bodyDigest*(body: CborValue): array[32, byte] =
   ## What the exporter signs: every field of the file except its own signature.
   let d = digest(hashInput(AuditFormat, @[("body", cbBytes(encode(body)))]))
   for i in 0 ..< 32: result[i] = d[i]
@@ -259,6 +259,15 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
           settle.add e
           break
 
+    # declines (exo-720): a decline is final, so the stage can be "declined". The intent's
+    # declines ride along as leaves, like settlement, so the verifier can check that claim
+    # against them. Absent when there are none, so a file with no declines keeps its bytes.
+    var declineArr: seq[CborValue]
+    for e in ordered:
+      let q = e.key.split('/')
+      if q.len >= 4 and q[0] == "intent" and q[1] == intentId and q[2] == "decline":
+        declineArr.add eventCbor(e)
+
     # alternates (exo-96d): the counted event under a key can change — a valid copy of a
     # member's signature that sorts ahead of the original becomes the one carried — so the
     # original, which other approvals and its own attestation link, is carried beside it:
@@ -336,6 +345,7 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
       (cbText("settlement"), cbArray(settlement)),
       (cbText("claims"), claims),
       (cbText("issuer"), cbText(hex0x(issuer.address()).toLowerAscii))])
+    if declineArr.len > 0: body.pairs.add (cbText("declines"), cbArray(declineArr))
     let sig = issuer.sign(bodyDigest(body))
     body.pairs.add (cbText("signature"), cbBytes(@sig))
     AuditResult(ok: true, bytes: encode(body))
@@ -395,6 +405,19 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
       let e = eventOf(v, "settlement entry")
       settle.add e
       all.incl eventId(e)
+    var declines: seq[Event]  # leaves too (exo-720): absent when the intent has none
+    var hasDeclines = false
+    for (k, _) in f.pairs:
+      if k.kind == ckText and k.t == "declines": hasDeclines = true
+    if hasDeclines:
+      for v in f.field("declines").arrayOf("declines"):
+        let e = eventOf(v, "decline")
+        let q = e.key.split('/')
+        if q.len < 4 or q[0] != "intent" or q[1] != intentId or q[2] != "decline":
+          refuse("a decline entry is not this intent's")
+        declines.add e
+        all.incl eventId(e)
+      if declines.len == 0: refuse("the file carries an empty list of declines")
     for e in lineage:
       for par in e.parents:
         if par notin all: refuse("an entry names a parent the file does not carry")
@@ -506,6 +529,9 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
     let consistent =
       if final: stage == "final"
       elif submitted: stage in ["submitted", "settling"]
+      # declined (exo-720): only with a decline in the file, and short of the threshold. Who
+      # counts as a signer is outside the file, so, like the threshold, the exporter signs it
+      elif stage == "declined": declines.len > 0 and (maxRound > 1 or counted < threshold)
       elif maxRound > 1: stage in ["proposed", "collecting", "executable"]
       elif counted == 0: stage == "proposed"
       elif counted < threshold: stage == "collecting"

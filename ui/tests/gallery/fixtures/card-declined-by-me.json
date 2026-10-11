@@ -1,0 +1,205 @@
+{
+  "about": "A member who declined is not offered Approve afterwards (exo-720; seen 2026-10-11: \"2 declined: Bob, you\" with Approve still shown).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "intentsJson": [
+      {
+        "id": "0xf82713a97f076e35",
+        "state": "proposed",
+        "threshold": 2,
+        "approvals": 0,
+        "policy": "threshold",
+        "domain": "muster.threshold.v1",
+        "txhash": "0x83736d75737465722e7468726573686f6c642e763178196d75737465722e6566666563742e7472616e736665722e7631a362746f782a307831313131313131313131313131313131313131313131313131313131313131313131313131313131656e6f6e6365006576616c75651903e8",
+        "round": 1,
+        "rounds": 1,
+        "roundApprovals": 0,
+        "declines": 1,
+        "decliners": [
+          "589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b"
+        ],
+        "schemaId": "muster.effect.transfer.v1",
+        "schemaKnown": true,
+        "committed": 0,
+        "unattested": 0,
+        "parts": [],
+        "n": 2,
+        "profile": {
+          "declared": true,
+          "family": "room.threshold",
+          "settlement": "none",
+          "locus": "room",
+          "scheme": "shared-bytes",
+          "commits": "content",
+          "binding": "room",
+          "ordering": "none",
+          "expiry": "optional",
+          "setup": "none",
+          "membershipChange": "in-place",
+          "approverCost": "none",
+          "reveals": {
+            "policy": "never",
+            "signers": "never",
+            "effect": "room-only"
+          },
+          "rounds": 1,
+          "secretState": false,
+          "maturity": "production",
+          "chain": "",
+          "account": "",
+          "k": 2,
+          "n": 2,
+          "bypassesKnown": true,
+          "bypasses": []
+        },
+        "rows": [
+          {
+            "key": "where",
+            "label": "Where the rule lives",
+            "text": "Agreement is final in this room (2 of 2). Nothing goes to a chain.",
+            "credibility": "imperative",
+            "party": ""
+          },
+          {
+            "key": "sign",
+            "label": "What you sign",
+            "text": "Everyone signs the same bytes: the full action. Muster rebuilds them and refuses on a mismatch.",
+            "credibility": "imperative",
+            "party": ""
+          },
+          {
+            "key": "binding",
+            "label": "Only valid on",
+            "text": "Nowhere outside this room.",
+            "credibility": "imperative",
+            "party": ""
+          },
+          {
+            "key": "ordering",
+            "label": "Ordering",
+            "text": "No ordering between proposals.",
+            "credibility": "",
+            "party": ""
+          },
+          {
+            "key": "expiry",
+            "label": "Expiry",
+            "text": "No expiry unless the proposer sets one.",
+            "credibility": "",
+            "party": ""
+          },
+          {
+            "key": "collect",
+            "label": "Collecting",
+            "text": "One signature from each signer.",
+            "credibility": "",
+            "party": ""
+          },
+          {
+            "key": "chain",
+            "label": "What the chain learns",
+            "text": "Nothing: it stays in the room.",
+            "credibility": "imperative",
+            "party": ""
+          },
+          {
+            "key": "cost",
+            "label": "Approving costs you",
+            "text": "Nothing; whoever submits pays once.",
+            "credibility": "",
+            "party": ""
+          },
+          {
+            "key": "change",
+            "label": "Changing signers",
+            "text": "A proposal on this account; the address stays.",
+            "credibility": "",
+            "party": ""
+          },
+          {
+            "key": "bypass",
+            "label": "Ways around the rule",
+            "text": "None: the room's log is the rule.",
+            "credibility": "",
+            "party": ""
+          }
+        ],
+        "kind": "threshold",
+        "accountId": "",
+        "rail": "threshold",
+        "effect": {
+          "to": "0x1111111111111111111111111111111111111111",
+          "value": 1000,
+          "nonce": 0
+        },
+        "provenance": [
+          {
+            "class": "peer-message",
+            "logPos": 3,
+            "account": "",
+            "alias": "",
+            "accountable": true,
+            "what": "the proposal",
+            "detail": "pay 1000 to 0x1111111111111111111111111111111111111111",
+            "guarantee": "sealed to the room's epoch \u2014 only a member could have placed it",
+            "attestation": ""
+          }
+        ],
+        "summary": {
+          "kind": "payment",
+          "amount": "1000",
+          "unit": "wei",
+          "to": "0x1111111111111111111111111111111111111111",
+          "text": "a payment: 1000 wei \u2192 0x1111\u20261111"
+        },
+        "approvers": [],
+        "approvedByMe": false,
+        "declinerNames": [
+          {
+            "who": "589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+            "name": "you"
+          }
+        ],
+        "proposedBy": [
+          {
+            "who": "589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+            "name": "you",
+            "mine": true
+          }
+        ]
+      }
+    ]
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "cardDeclined",
+        "text",
+        "1 declined: you"
+      ]
+    },
+    {
+      "expectProp": [
+        "cardApprove",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "cardDeny",
+        "visible",
+        false
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

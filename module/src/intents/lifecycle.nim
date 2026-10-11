@@ -2,7 +2,7 @@
 ##
 ## The capstone that ties the invariant modules into a working coordination flow:
 ## an intent moves draft → proposed → collecting(round r) → executable → submitted
-## → settling → final (plus dropped / expired), and the reducer that advances it is
+## → settling → final (plus dropped / expired / declined), and the reducer that advances it is
 ## a pure fold over log events. It reuses the driver's round-based Collection
 ## (invariant 6 — rounds/threshold come from describe(), never hardcoded) for the
 ## collecting → executable transition, the effect's canonicalized materialization
@@ -24,6 +24,7 @@ type
     lsFinal = "final"
     lsDropped = "dropped"
     lsExpired = "expired"
+    lsDeclined = "declined"              ## too many of those who could approve declined (exo-720)
 
   Intent* = object
     effect*: Effect
@@ -40,7 +41,7 @@ type
     contribution*: Contribution        ## for ieContribute (opaque to the core)
     now*: uint64                       ## logical time, for expiry
 
-const terminal = {lsFinal, lsDropped, lsExpired}
+const terminal = {lsFinal, lsDropped, lsExpired, lsDeclined}
 const preSubmit = {lsDraft, lsProposed, lsCollecting, lsExecutable}
 
 proc newIntent*(driver: Driver, effect: Effect, context: SigningContext): Intent =

@@ -26,7 +26,9 @@ block:
   let v = viewOf(events, named)
   doAssert v.declines == 2 and v.decliners == @["alice", "bob"], $v.decliners
   doAssert v.state == "proposed" and v.approvals == 0, "a decline never moves the lifecycle"
-  # approvals still complete regardless of declines (informational)
+  # approvals by others still complete: "bob" and "alice" here are no member's identity, so
+  # the driver names neither as a signer (a real decliner's own approval is void:
+  # decline_final_test)
   events.add contributeEvent(id, "carol", "aa")
   events.add contributeEvent(id, "dave", "bb")
   doAssert viewOf(events, named).state == "executable"

@@ -381,9 +381,10 @@ proc approvalGrades*(events: seq[Event], driverFor: DriverFor,
   let p0 = attestationPayload(events, driverFor, intentId)
   let desc = rec.desc
   var seen = initHashSet[string]()
+  let declined = declineFold(events)          # a decliner's approval is no one's (the fold's rule)
   for c in rec.copies:
     let k = c.who & "/" & $c.round
-    if k in seen: continue
+    if k in seen or voidedByDecline(declined, intentId, c.who): continue
     seen.incl k
     var atts: seq[Event]
     var ok = false

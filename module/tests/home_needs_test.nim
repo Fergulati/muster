@@ -107,8 +107,12 @@ block:
   doAssert home(aliceKs, id2).says(hcNeedsYou, "agree"), "the creditor is asked: " & $home(aliceKs, id2)
   doAssert home(room3CarolKs, id2).says(hcNeedsYou, "agree"), "proposing is not agreeing for a debtor"
   r.bob.publishAuthored(bobKs, declineEvent(id2, "0x" & bob))
-  doAssert home(bobKs, id2).says(hcWaiting), "a member who declined is not asked again"
-  echo "1c. on the creditor's behalf the creditor is asked; a decline is never asked again OK"
+  # a split every party must agree to, declined by one of them, can never pass: it is
+  # declined (exo-720), and nobody is asked about it any more — the decliner included
+  doAssert intentState(r.bob.roomEvents(), splitFor, id2) == "declined"
+  for ks in [Keystore(aliceKs), bobKs, room3CarolKs]:
+    doAssert home(ks, id2).says(hcSettled), "a declined split asks no one: " & $home(ks, id2)
+  echo "1c. on the creditor's behalf the creditor is asked; a declined split asks no one OK"
 
 # ── 2. a room statement (threshold, final in the room) ───────────────────────────
 block:

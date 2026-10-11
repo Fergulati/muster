@@ -2544,6 +2544,11 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
   ## in-process; this is plumbing over the module's session + keystore. A vote-locus
   ## intent is approved by the member's own chain vote instead (coordinate_vote).
   if gSession == nil: return "not-joined"
+  # A member who declined does not approve (the card's Deny): the fold would count it
+  # toward nothing, so it is not sent at all (exo-720).
+  let declineKey = "intent/" & intentId & "/decline/" & toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  if gSession.roomEvents().anyIt(it.key.toLowerAscii() == declineKey):
+    return "declined: you declined this proposal"
   if signatureHex.len == 0:
     let drv = driverFor(intentPolicyOf(gSession.roomEvents(), intentId))
     if drv of SplitDriver and drv.profile().family == MoneroSplitFamily:
@@ -2588,6 +2593,17 @@ proc musterCoordinateContribute(intentId: string, signatureHex: string, keyRef: 
                          intentLinkContext(intentId), uint64(epochTime()))
   if signatureHex.len == 0: noteApproved(intentId, r) else: r
 
+var gRoundsPumpAt = 0.0
+proc roundsPump() =
+  ## A multi-round decision's next round, for a member who approved the last one
+  ## (liveNextRounds, exo-720): they approve once, as with a FROST group.
+  if gSession == nil or epochTime() - gRoundsPumpAt < 2.0: return
+  gRoundsPumpAt = epochTime()
+  for (id, outcome) in liveNextRounds(gSession, moduleKeystore(), driverFor,
+                                      proc(i: string): LinkContext = intentLinkContext(i),
+                                      uint64(epochTime())):
+    if gLpDebug: stderr.writeLine("MUSTER-LP next-round " & id & " " & outcome)
+
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
   ## renders: the lifecycle state, the effect it carries, the driver threshold, and
@@ -2598,6 +2614,7 @@ proc musterCoordinateIntents(): string =
   gSession.poll()
   lezPump()                            # complete any LEZ step the chain has since included
   frostPump()                          # advance joined FROST ceremonies and round 2
+  roundsPump()                         # a multi-round room decision's next round, approved once (exo-720)
   splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
   keystorePump()                       # publish what a human approved in keystore_module (exo-149.2)
   let events = gSession.roomEvents()

@@ -147,7 +147,8 @@ Rectangle {
     // "What this needs" (exo-002.3): the card asks the room to load this intent's
     // readiness on first open (it probes the RPC, so it is on-demand, never on the tick).
     signal needs()
-    // Decline to take part — informational, the threshold is unchanged.
+    // Decline to take part. Final (exo-720): a decliner's approval counts for nothing, and a
+    // proposal too many of its signers declined is closed (state "declined").
     signal deny()
     // Save this intent's signature-audit file + report (exo-403).
     signal downloadAudit()
@@ -291,6 +292,8 @@ Rectangle {
     readonly property int declines: cardRoot.card ? Number(cardRoot.card.declines || 0) : 0
     readonly property var decliners: (cardRoot.card && cardRoot.card.decliners) ? cardRoot.card.decliners : []
     readonly property bool declinedByMe: !!(cardRoot.card && cardRoot.card.declinedByMe)
+    // closed by declines: too many of those who could approve declined (the module's fold)
+    readonly property bool isDeclined: !!(cardRoot.card && cardRoot.card.state === "declined")
 
     // The disclosure rows grouped by observer class, in a fixed honest order — the
     // room first, then everything OUTSIDE the boundary (store node, RPC, chain, module).
@@ -721,7 +724,10 @@ Rectangle {
             visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown && cardRoot.declines > 0
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: qsTr("%1 declined: %2").arg(cardRoot.declines).arg(
+            text: (cardRoot.isDeclined
+                   ? qsTr("Declined: it can no longer reach %1 of %2. %3 declined: %4")
+                         .arg(cardRoot.threshold).arg(cardRoot.signerCount).arg(cardRoot.declines)
+                   : qsTr("%1 declined: %2").arg(cardRoot.declines)).arg(
                       ((cardRoot.card && Array.isArray(cardRoot.card.declinerNames) && cardRoot.card.declinerNames.length > 0)
                          ? cardRoot.card.declinerNames : cardRoot.decliners.map(function (d) { return { who: d, name: "" }; }))
                       .map(function (d) {
@@ -800,6 +806,9 @@ Rectangle {
                 visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
                     && !(cardRoot.card && cardRoot.card.approvedByMe)
                     && !cardRoot.ready
+                    // a decline is final (exo-720): who declined does not approve, and a
+                    // proposal too many declined is closed
+                    && !cardRoot.declinedByMe && !cardRoot.isDeclined
                     // a split: only who it names agrees — each debtor, and the creditor to payTo
                     // being theirs (exo-770), never to an address this client does not hold
                     && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && (cardRoot.payToMine || cardRoot.payToMineUnknown)))
@@ -862,6 +871,7 @@ Rectangle {
                     && !(cardRoot.card && cardRoot.card.approvedByMe)
                     && !cardRoot.declinedByMe
                     && !cardRoot.ready
+                    && !cardRoot.isDeclined
                     && (!cardRoot.isSplit || cardRoot.iAmDebtor || cardRoot.iAmCreditor)
                 text: qsTr("Deny")
                 onClicked: cardRoot.deny()
