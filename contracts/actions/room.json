@@ -2977,10 +2977,7 @@
           "what": "reduceFlow: which log entries the flow view folds"
         }
       ],
-      "unverified": [
-        "The flow view omits account disclosures and FROST ceremony entries (flow.nim folds messages, intents and admits only).",
-        "coordinate_provenance still describes a message's author as 'what the sender wrote … not a verified signature' (intents.nim logProvenance); since exo-f76 the room verifies it."
-      ],
+      "unverified": [],
       "try": [
         {
           "path": "docs/runbooks/client-tour.md",

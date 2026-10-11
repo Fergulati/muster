@@ -66,9 +66,10 @@ things:
   Messages, proposals, policy changes, signatures, declines, submits, settlements, and
   membership admissions are each classed by the same vocabulary, each with a plain-English
   **guarantee** of what the code actually enforces for that entry. The honesty is in the
-  distinctions: a room-sealed *message* names its author as *what the sender wrote inside
-  the envelope* — not a verified signature; only a **driver-verified signature** proves
-  who; a *submit/final* is an **external read**, the member's report or the chain's answer,
+  distinctions: a *message* is signed by its author and bound to the room, and the room's
+  views drop one whose signature fails (exo-f76); an *approval* names the key its
+  **driver verified**, which belongs to a member only through a checked binding; a
+  *submit/final* is an **external read**, the member's report or the chain's answer,
   never asserted. Provenance that says "this is strong" and "this is only as good as the
   sender" *in the same view* is the point.
 
@@ -94,9 +95,9 @@ that **anyone with the epoch keys can recompute the whole thing and refuse on an
   names the first offending event. It is pure — it reads nothing but the proof. Tamper with
   one byte and it rejects. (Demo this live; it lands harder than any diagram.)
 - **What a proof does *not* claim, stated plainly.** It proves the *log*, not the *world*:
-  submit/final stay external reads. And it proves a message's *placement*, not its
-  *author* by signature — a message's author is what the sender wrote inside a room-sealed
-  envelope; only a driver-verified signature proves control of a key. Naming these two
+  submit/final stay external reads. And the proof checks content ids and order, not
+  signatures: it proves a message's *placement*. Its *author* is proven in the room, where
+  every view reads only messages whose author signature verifies (exo-f76). Naming these two
   limits *inside* the guarantee text is what makes the rest credible.
 
 The through-line: **capture is thorough because it's in the signed bytes and folds over

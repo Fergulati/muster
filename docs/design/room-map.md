@@ -108,7 +108,7 @@ Selecting a node opens a side panel: what it is, who placed it, the guarantee te
 
 - **exo-c7c (bug):** `reduceFlow` never places a parts intent's outside rows. A split settles through `intent/<id>/part/<part>/<step>` and writes no submit/final, so the payer, payee, amount and group linkage that the split's manifest declares to the chain observer (`drivers/split.nim:877-880`) never appear in `coordinate_flow`. "Who can see what" currently says a paid split left nothing. It also adds no store-node row for `context`, `read`, `attest`, `proposer`, `part`, `account/` or `frost/` entries, though the store node sees every envelope. The map depends on this fold, so this is slice G0.
 - **The founders bug (fixed with G3).** The host computed a room's founders as the roster minus every admitted joiner, but compared the roster in `strutils.toHex` uppercase against admit events in lowercase. No joiner was ever subtracted, so every later joiner counted as a founder, and "Who sees this?" listed them as able to read entries from before they joined. `flow.foundersOf` now compares without case; `flow_test` §7 holds it.
-- **Message authorship is signed now, and the guarantee text lags.** Since exo-f76 a message carries its author's signature and `roomEvents` drops a forgery, but `logProvenance` still says a message's author "is what the sender wrote, not a verified signature". The graph names a message's author with basis `author-signed`; the guarantee string should be updated where it is written.
+- **Message authorship is signed, and the guarantee text lagged (fixed, exo-37e).** Since exo-f76 a message carries its author's signature and `roomEvents` drops a forgery; `logProvenance` said the author "is what the sender wrote, not a verified signature". It now says what the read path enforces, and the graph names a message's author with basis `author-signed`.
 - **An approval is a key, not a member.** A driver-counted approval names the authorization key that signed. The graph hangs it from a `signer` node, and ties that key to a member only through a binding whose statement verifies (`attest.bindingLink`), so a member is never shown approving on the strength of a name on a key.
 - **External reads are not on the flow view at all.** The map's inbound edges (§4 rule 6) are new on screen, though `logProvenance` already classes `read` entries.
 
@@ -123,9 +123,9 @@ Each slice's accept criteria become a test before the code (working agreement).
 | **G2** | invariant probe for the map's two promises: no epoch leak, no claim about a member beyond the log | new probe under `tests/probes/`, append-only |
 | **G3** ✓ | `coordinate_graph` in `muster.lidl`, regen, hosted in `muster_module.nim` | `room_graph_live_test`: over real sessions, a joiner's map (what its session decrypted) starts at its admission; what both hold maps the same; the host module compiles (`probe_return_marshalling_host`) |
 | **G4** ✓ | `RoomMap.qml`: deterministic layout, membrane, observers, edges, inspector (QtQuick Shapes) | `scripts/card-self-test.sh`: the map loads offscreen and names the room's observers |
-| **G5** ◐ | timeline scrubber + digest; lens switching with animation | offscreen: scrubbing to k shows exactly the nodes with `seq ≤ k` |
+| **G5** ✓ | timeline scrubber + digest; lens switching with animation | offscreen: scrubbing to k shows exactly the nodes with `seq ≤ k` |
 | **G6** ◐ | entry points: Room details › Map, a card's "Who sees this?" opens the Provenance lens on that intent | looked at on a display (Xvfb + xdotool recipe) in the C++ and Nim hosts |
-| **G7** | scale: messages fold into one node per sender per epoch, past ~200 entries the DAG lens windows | a 2,000-entry room scrubs at 60 fps offscreen |
+| **G7** ◐ | scale: messages fold into one node per sender per epoch, past ~200 entries the DAG lens windows | a 2,000-entry room scrubs at 60 fps offscreen |
 
 ## 8. As built (2026-10-11)
 
@@ -138,7 +138,9 @@ Each slice's accept criteria become a test before the code (working agreement).
 ## 9. What is not true yet
 
 - **Replay order is what members saw** (exo-655, `docs/design/causal-parents.md`). Each event carries `after`, the heads its publisher had seen, and the map replays by `causalOrder`; each proposal's state is shown as of the replay point. Until `after` is signed (C5) a member could reorder what the map shows, never what the room agreed to, so the timeline says "in the order members saw them". Events from clients before this change replay in content-id order among themselves.
-- **G6 in the Nim host** and on a display are not checked yet; the gallery covers the C++ host offscreen.
+- **G6 in the Nim host**: the contract check (`ui-nim` `checks.contract`) covers the new slot and property; the Nim host has not been run on a display.
+- **G7, at scale.** `room_graph_scale_test` builds a 1,850-entry room's graph: `causalOrder` takes ~9 ms, and the graph adds almost nothing beyond the folds it joins. Those folds do not scale: `reduceIntentViews` and `logProvenance` take ~5 s each there, quadratic in proposals × log (exo-53d). The UI polls `coordinate_intents` every second, so that is the room's bottleneck, not the map's. The Log lens windows to 240 entries around the replay point and the timeline buckets its ticks past 400, but no recorded fixture is that large yet, so that path is lint-checked, not seen.
+- **Fixed since:** flow and provenance read each entry's epoch from the key that opened it (exo-dde.9, `epoch_attribution_test`); the message guarantee text (exo-37e); a per-thread `eventId` memo (exact, tested) took ~20% off every fold.
 - **The sealed count.** The session drops envelopes it cannot open, so the map says "sealed to you" without a number.
 
 ## 10. Open questions
