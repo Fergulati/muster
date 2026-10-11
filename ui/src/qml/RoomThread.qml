@@ -530,49 +530,68 @@ Rectangle {
                         }
                     }
 
-                    // honest outcome line (submitted/final/failed, or an error)
-                    LogosText {
+                    // honest outcome line (submitted/final/failed, or an error); selectable, and
+                    // its transaction hash has a Copy button
+                    RowLayout {
                         visible: readyBox.outcome !== null
                         Layout.fillWidth: true
-                        wrapMode: Text.WrapAnywhere
-                        text: {
-                            var o = readyBox.outcome || ({});
-                            if (o.error !== undefined) {
-                                var err = String(o.error);
-                                // spell out the cases the module reports so the
-                                // reader sees *why*, not just a slug.
-                                if (err === "insufficient-signatures")
-                                    return (readyBox.rail === "safe"
-                                            ? qsTr("⚠ Not enough owner signatures — have %1 of %2. "
-                                                   + "The approvers must be real Safe owners.")
-                                            : qsTr("⚠ Not enough signatures — have %1 of %2."))
-                                           .arg(String(o.have)).arg(String(o.need));
-                                if (err === "rpc-unreachable")
-                                    return qsTr("⚠ Couldn't reach the chain (RPC). Is your node running? — %1")
-                                           .arg(String(o.detail || ""));
-                                if (err === "not-executable")
-                                    return qsTr("⚠ Not ready to settle — state is \"%1\".")
-                                           .arg(String(o.state || ""));
-                                if (err === "not-onchain")
-                                    return qsTr("This endorsement settles nothing on-chain — %1")
-                                           .arg(String(o.detail || ""));
-                                return qsTr("⚠ ") + err + (o.detail ? " — " + String(o.detail) : "");
+                        spacing: Theme.spacing.small
+                        SelectableText {
+                            objectName: "roomOutcomeText"
+                            Layout.fillWidth: true
+                            text: {
+                                var o = readyBox.outcome || ({});
+                                if (o.error !== undefined) {
+                                    var err = String(o.error);
+                                    // spell out the cases the module reports so the
+                                    // reader sees *why*, not just a slug.
+                                    if (err === "insufficient-signatures")
+                                        return (readyBox.rail === "safe"
+                                                ? qsTr("⚠ Not enough owner signatures — have %1 of %2. "
+                                                       + "The approvers must be real Safe owners.")
+                                                : qsTr("⚠ Not enough signatures — have %1 of %2."))
+                                               .arg(String(o.have)).arg(String(o.need));
+                                    if (err === "rpc-unreachable")
+                                        return qsTr("⚠ Couldn't reach the chain (RPC). Is your node running? — %1")
+                                               .arg(String(o.detail || ""));
+                                    if (err === "not-executable")
+                                        return qsTr("⚠ Not ready to settle — state is \"%1\".")
+                                               .arg(String(o.state || ""));
+                                    if (err === "not-onchain")
+                                        return qsTr("This endorsement settles nothing on-chain — %1")
+                                               .arg(String(o.detail || ""));
+                                    return qsTr("⚠ ") + err + (o.detail ? " — " + String(o.detail) : "");
+                                }
+                                var oc = String(o.onchain || "");
+                                var tx = o.txHash ? "  ·  " + String(o.txHash) : "";
+                                return (oc === "final" ? qsTr("✓ Settled on-chain (final)")
+                                      : oc === "failed" ? (readyBox.rail === "safe"
+                                                           ? qsTr("⚠ On-chain execution reverted — the Safe rejected it")
+                                                           : qsTr("⚠ The chain rejected it"))
+                                      : qsTr("Submitted — awaiting finality")) + tx;
                             }
-                            var oc = String(o.onchain || "");
-                            var tx = o.txHash ? "  ·  " + String(o.txHash) : "";
-                            return (oc === "final" ? qsTr("✓ Settled on-chain (final)")
-                                  : oc === "failed" ? (readyBox.rail === "safe"
-                                                       ? qsTr("⚠ On-chain execution reverted — the Safe rejected it")
-                                                       : qsTr("⚠ The chain rejected it"))
-                                  : qsTr("Submitted — awaiting finality")) + tx;
+                            color: {
+                                var o = readyBox.outcome || ({});
+                                return (o.error !== undefined || String(o.onchain || "") === "failed")
+                                       ? Theme.palette.warning : Theme.palette.textSecondary;
+                            }
                         }
-                        color: {
-                            var o = readyBox.outcome || ({});
-                            return (o.error !== undefined || String(o.onchain || "") === "failed")
-                                   ? Theme.palette.warning : Theme.palette.textSecondary;
+                        ActionButton {
+                            id: copyTx
+                            objectName: "roomCopyTx"
+                            property bool copied: false
+                            quiet: true
+                            visible: !!(readyBox.outcome && readyBox.outcome.txHash)
+                            Layout.alignment: Qt.AlignTop
+                            text: copied ? qsTr("✓ Copied") : qsTr("Copy hash")
+                            onClicked: {
+                                txClip.text = String(readyBox.outcome.txHash);
+                                txClip.selectAll(); txClip.copy();
+                                copied = true; copiedTimer.restart();
+                            }
+                            TextEdit { id: txClip; visible: false; width: 0; height: 0 }
+                            Timer { id: copiedTimer; interval: 1500; onTriggered: copyTx.copied = false }
                         }
-                        font.family: MusterStyle.mono
-                        font.pixelSize: MusterStyle.caption
                     }
 
                     // honest invoke-execute outcome (executed/detail, or an error).

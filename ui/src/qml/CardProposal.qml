@@ -1033,10 +1033,9 @@ ColumnLayout {
                         font.pixelSize: MusterStyle.caption
                     }
 
-                    LogosText {
+                    SelectableText {
                         objectName: "verifyVal_" + modelData.id
                         Layout.fillWidth: true
-                        wrapMode: Text.WrapAnywhere
                         text: modelData.v
                         color: Theme.palette.textSecondary
                         font.family: MusterStyle.mono

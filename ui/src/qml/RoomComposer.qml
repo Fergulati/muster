@@ -1205,6 +1205,9 @@ ColumnLayout {
             RoomActionPicker {
                 id: actionPicker
                 room: composerRoot.room
+                // its own parent is the 40 px "+": size it by the composer (seen 2026-10-11,
+                // a picker as narrow as the button, its tiles spilling out of it)
+                width: Math.min(560, composerRoot.width)
                 y: -height - Theme.spacing.small
             }
         }
