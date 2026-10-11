@@ -2310,3 +2310,5 @@
 {"type":"close","timestamp":"2026-10-11T11:41:26.575917732Z","issue_id":"exo-720.10","payload":{}}
 {"type":"close","timestamp":"2026-10-11T12:06:59.458783225Z","issue_id":"exo-720.11","payload":{}}
 {"type":"close","timestamp":"2026-10-11T12:06:59.458783225Z","issue_id":"exo-720.12","payload":{}}
+{"type":"comment","timestamp":"2026-10-11T12:08:17.271986668Z","issue_id":"exo-720.4","payload":{"body":"Accepted by the operator ('go ahead', 2026-10-10); U1–U8 were built against it."}}
+{"type":"close","timestamp":"2026-10-11T12:08:17.524996881Z","issue_id":"exo-720.4","payload":{}}
