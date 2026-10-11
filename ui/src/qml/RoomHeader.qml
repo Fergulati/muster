@@ -12,7 +12,7 @@ import Logos.Icons
 //   who is in it — their faces and a count, which open Room details › People
 //   whether its connections are up — a dot, its popover the full list (invariant 8)
 //   Invite — the room code, to copy
-//   Room details — the drawer (RoomDetails), and ⋯ — Rename, Room history, Leave
+//   Room details — the drawer (RoomDetails), and ⋯ — Rename, Room history, Room map, Leave
 // Until a room is joined, it is the join form. Every objectName the old header carried
 // rides on the control that does the same job now (roomRenameButton and leaveRoomButton
 // are menu items; roomTopicText and copyRoomTopic live in Invite).
@@ -271,6 +271,7 @@ ColumnLayout {
                 LogosMenuItem { objectName: "roomRenameButton"; text: qsTr("Rename"); onTriggered: header.startRename() }
                 LogosMenuItem { text: qsTr("Room details"); onTriggered: header.room.openDetails("people") }
                 LogosMenuItem { text: qsTr("Room history"); onTriggered: header.room.openDetails("history") }
+                LogosMenuItem { objectName: "roomMapButton"; text: qsTr("Room map"); onTriggered: header.room.openMap("room", "") }
                 LogosMenuSeparator {}
                 LogosMenuItem { objectName: "leaveRoomButton"; text: qsTr("Leave room…"); onTriggered: leaveConfirm.open() }
             }

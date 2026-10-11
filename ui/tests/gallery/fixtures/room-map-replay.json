@@ -1,0 +1,75 @@
+{
+  "about": "Replaying the room map (exo-dde G5): at the first entry only what it shows is drawn.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "set": [
+        "roomMap",
+        "following",
+        false
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "k",
+        0
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMap",
+        "heldCount",
+        1
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapNow",
+        "text",
+        "~1 of 12"
+      ]
+    },
+    {
+      "shot": "first"
+    },
+    {
+      "set": [
+        "roomMap",
+        "k",
+        6
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMap",
+        "heldCount",
+        7
+      ]
+    },
+    {
+      "shot": "middle"
+    }
+  ]
+}

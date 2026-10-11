@@ -1,0 +1,43 @@
+{
+  "about": "The room map's Me lens: this device's member, its keys, what it did, and which of it left.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "expect": {
+        "slot": "loadGraph"
+      }
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "me"
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMapNode_o:store-node",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

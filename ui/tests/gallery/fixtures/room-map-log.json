@@ -1,0 +1,36 @@
+{
+  "about": "The room map's Log lens: every entry in canonical order, linked by hash, on epoch bands.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "expect": {
+        "slot": "loadGraph"
+      }
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "log"
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

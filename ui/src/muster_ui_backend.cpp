@@ -946,6 +946,13 @@ void MusterUiBackend::loadFlow()
     setFlowJson(modules().muster_module.coordinate_flow());
 }
 
+void MusterUiBackend::loadGraph(const QString &roomTopic)
+{
+    // coordinate_graph → the room map: the room's nodes and edges, folded from the log
+    // this instance holds (exo-dde). A pure fold, no RPC; the view replays it by seq.
+    setGraphJson(modules().muster_module.coordinate_graph(roomTopic));
+}
+
 void MusterUiBackend::setPolicy(const QString &kind)
 {
     // coordinate_set_policy → choose the room's driver (safe | threshold). The same

@@ -1,0 +1,50 @@
+{
+  "about": "The room map (exo-dde): a finished split, the room as a graph; the store node, the RPC provider and the chain observer named outside it.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "expect": {
+        "slot": "loadGraph"
+      }
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMapNode_o:store-node",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapNode_o:chain-observer",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapNode_o:rpc-provider",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

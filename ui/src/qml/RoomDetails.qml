@@ -189,6 +189,16 @@ Rectangle {
                             }
                         }
                     }
+                    LogosText {
+                        objectName: "flowOpenMap"
+                        text: details.room.detailsIntent.length > 0 ? qsTr("See where this proposal's information went, on the room map")
+                                                                    : qsTr("See it on the room map")
+                        color: mapHover.hovered ? Theme.palette.text : Theme.palette.textSecondary
+                        font.pixelSize: MusterStyle.caption
+                        font.underline: true
+                        HoverHandler { id: mapHover; cursorShape: Qt.PointingHandCursor }
+                        TapHandler { onTapped: details.room.openMap("leaks", details.room.detailsIntent) }
+                    }
                     FlowView {
                         id: flowView
                         objectName: "flowView"

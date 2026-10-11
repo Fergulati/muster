@@ -43,4 +43,10 @@ Item {
     }
 
     Timer { interval: 250; running: true; repeat: true; onTriggered: recorder.snapshot() }
+    // The room map's graph is fetched only while the map is open, so ask for it here too:
+    // every snapshot of a joined room then carries what coordinate_graph returned (exo-dde).
+    Timer {
+        interval: 2000; running: true; repeat: true
+        onTriggered: if (recorder.backend && String(recorder.backend.roomTopic || "").length > 0) recorder.backend.loadGraph("")
+    }
 }

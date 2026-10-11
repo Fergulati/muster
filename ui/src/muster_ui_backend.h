@@ -104,6 +104,7 @@ public:
     void frostCeremonyJoin(const QString &ceremonyId) override;
     void loadFrostCeremonies() override;
     void loadFlow() override;
+    void loadGraph(const QString &roomTopic) override;
     void setPolicy(const QString &kind) override;
     void loadPolicy() override;
 
