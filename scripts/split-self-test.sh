@@ -58,7 +58,7 @@ BEFORE=$(cast balance "$PAYEE" --rpc-url "$RPC")
 launch() {  # name, extra env… — each runner in its own session, so cleanup can find it
   local name="$1"; shift
   env "$@" MUSTER_RPC="$RPC" MUSTER_LP_DEBUG=1 MUSTER_DELIVERY_CONFIG="$CFG" \
-      MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID="split$name" QT_QPA_PLATFORM=offscreen \
+      MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID="split$name" QT_QPA_PLATFORM="${MUSTER_QPA:-offscreen}" \
       setsid "$RUNNER" --user-dir "$D/$name" >"$D/$name.log" 2>&1 &
   echo $! >"$D/$name.pid"
   disown $!

@@ -1,0 +1,22 @@
+{
+  "about": "The composer on Payment, Bitcoin P2WSH multisig.",
+  "snapshot": "data/split-alice-final.json",
+  "props": {
+    "policyJson": {
+      "policy": "btc-p2wsh",
+      "kind": "btc-p2wsh",
+      "account": ""
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

@@ -1,0 +1,204 @@
+import QtQuick
+import QtQuick.Layouts
+
+import Logos.Theme
+import Logos.Controls
+import Logos.Icons
+
+// Room details, on demand (exo-720.8, docs/design/ui-modernization.md §4 U4): the room's
+// meta-state, which used to be a 320 px column always on screen, now a drawer closed by
+// default. Four tabs, the same components and the same folds of the sealed log as before:
+//   People    who is in the room, who asks to join, the room's security level (ScopePanel)
+//   Accounts  the accounts members disclosed into the room, and the forms to add one
+//   History   how the room reached its state (ActivityFeed)
+//   Privacy   who can see what (FlowView); the store node is always listed (FS-9)
+// Its connections moved to the header's dot (RoomHeader). The Room decides where the drawer
+// sits — beside the thread when there is room, over it when not — and what opens it: the
+// header, the scope line, a refusal that names an account (exo-dcc.30), a join request.
+Rectangle {
+    id: details
+    required property var room   // the Room this piece belongs to (Room.qml's roomItem)
+
+    readonly property var tabs: ["people", "accounts", "history", "privacy"]
+    color: Theme.palette.backgroundTertiary
+
+    Rectangle {      // the edge against the thread
+        anchors.left: parent.left
+        width: 1; height: parent.height
+        color: Theme.palette.borderSubtle
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        anchors.leftMargin: 1
+        spacing: 0
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 56
+            Layout.leftMargin: Theme.spacing.large
+            Layout.rightMargin: Theme.spacing.small
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("Room details")
+                color: Theme.palette.text
+                font.pixelSize: MusterStyle.subtitle
+                font.weight: Theme.typography.weightBold
+            }
+            IconAction {
+                objectName: "roomDetailsClose"
+                label: qsTr("Close room details")
+                icon: LogosIcons.close
+                onClicked: details.room.closeDetails()
+            }
+        }
+        LogosTabBar {
+            id: tabBar
+            objectName: "roomDetailsTabs"
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.spacing.small
+            currentIndex: Math.max(0, details.tabs.indexOf(details.room.detailsTab))
+            onCurrentIndexChanged: details.room.detailsTab = details.tabs[currentIndex]
+            LogosTabButton { objectName: "roomDetailsPeople"; text: qsTr("People") }
+            LogosTabButton { objectName: "roomDetailsAccounts"; text: qsTr("Accounts") }
+            LogosTabButton { objectName: "roomDetailsHistory"; text: qsTr("History") }
+            LogosTabButton { objectName: "roomDetailsPrivacy"; text: qsTr("Privacy") }
+        }
+        Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.palette.borderSubtle }
+
+        StackLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.margins: Theme.spacing.large
+            currentIndex: tabBar.currentIndex
+
+            // ── People ────────────────────────────────────────────────────
+            ScopePanel {
+                members: details.room.members
+                pending: details.room.pending
+                topic: details.room.topic
+                joinStatus: details.room.backend ? String(details.room.backend.joinStatus || "") : ""
+                founder: details.room.founded
+                securityLevels: details.room.securityLevels
+                onRequestJoin: if (details.room.backend) details.room.backend.requestJoin()
+                onAdmit: function (identityHex) { details.room.admitMember(identityHex); }
+            }
+
+            // ── Accounts ──────────────────────────────────────────────────
+            // The accounts block is taller than a window (Safe, Bitcoin, FROST and LEZ
+            // multisig sections): it scrolls. When an add-an-account form opens it scrolls
+            // to show it, since the forms sit at the end (exo-dcc.30).
+            Flickable {
+                id: accountsFlick
+                clip: true
+                contentWidth: width
+                contentHeight: accounts.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                function showEnd() { contentY = Math.max(0, contentHeight - height); }
+                Timer { id: accountsFollow; interval: 60; onTriggered: accountsFlick.showEnd() }
+
+                // The accounts members have disclosed into this room (exo-a50.1.3).
+                RoomAccounts {
+                    id: accounts
+                    width: accountsFlick.width
+                    accounts: details.room.roomAccounts
+                    // The composer was refused for want of an account this kind can act
+                    // from: open the form that discloses one (exo-dcc.30).
+                    wantedFamilies: {
+                        var e = details.room.policyError || {};
+                        if (e.error !== "no-account" || !details.room.kindNeedsAccount(details.room.policyKind)) return [];
+                        var info = details.room.kindInfo(details.room.policyKind);
+                        return (info && info.accountFamilies) ? info.accountFamilies : [];
+                    }
+                    discloseResult: details.room.discloseResult
+                    suggestionAvailable: {
+                        try { return JSON.parse(details.room.backend ? details.room.backend.accountJson : "{}").available !== false; }
+                        catch (e) { return true; }
+                    }
+                    defaultChainId: {
+                        try { return String(JSON.parse(details.room.backend ? details.room.backend.accountJson : "{}").defaultChainId || "31337"); }
+                        catch (e) { return "31337"; }
+                    }
+                    lezMember: details.room.lezMember
+                    lezCreate: details.room.lezCreate
+                    frostCeremonies: details.room.frostCeremonies
+                    frostCeremony: details.room.frostCeremony
+                    onFrostOpenRequested: function (cid, network, t, n) {
+                        if (details.room.backend) details.room.backend.frostCeremonyOpen(cid, network, t, n);
+                    }
+                    onFrostJoinRequested: function (cid) { if (details.room.backend) details.room.backend.frostCeremonyJoin(cid); }
+                    onDiscloseRequested: function (accountJson) { if (details.room.backend) details.room.backend.discloseAccount(accountJson); }
+                    onLezMemberRequested: if (details.room.backend) details.room.backend.lezMemberAccount("")
+                    onLezCreateRequested: function (threshold, members) {
+                        if (details.room.backend) details.room.backend.lezCreateMultisig(threshold, members);
+                    }
+                    onDiscloseSuggested: if (details.room.backend) details.room.backend.discloseSuggestedAccount()
+                    onFormShown: accountsFollow.restart()
+                }
+            }
+
+            // ── History: paramount to the education mission — the decisions that led
+            // to the current state, and each update as it lands ──────────────────
+            ActivityFeed {
+                entries: details.room.activity
+            }
+
+            // ── Privacy: who can see what, folded from the same log (exo-002.5) ──
+            Flickable {
+                clip: true
+                contentWidth: width
+                contentHeight: privacyCol.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                ColumnLayout {
+                    id: privacyCol
+                    width: parent.width
+                    spacing: Theme.spacing.medium
+                    // one proposal's flow, from its card's "Who sees this?" — say so, and offer
+                    // the whole room's
+                    Rectangle {
+                        objectName: "flowFilterChip"
+                        visible: details.room.detailsIntent.length > 0
+                        Layout.fillWidth: true
+                        implicitHeight: chipRow.implicitHeight + 2 * Theme.spacing.small
+                        radius: Theme.spacing.radiusLarge
+                        color: MusterStyle.needsSoft
+                        RowLayout {
+                            id: chipRow
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacing.medium
+                            anchors.rightMargin: Theme.spacing.tiny
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: {
+                                    var it = details.room.intentById(details.room.detailsIntent);
+                                    var what = it && it.summary ? String(it.summary.text || "") : "";
+                                    return what.length > 0 ? qsTr("Showing one proposal: %1").arg(what)
+                                                           : qsTr("Showing one proposal");
+                                }
+                                color: MusterStyle.needsText
+                                font.pixelSize: MusterStyle.caption
+                                font.weight: Theme.typography.weightBold
+                            }
+                            IconAction {
+                                objectName: "flowFilterClear"
+                                size: 24
+                                label: qsTr("Show the whole room")
+                                icon: LogosIcons.close
+                                onClicked: details.room.detailsIntent = ""
+                            }
+                        }
+                    }
+                    FlowView {
+                        id: flowView
+                        objectName: "flowView"
+                        Layout.fillWidth: true
+                        flow: details.room.flow
+                        intentFilter: details.room.detailsIntent
+                        collapsed: false
+                    }
+                }
+            }
+        }
+    }
+}

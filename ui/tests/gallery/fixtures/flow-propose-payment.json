@@ -1,0 +1,57 @@
+{
+  "about": "Payment from the picker, the harness's path: + \u2192 Payment \u2192 Safe \u2192 recipient, amount \u2192 Propose.",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "click": "roomKindPayment"
+    },
+    {
+      "click": "roomPolicySafe"
+    },
+    {
+      "set": [
+        "roomProposeTo",
+        "text",
+        "0x1111111111111111111111111111111111111111"
+      ]
+    },
+    {
+      "set": [
+        "roomProposeValue",
+        "text",
+        "1000"
+      ]
+    },
+    {
+      "click": "roomProposeSubmit"
+    },
+    {
+      "expect": {
+        "slot": "setPolicy",
+        "args": [
+          "safe"
+        ]
+      }
+    },
+    {
+      "expect": {
+        "slot": "proposeInRoom",
+        "args": [
+          "{\"to\":\"0x1111111111111111111111111111111111111111\",\"value\":1000,\"nonce\":0}"
+        ]
+      }
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

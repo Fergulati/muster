@@ -1,0 +1,18 @@
+{
+  "about": "The composer on Statement.",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "click": "roomKindStatement"
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

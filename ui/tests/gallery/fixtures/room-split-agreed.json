@@ -1,0 +1,5 @@
+{
+  "about": "Every party agreed; the debtor's share is to pay (Bob's instance).",
+  "snapshot": "data/split-bob-agreed.json",
+  "steps": [ {"view": "room"}, {"shot": ""} ]
+}

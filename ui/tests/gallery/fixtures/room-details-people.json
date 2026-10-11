@@ -1,0 +1,30 @@
+{
+  "about": "Room details \u203a People: beside the thread when there is room, over it when not (exo-720.8).",
+  "snapshot": "data/split-bob-join-request.json",
+  "sizes": [
+    "1440x900",
+    "1024x700"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "people"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

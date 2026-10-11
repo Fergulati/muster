@@ -1,0 +1,6 @@
+{
+  "about": "Who sees this? on a settled split: Privacy shows that split's flow alone (exo-720.10).",
+  "snapshot": "data/split-bob-final.json",
+  "sizes": ["1440x900"],
+  "steps": [ {"view": "room"}, {"click": "cardWhoSees"}, {"expectProp": ["flowView", "intentFilter", "0xa566cea2c7c46cff"]}, {"shot": ""} ]
+}

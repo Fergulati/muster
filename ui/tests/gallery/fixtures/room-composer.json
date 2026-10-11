@@ -1,0 +1,5 @@
+{
+  "about": "The room with the proposal composer open (the + beside the message row).",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [ {"view": "room"}, {"click": "roomProposeButton"}, {"shot": ""} ]
+}

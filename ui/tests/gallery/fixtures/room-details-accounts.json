@@ -1,0 +1,29 @@
+{
+  "about": "Room details \u203a Accounts (exo-720.8).",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "accounts"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

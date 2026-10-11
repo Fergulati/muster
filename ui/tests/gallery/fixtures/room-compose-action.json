@@ -1,0 +1,18 @@
+{
+  "about": "The composer on Action (a module call).",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "click": "roomKindAction"
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

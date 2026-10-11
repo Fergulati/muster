@@ -1,0 +1,5 @@
+{
+  "about": "The split settled: Bob paid and Alice's own read confirmed it (Bob's instance).",
+  "snapshot": "data/split-bob-final.json",
+  "steps": [ {"view": "room"}, {"shot": ""} ]
+}

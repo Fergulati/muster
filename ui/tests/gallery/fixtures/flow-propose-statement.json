@@ -1,0 +1,39 @@
+{
+  "about": "A statement proposed from the picker reaches the module as proposeInRoom.",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "click": "roomKindStatement"
+    },
+    {
+      "set": [
+        "roomProposeText",
+        "text",
+        "We meet on Friday"
+      ]
+    },
+    {
+      "click": "roomProposeSubmit"
+    },
+    {
+      "expect": {
+        "slot": "proposeInRoom",
+        "args": [
+          "~We meet on Friday"
+        ]
+      }
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

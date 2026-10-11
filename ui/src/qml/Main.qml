@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtCore as Prefs   // qualified: Settings here is also our own Settings.qml surface
 
 import Logos.Theme
 import Logos.Controls
@@ -36,6 +37,9 @@ Item {
     id: root
 
     readonly property var backend: logos.module("muster_ui")
+    // Main passed down to the surfaces that read its state (AccountPage), as `root`:
+    // `root: root` there would bind the surface's own property to itself.
+    readonly property Item mainItem: root
     property bool ready: false
 
     // Whether the account card's owner list is expanded (Account view, "dive in").
@@ -275,7 +279,8 @@ Item {
     Timer {
         interval: 2000
         repeat: true
-        running: root.view === "home" && root.backend !== null
+        // the sidebar shows every room and what waits on you, on every view (exo-720.6)
+        running: root.backend !== null
         onTriggered: root.backend.loadConversations()
     }
 
@@ -295,97 +300,117 @@ Item {
         color: Theme.palette.background
     }
 
-    // ── top nav bar ──────────────────────────────────────────────────────
-    // Occupies its own strip at the top with a solid ground, so it never overlaps
-    // the surface below it. Every surface anchors under `navBar.bottom`.
+    // ── the sidebar (Sidebar.qml), and in a narrow window the strip that opens it ──
+    // It replaces the top bar of seven buttons (exo-720.6). Where it sits is the person's
+    // choice, kept on this device only: collapsed to a rail or full. Until they choose, a
+    // window under 1180 px (Basecamp's, beside its own sidebar) starts with the rail
+    // (decision §6.1); under 900 px it is a drawer, opened from the strip.
+    Prefs.Settings {
+        id: uiPrefs
+        category: "MusterUi"
+        property int sidebarCollapsed: -1      // -1: not chosen yet · 0: full · 1: rail
+    }
+    property bool sidebarOpen: false           // the drawer, in a narrow window
+    readonly property string sideMode: root.width < 900 ? "drawer"
+        : uiPrefs.sidebarCollapsed === 1 ? "rail"
+        : uiPrefs.sidebarCollapsed === 0 ? "full"
+        : root.width < 1180 ? "rail" : "full"
+
     Rectangle {
-        id: navBar
+        id: drawerStrip
+        visible: root.sideMode === "drawer"
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: navRow.implicitHeight + 2 * Theme.spacing.small
-        color: Theme.palette.background
-        z: 10
-
-        Rectangle {
-            anchors.bottom: parent.bottom
-            width: parent.width
-            height: 1
-            color: Theme.palette.borderSubtle
-        }
-
-        // A Flow (not a right-anchored RowLayout): the buttons wrap to a second row
-        // when the window is too narrow to hold them, instead of the leftmost ones
-        // running off the left edge. navBar's height tracks the wrapped height, so the
-        // surfaces below always start under the real bottom of the nav.
-        Flow {
-            id: navRow
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.topMargin: Theme.spacing.small
-            anchors.leftMargin: Theme.spacing.medium
+        height: visible ? 48 : 0
+        color: Theme.palette.backgroundTertiary
+        z: 5
+        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.palette.borderSubtle }
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Theme.spacing.small
             anchors.rightMargin: Theme.spacing.medium
             spacing: Theme.spacing.small
-
-            // The current surface reads as filled (Primary); the rest stay neutral
-            // (Secondary), so "where am I" is answered without a second glance.
-            // Compose is a sub-flow of Home, so Home stays lit through it.
-            LogosButton {
-                objectName: "homeToggle"; text: qsTr("Home")
-                variant: (root.view === "home" || root.view === "compose")
-                         ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "home";
-                    if (root.backend) root.backend.loadConversations();   // refresh the room list
-                }
+            IconAction {
+                objectName: "sidebarOpen"
+                label: qsTr("Open the sidebar")
+                icon: MusterStyle.icon("menu")
+                onClicked: root.sidebarOpen = true
             }
-            LogosButton {
-                objectName: "roomToggle"; text: qsTr("Room")
-                variant: root.view === "room" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: root.view = "room"
-            }
-            LogosButton {
-                objectName: "dashboardToggle"; text: qsTr("Account")
-                variant: root.view === "dashboard" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "dashboard";
-                    // Re-read the account + balances on entry, so the card recovers even
-                    // if the one-shot load at startup ran before the module was ready.
-                    if (root.backend) { root.backend.loadAccount(); root.backend.loadBalances(); }
-                }
-            }
-            LogosButton {
-                objectName: "walkthroughToggle"; text: qsTr("Walkthrough")
-                variant: root.view === "walkthrough" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: root.view = (root.view === "walkthrough" ? "home" : "walkthrough")
-            }
-            LogosButton {
-                objectName: "settingsToggle"; text: qsTr("Settings")
-                variant: root.view === "settings" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "settings";
-                    if (root.backend) root.backend.loadSettings();
-                }
-            }
-            LogosButton {
-                objectName: "contactsToggle"; text: qsTr("Contacts")
-                variant: root.view === "contacts" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "contacts";
-                    if (root.backend) root.backend.loadContacts();
-                }
-            }
-
-            LogosButton {
-                objectName: "lezToggle"; text: qsTr("Send λ")
-                variant: root.view === "lez" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
-                onClicked: {
-                    root.view = "lez";
-                    if (root.backend) root.backend.loadWalletAccounts();
-                }
+            LogosText {
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+                text: root.view === "room" ? (root.titleOf(root.roomTopic) || (root.roomTopic.length > 0 ? root.shortRoom(root.roomTopic) : qsTr("Join a room")))
+                    : root.view === "home" || root.view === "compose" ? qsTr("Needs you")
+                    : root.view === "dashboard" ? qsTr("Wallet")
+                    : root.view === "lez" ? qsTr("Wallet")
+                    : root.view === "contacts" ? qsTr("Contacts")
+                    : root.view === "walkthrough" ? qsTr("Learn")
+                    : root.view === "settings" ? qsTr("Settings") : ""
+                color: Theme.palette.text
+                font.pixelSize: MusterStyle.subtitle
+                font.weight: Theme.typography.weightBold
             }
         }
+    }
+
+    // Every surface fills this, beside the sidebar (or under the strip).
+    Item {
+        id: contentArea
+        anchors.top: drawerStrip.visible ? drawerStrip.bottom : parent.top
+        anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+    }
+
+    // the drawer's scrim: a tap outside closes it
+    Rectangle {
+        visible: root.sideMode === "drawer" && root.sidebarOpen
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.45)
+        z: 19
+        TapHandler { onTapped: root.sidebarOpen = false }
+    }
+
+    // ── keyboard (exo-720.12, U-10) ──────────────────────────────────────
+    // Ctrl+K: jump to a room by name, from anywhere.
+    RoomSwitcher { id: roomSwitcher; app: mainItem }
+    Shortcut {
+        sequences: ["Ctrl+K"]
+        context: Qt.ApplicationShortcut
+        onActivated: roomSwitcher.opened ? roomSwitcher.close() : roomSwitcher.open()
+    }
+    // A Shortcut fires only while Qt counts the window active, which a host embedding this
+    // view may not report; the key itself still reaches the focused item and bubbles up
+    // here, so take it then too (whichever comes first consumes it).
+    // the default receiver of keys: with nothing else focused (a click on empty space
+    // focuses nothing), Main holds focus, so its handler sees Ctrl+K
+    focus: true
+    Keys.onPressed: function (event) {
+        if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
+            roomSwitcher.opened ? roomSwitcher.close() : roomSwitcher.open();
+            event.accepted = true;
+        } else if (event.key === Qt.Key_Escape && root.view === "room"
+                   && (roomSurface.detailsShown || roomSurface.composing)) {
+            // Esc in a room, when Main holds focus: the drawer, else the proposal panel
+            roomSurface.detailsShown ? roomSurface.closeDetails() : (roomSurface.composing = false);
+            event.accepted = true;
+        }
+    }
+
+    Sidebar {
+        id: sidebar
+        objectName: "sidebar"
+        app: mainItem
+        mode: root.sideMode
+        z: root.sideMode === "drawer" ? 20 : 10
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        x: root.sideMode !== "drawer" || root.sidebarOpen ? 0 : -width
+        width: implicitWidth
+        onCollapseToggled: uiPrefs.sidebarCollapsed = (root.sideMode === "rail" ? 0 : 1)
+        onCloseRequested: root.sidebarOpen = false
+        onJumpRequested: roomSwitcher.open()
     }
 
     // ── the product surfaces (one shown at a time), below the nav bar ─────
@@ -393,8 +418,8 @@ Item {
     // goes to the composer.
     Home {
         objectName: "homeSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "home"
@@ -435,7 +460,8 @@ Item {
     // store, ~1s) shows up without a manual refresh. Cheap: one module read per tick.
     Timer {
         interval: 2000
-        running: root.view === "home" && root.backend !== null
+        // the sidebar counts invitations on every view (exo-720.6)
+        running: root.backend !== null
         repeat: true
         onTriggered: if (root.backend) root.backend.loadInvites()
     }
@@ -443,8 +469,8 @@ Item {
     // Compose: create a room from an action (what → who). "who" can be a tap on an
     // address-book name, fed in here from the host's contactsJson.
     Composer {
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "compose"
@@ -490,8 +516,8 @@ Item {
         moneroWallet: root.moneroWallet
         onMoneroWalletRequested: function (wallet) { root.openMoneroWallet(wallet); }
         objectName: "roomSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "room"
@@ -500,8 +526,8 @@ Item {
 
     // The teaching surface (ADR-012 claims registry).
     Walkthrough {
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "walkthrough"
@@ -510,8 +536,8 @@ Item {
     // The config-shell start: identity + user-configurable infrastructure (inv 8).
     Settings {
         objectName: "settingsSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "settings"
@@ -529,660 +555,90 @@ Item {
     // roster and the join prompt).
     AddressBook {
         objectName: "addressBookSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "contacts"
         backend: root.backend
     }
 
+    // ── the Wallet (exo-720.11, decision §6.3): the Account surface and Send on LEZ, as two
+    // tabs of one page. The local test Safe on the Account surface already shows only where
+    // the local dev chain (31337) answers — a fresh install never sees it.
+    Rectangle {
+        id: walletHeader
+        objectName: "walletHeader"
+        visible: root.view === "dashboard" || root.view === "lez"
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
+        anchors.right: parent.right
+        height: visible ? walletHeaderCol.implicitHeight : 0
+        color: Theme.palette.background
+        ColumnLayout {
+            id: walletHeaderCol
+            anchors.left: parent.left
+            anchors.right: parent.right
+            spacing: 0
+            ColumnLayout {
+                Layout.leftMargin: Theme.spacing.xxlarge
+                Layout.topMargin: Theme.spacing.xlarge
+                spacing: 2
+                LogosText {
+                    text: qsTr("Wallet")
+                    color: Theme.palette.text
+                    font.pixelSize: MusterStyle.title
+                    font.weight: Theme.typography.weightBold
+                }
+                LogosText {
+                    text: qsTr("What you hold on the chains you set up, each balance saying whether your own client checked it.")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.body
+                }
+            }
+            LogosTabBar {
+                Layout.leftMargin: Theme.spacing.xxlarge - Theme.spacing.small
+                Layout.topMargin: Theme.spacing.medium
+                currentIndex: root.view === "lez" ? 1 : 0
+                LogosTabButton {
+                    objectName: "walletBalancesTab"
+                    text: qsTr("Balances")
+                    onClicked: {
+                        root.view = "dashboard";
+                        if (root.backend) { root.backend.loadAccount(); root.backend.loadBalances(); }
+                    }
+                }
+                LogosTabButton {
+                    objectName: "lezToggle"
+                    text: qsTr("Send on LEZ")
+                    onClicked: {
+                        root.view = "lez";
+                        if (root.backend) root.backend.loadWalletAccounts();
+                    }
+                }
+            }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.palette.borderSubtle }
+        }
+    }
+
     // Send assets via Logos (the LEZ) — Mode A: request → share → send.
     LezSend {
         objectName: "lezSendSurface"
-        anchors.top: navBar.bottom
-        anchors.left: parent.left
+        anchors.top: walletHeader.bottom
+        anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         visible: root.view === "lez"
         backend: root.backend
     }
 
-    ColumnLayout {
-        id: page
-        visible: root.view === "dashboard"
-        anchors.top: navBar.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: Theme.spacing.large
-        anchors.bottomMargin: Theme.spacing.xlarge
-        spacing: Theme.spacing.large
-        width: Math.min(parent.width - 2 * Theme.spacing.xlarge, 520)
-
-        // ── header ───────────────────────────────────────────────────────────
-        LogosText {
-            text: qsTr("Muster")
-            color: Theme.palette.text
-            font.family: Theme.typography.publicSans
-            font.pixelSize: Theme.typography.subtitleText
-            font.weight: Theme.typography.weightBold
-            Layout.alignment: Qt.AlignHCenter
-        }
-
-        LogosText {
-            text: (root.account && root.account.available === false)
-                  ? qsTr("Your balances on the chains you have set up. To coordinate with people, open a Room.")
-                  : qsTr("The Safe you coordinate against — inspect it, act on it directly, "
-                         + "and settle on-chain. To coordinate with people, open a Room.")
-            color: Theme.palette.textTertiary
-            font.pixelSize: Theme.typography.secondaryText
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignHCenter
-            Layout.fillWidth: true
-        }
-
-        // ── the local test Safe (a suggestion) ─────────────────────────────────
-        // Shown from describe(): the anvil fixture a member MAY disclose into a room.
-        // It is not a room's account — accounts live in the room, disclosed by members
-        // (exo-a50.1.3). A null account renders as "not loaded", never fabricated. Hidden
-        // where no chain 31337 is read (a fresh Basecamp install, exo-d4d.6).
-        Rectangle {
-            visible: !root.account || root.account.available !== false
-            Layout.fillWidth: true
-            implicitHeight: acctCol.implicitHeight + 2 * Theme.spacing.medium
-            radius: Theme.spacing.radiusMedium
-            color: Theme.palette.surface
-            border.width: 1
-            border.color: Theme.palette.borderSubtle
-
-            ColumnLayout {
-                id: acctCol
-                anchors.fill: parent
-                anchors.margins: Theme.spacing.medium
-                spacing: Theme.spacing.tiny
-
-                LogosText {
-                    text: qsTr("LOCAL TEST SAFE · disclose it into a room to use it")
-                    color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
-                    font.weight: Theme.typography.weightMedium
-                }
-
-                LogosText {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WrapAnywhere
-                    text: root.account
-                        ? qsTr("Safe %1").arg(String(root.account.safe))
-                        : qsTr("account not loaded")
-                    color: Theme.palette.text
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.secondaryText
-                }
-
-                LogosText {
-                    visible: !!root.account
-                    text: root.account
-                        ? qsTr("%1 of %2 owners · chain %3 · %4")
-                            .arg(Number(root.account.threshold))
-                            .arg(root.account.owners ? root.account.owners.length : 0)
-                            .arg(Number(root.account.chainId))
-                            .arg(String(root.account.environment))
-                        : ""
-                    color: Theme.palette.textSecondary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
-                }
-
-                // ── owners (dive in) ─────────────────────────────────────────
-                // The approval policy is who can sign, so the owner addresses are
-                // worth seeing — collapsed to a count by default, the full list a
-                // tap away. Any 2 of these signing meets the threshold above.
-                Item {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.spacing.tiny
-                    implicitHeight: ownersToggle.implicitHeight
-                    visible: !!root.account && !!root.account.owners
-                             && root.account.owners.length > 0
-
-                    LogosText {
-                        id: ownersToggle
-                        text: root.ownersOpen
-                            ? qsTr("Owners — tap to hide  −")
-                            : qsTr("Owners — tap to see all %1  +")
-                                .arg(root.account && root.account.owners ? root.account.owners.length : 0)
-                        color: Theme.palette.textSecondary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.ownersOpen = !root.ownersOpen
-                    }
-                }
-
-                Repeater {
-                    model: (root.ownersOpen && root.account && root.account.owners)
-                           ? root.account.owners : []
-
-                    delegate: LogosText {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        Layout.leftMargin: Theme.spacing.small
-                        wrapMode: Text.WrapAnywhere
-                        text: "· " + String(modelData)
-                        color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
-                    }
-                }
-            }
-        }
-
-        // ── propose composer ──────────────────────────────────────────────────
-        // The direct path drives the local test Safe; hidden where it cannot work (exo-d4d.6).
-        Rectangle {
-            visible: !root.account || root.account.available !== false
-            Layout.fillWidth: true
-            implicitHeight: composeCol.implicitHeight + 2 * Theme.spacing.medium
-            radius: Theme.spacing.radiusMedium
-            color: Theme.palette.surface
-            border.width: 1
-            border.color: Theme.palette.borderDefault
-
-            ColumnLayout {
-                id: composeCol
-                anchors.fill: parent
-                anchors.margins: Theme.spacing.medium
-                spacing: Theme.spacing.small
-
-                LogosText {
-                    text: qsTr("Propose a transfer — directly")
-                    color: Theme.palette.text
-                    font.pixelSize: Theme.typography.primaryText
-                    font.weight: Theme.typography.weightMedium
-                }
-
-                LogosText {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: qsTr("The direct path: you drive the whole lifecycle here — propose, "
-                             + "collect signatures, settle on-chain. To decide it with people in "
-                             + "a conversation instead, open a Room.")
-                    color: Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.badgeText
-                }
-
-                LogosTextField {
-                    id: toField
-                    objectName: "proposeTo"
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("to (0x…)")
-                    font.family: Theme.typography.mono
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: Theme.spacing.small
-
-                    LogosTextField {
-                        id: valueField
-                        objectName: "proposeValue"
-                        Layout.fillWidth: true
-                        placeholderText: qsTr("value")
-                        font.family: Theme.typography.mono
-                        validator: IntValidator { bottom: 0 }
-                    }
-
-                    LogosTextField {
-                        id: nonceField
-                        objectName: "proposeNonce"
-                        Layout.preferredWidth: 120
-                        placeholderText: qsTr("nonce")
-                        font.family: Theme.typography.mono
-                        validator: IntValidator { bottom: 0 }
-                    }
-                }
-
-                LogosButton {
-                    objectName: "proposeButton"
-                    Layout.fillWidth: true
-                    variant: LogosButton.Variant.Primary
-                    text: qsTr("Propose")
-                    enabled: root.ready && toField.text.length > 0 && valueField.text.length > 0
-                    onClicked: {
-                        if (!root.backend)
-                            return;
-                        var effectJson = JSON.stringify({
-                            to: toField.text,
-                            value: parseInt(valueField.text || "0", 10),
-                            nonce: parseInt(nonceField.text || "0", 10)
-                        });
-                        root.backend.propose(effectJson);
-                    }
-                }
-            }
-        }
-
-        // ── the intent, once proposed ─────────────────────────────────────────
-        Rectangle {
-            objectName: "intentCard"
-            Layout.fillWidth: true
-            visible: root.hasIntent
-            implicitHeight: intentCol.implicitHeight + 2 * Theme.spacing.medium
-            radius: Theme.spacing.radiusMedium
-            color: Theme.palette.surfaceRaised
-            border.width: 1
-            border.color: Theme.palette.borderDefault
-
-            ColumnLayout {
-                id: intentCol
-                anchors.fill: parent
-                anchors.margins: Theme.spacing.medium
-                spacing: Theme.spacing.small
-
-                // The effect, in plain terms: amount leads, destination follows.
-                LogosText {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WrapAnywhere
-                    text: root.effect
-                        ? qsTr("%1 → %2").arg(String(root.effect.value)).arg(String(root.effect.to))
-                        : root.intentId
-                    color: Theme.palette.text
-                    font.pixelSize: Theme.typography.primaryText
-                    font.weight: Theme.typography.weightMedium
-                }
-
-                LogosText {
-                    text: qsTr("%1 · nonce %2")
-                        .arg(root.intentId)
-                        .arg(root.effect && root.effect.nonce !== undefined ? String(root.effect.nonce) : "0")
-                    color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
-                }
-
-                // ── status rail ──────────────────────────────────────────────
-                // The full lifecycle path, drawn from the first card so it is
-                // visible where a proposal has got to. This build reaches
-                // "executable" (the threshold is a driver fact); submitted/final
-                // arrive with the submit method (next increment) and stay unlit.
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.spacing.tiny
-                    spacing: Theme.spacing.small
-
-                    Repeater {
-                        model: [{ k: "proposed", t: qsTr("proposed") },
-                                { k: "collecting", t: qsTr("collecting") },
-                                { k: "executable", t: qsTr("ready") },
-                                { k: "submitted", t: qsTr("submitted") },
-                                { k: "final", t: qsTr("final") }]
-
-                        delegate: RowLayout {
-                            id: step
-                            required property var modelData
-                            required property int index
-                            spacing: 4
-
-                            readonly property string current:
-                                root.intentState === "draft" ? "proposed" : root.intentState
-                            readonly property bool lit:
-                                step.index <= ["proposed", "collecting", "executable", "submitted", "final"]
-                                    .indexOf(step.current)
-
-                            Rectangle {
-                                implicitWidth: 6
-                                implicitHeight: 6
-                                radius: 3
-                                color: step.lit ? Theme.palette.success : Theme.palette.borderDefault
-                            }
-
-                            LogosText {
-                                text: step.modelData.t
-                                color: step.lit ? Theme.palette.textSecondary : Theme.palette.textTertiary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
-                            }
-                        }
-                    }
-                }
-
-                // ── the re-materialization strip ─────────────────────────────
-                // The point of the whole slice. "re-derived" is the module's real
-                // EIP-712 safeTxHash, computed from the effect shown — not a value
-                // a service asserted. Shown and re-derived agree by construction,
-                // which is the honest match. If they ever disagreed, the module
-                // core refuses to sign (F-4 / invariant 1) — that refusal is real
-                // and lives below the UI; it is never faked here.
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.spacing.tiny
-                    implicitHeight: stripCol.implicitHeight + 2 * Theme.spacing.small
-                    radius: Theme.spacing.radiusSmall
-                    color: Theme.palette.surfaceRecessed
-                    border.width: 1
-                    border.color: Theme.palette.success
-
-                    ColumnLayout {
-                        id: stripCol
-                        anchors.fill: parent
-                        anchors.margins: Theme.spacing.small
-                        spacing: Theme.spacing.tiny
-
-                        LogosText {
-                            Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                            text: qsTr("✓ your client re-derived this — these are the exact bytes each owner signs")
-                            color: Theme.palette.success
-                            font.pixelSize: Theme.typography.secondaryText
-                            font.weight: Theme.typography.weightMedium
-                        }
-
-                        // shown / re-derived / domain, in mono.
-                        Repeater {
-                            model: [
-                                { k: qsTr("shown"),
-                                  v: root.effect
-                                     ? qsTr("%1 → %2 · nonce %3")
-                                        .arg(String(root.effect.value))
-                                        .arg(String(root.effect.to))
-                                        .arg(root.effect.nonce !== undefined ? String(root.effect.nonce) : "0")
-                                     : root.intentEffect },
-                                { k: qsTr("re-derived"), v: root.intentTxhash },
-                                { k: qsTr("domain"),
-                                  v: root.account
-                                     ? qsTr("chain %1 · Safe %2")
-                                        .arg(Number(root.account.chainId)).arg(String(root.account.safe))
-                                     : qsTr("committed inside the hash") }
-                            ]
-
-                            delegate: RowLayout {
-                                required property var modelData
-                                Layout.fillWidth: true
-                                spacing: Theme.spacing.small
-
-                                LogosText {
-                                    Layout.preferredWidth: 72
-                                    text: modelData.k
-                                    color: Theme.palette.textTertiary
-                                    font.family: Theme.typography.mono
-                                    font.pixelSize: Theme.typography.badgeText
-                                }
-
-                                LogosText {
-                                    Layout.fillWidth: true
-                                    wrapMode: Text.WrapAnywhere
-                                    text: modelData.v
-                                    color: Theme.palette.textSecondary
-                                    font.family: Theme.typography.mono
-                                    font.pixelSize: Theme.typography.badgeText
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ── collect owner signatures ─────────────────────────────────
-                // The client holds no keys: each owner signs the exact bytes above
-                // on their own device and hands back the signature. Paste one here
-                // to collect it; the module verifies it recovers to a configured
-                // owner before it counts toward the threshold (F-5). When the
-                // threshold is met the driver reports the intent executable.
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.spacing.tiny
-                    visible: root.collectable
-                    spacing: Theme.spacing.small
-
-                    LogosTextField {
-                        id: sigField
-                        objectName: "approveSig"
-                        Layout.fillWidth: true
-                        placeholderText: qsTr("paste an owner signature (65-byte hex)")
-                        font.family: Theme.typography.mono
-                    }
-
-                    LogosButton {
-                        objectName: "approveButton"
-                        Layout.fillWidth: true
-                        variant: LogosButton.Variant.Primary
-                        text: qsTr("Add signature")
-                        enabled: root.ready && sigField.text.length > 0
-                        onClicked: {
-                            if (root.backend)
-                                root.backend.approve(sigField.text);
-                            sigField.text = "";
-                        }
-                    }
-
-                    LogosText {
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: qsTr("Each owner signs on their own device — the client never holds their keys. "
-                                 + "%1 of %2 owners must sign; a signature counts only if it recovers to an owner.")
-                            .arg(root.account ? Number(root.account.threshold) : 2)
-                            .arg(root.account && root.account.owners ? root.account.owners.length : 3)
-                        color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
-                    }
-                }
-
-                // ── executable → submit → final ──────────────────────────────
-                // The signatures are collected; the module can now assemble the
-                // Safe execTransaction and send it through the user's RPC. Finality
-                // is read from the receipt (R-8), never asserted by a service.
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.spacing.tiny
-                    visible: root.hasIntent && !root.collectable
-                    spacing: Theme.spacing.small
-
-                    LogosText {
-                        objectName: "executableNotice"
-                        Layout.fillWidth: true
-                        visible: root.isExecutable
-                        wrapMode: Text.WordWrap
-                        text: qsTr("✓ threshold met — the owner signatures are collected. Submit assembles the Safe execTransaction and sends it through your RPC.")
-                        color: Theme.palette.success
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
-                    }
-
-                    LogosButton {
-                        objectName: "submitButton"
-                        Layout.fillWidth: true
-                        visible: root.isExecutable
-                        variant: LogosButton.Variant.Primary
-                        text: qsTr("Submit on-chain")
-                        enabled: root.ready
-                        onClicked: {
-                            if (root.backend)
-                                root.backend.submit();
-                        }
-                    }
-
-                    LogosText {
-                        Layout.fillWidth: true
-                        visible: root.isSubmitting
-                        wrapMode: Text.WordWrap
-                        text: qsTr("submitting… waiting for the receipt")
-                        color: Theme.palette.textSecondary
-                        font.pixelSize: Theme.typography.badgeText
-                    }
-
-                    LogosText {
-                        objectName: "finalNotice"
-                        Layout.fillWidth: true
-                        visible: root.isFinal
-                        wrapMode: Text.WordWrap
-                        text: qsTr("✓ executed on-chain — final. The transfer settled through the Safe; finality was read from the chain, not asserted by a service.")
-                        color: Theme.palette.success
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
-                    }
-
-                    LogosButton {
-                        objectName: "newProposalButton"
-                        Layout.fillWidth: true
-                        visible: root.isFinal
-                        text: qsTr("Start a new proposal")
-                        onClicked: { if (root.backend) root.backend.reset(); }
-                    }
-                }
-            }
-        }
-
-        // ── error banner ──────────────────────────────────────────────────────
-        // One place for every failure — a rejected signature, an unreachable RPC,
-        // a failed proposal. It clears when the next action runs (each backend call
-        // resets it), or on New proposal. Honest by construction: the text is the
-        // module's own reason, never a guess.
-        Rectangle {
-            objectName: "errorBanner"
-            Layout.fillWidth: true
-            visible: root.lastError.length > 0
-            implicitHeight: errRow.implicitHeight + 2 * Theme.spacing.medium
-            radius: Theme.spacing.radiusSmall
-            color: Theme.palette.surface
-            border.width: 1
-            border.color: Theme.palette.error
-
-            RowLayout {
-                id: errRow
-                anchors.fill: parent
-                anchors.margins: Theme.spacing.medium
-                spacing: Theme.spacing.small
-
-                LogosText {
-                    objectName: "errorText"
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: root.lastError
-                    color: Theme.palette.error
-                    font.pixelSize: Theme.typography.badgeText
-                }
-
-                // Recovery from any error — including a submit that never landed.
-                LogosButton {
-                    objectName: "errorResetButton"
-                    visible: root.hasIntent
-                    text: qsTr("New proposal")
-                    onClicked: { if (root.backend) root.backend.reset(); }
-                }
-            }
-        }
-
-        // ── wallet: balances across chains, each with its F-10 grade badge ────
-        // The account-level view. A balance is shown with a badge saying whether
-        // it is "verified" (checked against a consensus state root) or "attested"
-        // (what the RPC returned, trusted) — the honesty rule made visible. A read
-        // that could not be answered shows "unavailable", never a false zero.
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: walletCol.implicitHeight + 2 * Theme.spacing.medium
-            radius: Theme.spacing.radiusMedium
-            color: Theme.palette.surface
-            border.width: 1
-            border.color: Theme.palette.borderSubtle
-
-            ColumnLayout {
-                id: walletCol
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: Theme.spacing.medium
-                spacing: Theme.spacing.small
-
-                LogosText {
-                    text: qsTr("WALLET")
-                    color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
-                    font.weight: Theme.typography.weightMedium
-                }
-
-                Repeater {
-                    model: root.balances
-                    delegate: RowLayout {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing.small
-
-                        LogosText {
-                            text: (modelData.asset || "?") + "  " + (modelData.chain || "")
-                            color: Theme.palette.text
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.secondaryText
-                        }
-                        Item { Layout.fillWidth: true }
-                        LogosText {
-                            text: modelData.error ? qsTr("unavailable") : (modelData.display || "")
-                            color: modelData.error ? Theme.palette.warning : Theme.palette.text
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.secondaryText
-                        }
-                        Rectangle {
-                            visible: !modelData.error
-                            implicitWidth: gradeText.implicitWidth + 2 * Theme.spacing.small
-                            implicitHeight: gradeText.implicitHeight + Theme.spacing.tiny
-                            radius: Theme.spacing.radiusMedium
-                            color: modelData.grade === "verified-locally"
-                                   ? Theme.palette.success : Theme.palette.warning
-                            LogosText {
-                                id: gradeText
-                                anchors.centerIn: parent
-                                text: modelData.grade === "verified-locally"
-                                      ? qsTr("verified") : qsTr("attested")
-                                color: Theme.palette.background
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
-                                font.weight: Theme.typography.weightMedium
-                            }
-                        }
-                    }
-                }
-
-                LogosText {
-                    visible: root.balances.length === 0
-                    text: qsTr("no balances yet")
-                    color: Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.badgeText
-                }
-
-                LogosButton {
-                    Layout.fillWidth: true
-                    variant: LogosButton.Variant.Primary
-                    text: qsTr("Refresh balances")
-                    onClicked: root.backend.loadBalances()
-                }
-            }
-        }
-
-        // ── health footer (the loading-spike smoke test, kept) ────────────────
-        RowLayout {
-            Layout.topMargin: Theme.spacing.small
-            Layout.alignment: Qt.AlignHCenter
-            spacing: Theme.spacing.small
-
-            Rectangle {
-                implicitWidth: 8
-                implicitHeight: 8
-                radius: 4
-                color: root.ready ? (root.healthy ? Theme.palette.success : Theme.palette.warning)
-                                   : Theme.palette.warning
-            }
-
-            LogosText {
-                text: root.ready ? qsTr("module.health() → %1").arg(root.health)
-                                 : qsTr("connecting to backend…")
-                color: Theme.palette.textTertiary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
-            }
-        }
+    // The Account surface (AccountPage.qml).
+    AccountPage {
+        root: mainItem
+        anchors.top: walletHeader.bottom
+        anchors.left: contentArea.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
     }
 
     // ── the platform's signer (exo-d4d.2 R1) ─────────────────────────────
@@ -1377,15 +833,15 @@ Item {
             LogosText {
                 text: root.signerNote
                 color: Theme.palette.textSecondary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
-            LogosButton {
+            ActionButton {
                 objectName: "signerInstall"
                 visible: root.signerMissing
                 text: qsTr("Install the Logos Signer")
                 onClicked: root.requestPackageInstall(root.signerPackage)
             }
-            LogosButton {
+            ActionButton {
                 text: qsTr("Dismiss")
                 onClicked: root.signerNote = ""
             }

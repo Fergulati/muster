@@ -1,0 +1,26 @@
+{
+  "about": "Approve on a card asks the module to contribute to that intent.",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "cardApprove"
+    },
+    {
+      "expect": {
+        "slot": "contributeInRoom",
+        "args": [
+          "0xf82713a97f076e35"
+        ]
+      }
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

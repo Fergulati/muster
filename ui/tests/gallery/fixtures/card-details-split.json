@@ -1,0 +1,12 @@
+{
+  "about": "A split card stays compact (exo-720.10): who owes what on the face, the explanations behind Details.",
+  "snapshot": "data/split-alice-collecting.json",
+  "sizes": ["1440x900"],
+  "steps": [
+    {"view": "room"},
+    {"expectProp": ["cardSplit", "visible", true]},
+    {"shot": "compact"},
+    {"click": "cardDetailsToggle"},
+    {"shot": "details"}
+  ]
+}

@@ -23,8 +23,26 @@ Item {
     // crowd the roster/history in the side column. The heading (with the action count)
     // stays; click it to reveal "who can see what".
     property bool collapsed: true
-    readonly property var rows: (flowView.flow && flowView.flow.rows) ? flowView.flow.rows : []
-    readonly property var matrix: (flowView.flow && flowView.flow.matrix) ? flowView.flow.matrix : ({})
+    // One proposal's flow (exo-720.10, a card's "Who sees this?"): its intent id, else "".
+    // Filtered, the matrix is rebuilt from that proposal's rows alone, over the same
+    // observers the room's matrix lists — the store node always among them (FS-9).
+    property string intentFilter: ""
+    readonly property var allRows: (flowView.flow && flowView.flow.rows) ? flowView.flow.rows : []
+    readonly property var rows: flowView.intentFilter.length === 0 ? flowView.allRows
+        : flowView.allRows.filter(function (r) { return String(r.intentId || "") === flowView.intentFilter; })
+    readonly property var roomMatrix: (flowView.flow && flowView.flow.matrix) ? flowView.flow.matrix : ({})
+    readonly property var matrix: {
+        if (flowView.intentFilter.length === 0) return flowView.roomMatrix;
+        var m = {};
+        for (var o in flowView.roomMatrix) m[o] = [];
+        for (var i = 0; i < flowView.rows.length; ++i) {
+            var r = flowView.rows[i], to = String(r.to || ""), f = String(r.field || "");
+            if (!(to in m)) m[to] = [];
+            if (f.length > 0 && m[to].indexOf(f) < 0) m[to].push(f);
+        }
+        for (var k in m) m[k].sort();
+        return m;
+    }
 
     readonly property var observerOrder: ["room-member", "store-node", "rpc-provider", "chain-observer", "target-module"]
     function observerLabel(o) {
@@ -61,7 +79,7 @@ Item {
             LogosText {
                 text: flowView.collapsed ? "▸" : "▾"
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
             LogosText {
                 Layout.fillWidth: true
@@ -74,13 +92,11 @@ Item {
                 objectName: "flowRowCount"
                 text: qsTr("%1 actions").arg(flowView.rows.length)
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: flowView.collapsed = !flowView.collapsed
-            }
+            // handlers, not a MouseArea: an Item here would be a layout cell (and a spacing gap)
+            TapHandler { onTapped: flowView.collapsed = !flowView.collapsed }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
 
         // ── the expandable body, bounded + scrollable ─────────────────────
@@ -115,7 +131,7 @@ Item {
                             Layout.alignment: Qt.AlignTop
                             text: modelData.label
                             color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
-                            font.pixelSize: Theme.typography.badgeText
+                            font.pixelSize: MusterStyle.caption
                             font.weight: Theme.typography.weightMedium
                         }
                         LogosText {
@@ -123,14 +139,14 @@ Item {
                             wrapMode: Text.WordWrap
                             text: modelData.fields
                             color: Theme.palette.text
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
                     }
                 }
 
                 // per-action rows, on demand
-                LogosButton {
+                ActionButton {
                     objectName: "flowRowsToggle"
                     visible: !flowView.collapsed && flowView.rows.length > 0
                     text: flowView.rowsOpen ? qsTr("Hide per-action rows") : qsTr("Show per-action rows")
@@ -151,8 +167,8 @@ Item {
                             + " · epoch " + String(modelData.epoch)
                             + (modelData.declared === false ? qsTr("  ⚠ undeclared") : "")
                         color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
                 }
             }

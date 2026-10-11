@@ -1,0 +1,59 @@
+{
+  "about": "A card's Who sees this? opens Room details at Privacy, showing that proposal's flow; the chip's \u00d7 shows the whole room's.",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "cardWhoSees"
+    },
+    {
+      "expectProp": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "roomSurface",
+        "detailsTab",
+        "privacy"
+      ]
+    },
+    {
+      "expectProp": [
+        "roomSurface",
+        "detailsIntent",
+        "0xf82713a97f076e35"
+      ]
+    },
+    {
+      "expectProp": [
+        "flowView",
+        "intentFilter",
+        "0xf82713a97f076e35"
+      ]
+    },
+    {
+      "shot": "filtered"
+    },
+    {
+      "click": "flowFilterClear"
+    },
+    {
+      "expectProp": [
+        "flowView",
+        "intentFilter",
+        ""
+      ]
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

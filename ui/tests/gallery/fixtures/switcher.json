@@ -1,0 +1,5 @@
+{
+  "about": "Ctrl+K: jump to a room by name (exo-720.12).",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [ {"view": "home"}, {"click": "sidebarJump"}, {"wait": 300}, {"shot": ""} ]
+}

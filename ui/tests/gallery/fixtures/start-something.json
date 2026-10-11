@@ -1,0 +1,5 @@
+{
+  "about": "Start something: what, and who with (the new-room flow).",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [ {"view": "compose"}, {"shot": ""} ]
+}

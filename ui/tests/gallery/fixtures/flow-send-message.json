@@ -1,0 +1,33 @@
+{
+  "about": "A message typed and sent reaches the module as postMessage.",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "messageComposer",
+        "text",
+        "hello from the gallery"
+      ]
+    },
+    {
+      "click": "sendMessageButton"
+    },
+    {
+      "expect": {
+        "slot": "postMessage",
+        "args": [
+          "hello from the gallery"
+        ]
+      }
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

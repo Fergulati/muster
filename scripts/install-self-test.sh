@@ -52,8 +52,11 @@ printf '%s' "$ITEM" | grep -q '"moduleState": "unknown"' || { echo "FAIL: module
 printf '%s' "$ITEM" | grep -q '"install": "'"$MISSING"'"' || { echo "FAIL: the item does not name the package to install"; ok=0; }
 printf '%s' "$ITEM" | grep -q "Package Manager" || { echo "FAIL: the remedy does not name Package Manager"; ok=0; }
 echo "── the module thread ──"
-GAP=$(grep -a 'MUSTER-LP' "$D/A.log" | awk -F'[][]' '
-  { split($2, t, /[ :]/); s = t[2]*3600 + t[3]*60 + t[4]
+# each record's own timestamp: two processes share the log, so a record may follow another's
+# unterminated line, and the line's first bracket is not always its time
+GAP=$(grep -a 'MUSTER-LP' "$D/A.log" | awk '
+  { if (!match($0, /\[[0-9-]+ [0-9:.]+\] \[[a-z]+\] \[logos\] \[muster_module\] MUSTER-LP/)) next
+    split(substr($0, RSTART + 1, 23), t, /[ :]/); s = t[2]*3600 + t[3]*60 + t[4]
     if (prev != "" && s - prev > max) max = s - prev
     prev = s }
   /MUSTER-LP readiness/ { printf "%.1f", max; exit }')

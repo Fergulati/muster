@@ -88,26 +88,14 @@ Item {
         ColumnLayout {
             id: stack
             y: Theme.spacing.xlarge
-            x: (flick.width - width) / 2
-            width: Math.min(flick.width - 2 * Theme.spacing.xlarge, 560)
+            // aligned like every page (exo-720.11)
+            x: Theme.spacing.xxlarge
+            width: Math.min(flick.width - 2 * Theme.spacing.xxlarge, 720)
             spacing: Theme.spacing.large
 
-            LogosText {
-                text: qsTr("The transaction lifecycle")
-                color: Theme.palette.text
-                font.family: Theme.typography.publicSans
-                font.pixelSize: Theme.typography.subtitleText
-                font.weight: Theme.typography.weightBold
-                Layout.alignment: Qt.AlignHCenter
-            }
-
-            LogosText {
-                Layout.fillWidth: true
-                text: qsTr("Each step: what happens, what Logos protects, where others leak, and what is still open.")
-                color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.secondaryText
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
+            PageHeader {
+                title: qsTr("Learn")
+                subtitle: qsTr("The transaction lifecycle: at each step, what happens, what Logos protects, where others leak, and what is still open.")
             }
 
             // ── one block per lifecycle step ──────────────────────────────────
@@ -158,8 +146,8 @@ Item {
                                 LogosText {
                                     text: walkthrough.kindLabel(modelData.kind)
                                     color: walkthrough.kindColor(modelData.kind)
-                                    font.family: Theme.typography.mono
-                                    font.pixelSize: Theme.typography.badgeText
+                                    font.family: MusterStyle.mono
+                                    font.pixelSize: MusterStyle.caption
                                     font.weight: Theme.typography.weightMedium
                                 }
 
@@ -184,7 +172,7 @@ Item {
                                     Layout.fillWidth: true
                                     text: walkthrough.evidenceOf(modelData)
                                     color: Theme.palette.textTertiary
-                                    font.family: Theme.typography.mono
+                                    font.family: MusterStyle.mono
                                     font.pixelSize: Theme.typography.secondaryText
                                     wrapMode: Text.WrapAnywhere
                                 }
@@ -195,7 +183,7 @@ Item {
                                     Layout.fillWidth: true
                                     text: walkthrough.credibilityOf(modelData)
                                     color: walkthrough.credibilityColor(modelData)
-                                    font.pixelSize: Theme.typography.badgeText
+                                    font.pixelSize: MusterStyle.caption
                                     font.weight: Theme.typography.weightMedium
                                     wrapMode: Text.WordWrap
                                 }

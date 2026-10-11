@@ -180,7 +180,7 @@ test("muster_ui: an in-room proposal renders the re-derived verify box", async (
       const r = await app.inspector.send("findByProperty", { property: "objectName", value: "musterCard" });
       if (!(r.matches?.length > 0)) throw new Error("no proposal card rendered");
       for (const m of r.matches)
-        await app.inspector.send("setProperty", { objectId: m.id, property: "verifyOpen", value: true });
+        await app.inspector.send("setProperty", { objectId: m.id, property: "verifyOpen", value: true });  // opens Details too
     },
     { timeout: 20000, interval: 500, description: "proposal card in the thread" }
   );

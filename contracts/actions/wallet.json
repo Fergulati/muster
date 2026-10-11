@@ -91,7 +91,7 @@
         "wallet_accounts",
         "wallet_balances"
       ],
-      "ui": "the Main.qml wallet card (each balance with its grade badge) and LezSend.qml",
+      "ui": "the Wallet's Balances tab (AccountPage.qml: each balance with its grade badge) and its Send on LEZ tab (LezSend.qml)",
       "invariants": [
         8
       ],
@@ -679,7 +679,7 @@
       "hosted": [
         "wallet_verified_balance"
       ],
-      "ui": "headless only (the Main.qml wallet card has a 'verified' badge, but wallet_balances always returns attested)",
+      "ui": "headless only (the Wallet's Balances tab, AccountPage.qml, has a 'verified' badge, but wallet_balances always returns attested)",
       "invariants": [
         8
       ],
@@ -1093,7 +1093,7 @@
         "wallet_send",
         "wallet_finality"
       ],
-      "ui": "LezSend.qml (Main.qml 'lez' view): preview, then send",
+      "ui": "LezSend.qml (the Wallet's Send on LEZ tab): preview, then send",
       "invariants": [
         8
       ],
@@ -1364,7 +1364,7 @@
         "wallet_send",
         "wallet_finality"
       ],
-      "ui": "LezSend.qml (Main.qml 'lez' view): preview, then send",
+      "ui": "LezSend.qml (the Wallet's Send on LEZ tab): preview, then send",
       "invariants": [
         8
       ],
@@ -1639,7 +1639,7 @@
         "wallet_send",
         "wallet_finality"
       ],
-      "ui": "LezSend.qml (Main.qml 'lez' view): preview, then send",
+      "ui": "LezSend.qml (the Wallet's Send on LEZ tab): preview, then send",
       "invariants": [
         8
       ],
@@ -1877,7 +1877,7 @@
         "wallet_send",
         "wallet_finality"
       ],
-      "ui": "LezSend.qml (Main.qml 'lez' view): preview, then send",
+      "ui": "LezSend.qml (the Wallet's Send on LEZ tab): preview, then send",
       "invariants": [
         8
       ],
@@ -2195,7 +2195,7 @@
           "evidence": [
             "module/tests/wallet_lez_test.nim",
             "ui/src/qml/LezSend.qml",
-            "ui/src/qml/Room.qml"
+            "ui/src/qml/MusterCard.qml"
           ]
         },
         {
@@ -2261,7 +2261,7 @@
         "wallet_finality",
         "coordinate_post_message"
       ],
-      "ui": "LezSend.qml (Main.qml 'lez' view); the room's address-request card (Main.qml, Room.qml)",
+      "ui": "LezSend.qml (the Wallet's Send on LEZ tab); the room's address-request card (CardAddressRequest.qml, shown by RoomThread.qml)",
       "invariants": [
         8,
         9

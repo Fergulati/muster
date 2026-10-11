@@ -1,0 +1,5 @@
+{
+  "about": "A split just proposed, collecting agreement (Alice, the creditor, proposed it).",
+  "snapshot": "data/split-alice-collecting.json",
+  "steps": [ {"view": "room"}, {"shot": ""} ]
+}

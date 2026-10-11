@@ -130,7 +130,7 @@ Item {
             visible: acc.accounts.length === 0
             text: qsTr("No shared accounts yet")
             color: Theme.palette.textTertiary
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
             wrapMode: Text.WordWrap
         }
 
@@ -166,8 +166,8 @@ Item {
                     Layout.fillWidth: true
                     text: String(modelData.family || "") + " · " + String(modelData.chain || "") + " · " + acc.shortAddr(modelData.address)
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WrapAnywhere
                 }
                 // The whole address, selectable and copyable — funding an account (a Bitcoin
@@ -185,10 +185,10 @@ Item {
                         text: String(modelData.address || "")
                         color: Theme.palette.textSecondary
                         selectionColor: Theme.palette.primary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
-                    LogosButton {
+                    ActionButton {
                         objectName: "copyAccountAddress"
                         text: qsTr("Copy address")
                         variant: LogosButton.Variant.Secondary
@@ -199,7 +199,7 @@ Item {
                     Layout.fillWidth: true
                     text: qsTr("disclosed by %1").arg(acc.discloserNames(modelData))
                     color: Theme.palette.textSecondary
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WordWrap
                 }
                 LogosText {
@@ -207,7 +207,7 @@ Item {
                     text: acc.checkLabel(modelData.check ? modelData.check.status : "")
                           + (modelData.check && modelData.check.detail ? " — " + String(modelData.check.detail) : "")
                     color: modelData.check && modelData.check.status === "disagrees" ? Theme.palette.error : Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WordWrap
                 }
                 LogosText {
@@ -215,7 +215,7 @@ Item {
                     visible: modelData.conflict === true
                     text: qsTr("Members disclosed different signers or thresholds for this account. The first disclosure governs until they agree.")
                     color: Theme.palette.warning
-                    font.pixelSize: Theme.typography.badgeText
+                    font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WordWrap
                 }
             }
@@ -229,7 +229,7 @@ Item {
             visible: acc.frostCeremonies.length > 0
             text: qsTr("Key ceremonies")
             color: Theme.palette.textSecondary
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
         }
         Repeater {
             model: acc.frostCeremonies
@@ -247,10 +247,10 @@ Item {
                               .arg(modelData.step1).arg(modelData.step2)
                               .arg(modelData.last ? " · " + String(modelData.last) : "")
                     color: Theme.palette.textSecondary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                 }
-                LogosButton {
+                ActionButton {
                     visible: !modelData.participant && !modelData.address && Number(modelData.joined) < Number(modelData.n)
                     text: qsTr("Join")
                     variant: LogosButton.Variant.Secondary
@@ -265,7 +265,7 @@ Item {
                   ? "⚠ " + String(acc.frostCeremony.error) + (acc.frostCeremony.detail ? " — " + String(acc.frostCeremony.detail) : "")
                   : ""
             color: Theme.palette.error
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
             wrapMode: Text.WordWrap
         }
         // A LEZ multisig sent to the chain, disclosed here once a block includes it.
@@ -280,7 +280,7 @@ Item {
                         .arg(String((acc.lezCreate && acc.lezCreate.chain) || ""))
                         .arg(String((acc.lezCreate && acc.lezCreate.tx) || "").slice(0, 12))
             color: acc.lezCreate && acc.lezCreate.error ? Theme.palette.error : Theme.palette.textSecondary
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
         }
         LogosText {
             Layout.fillWidth: true
@@ -289,7 +289,7 @@ Item {
                   ? String(acc.discloseResult.error) + (acc.discloseResult.detail ? " — " + String(acc.discloseResult.detail) : "")
                   : ""
             color: Theme.palette.error
-            font.pixelSize: Theme.typography.badgeText
+            font.pixelSize: MusterStyle.caption
             wrapMode: Text.WordWrap
         }
 
@@ -297,7 +297,7 @@ Item {
         RowLayout {      // visibility on a wrapper: a LogosButton's own did not take in Basecamp
             Layout.fillWidth: true
             visible: acc.openForm === ""
-            LogosButton {
+            ActionButton {
                 objectName: "addAccountButton"
                 Layout.fillWidth: true
                 text: qsTr("Add an account")
@@ -321,7 +321,7 @@ Item {
                     font.weight: Theme.typography.weightMedium
                     wrapMode: Text.WordWrap
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "addAccountClose"
                     Layout.preferredWidth: 90
                     text: qsTr("Close")
@@ -334,7 +334,7 @@ Item {
                 visible: acc.openForm === "chooser"
                 text: qsTr("An account is shared here once a member discloses it. Every member checks it against the chain.")
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
                 wrapMode: Text.WordWrap
             }
             // The four families, until one is picked; then only its form shows (Close
@@ -345,28 +345,28 @@ Item {
                 columns: 2
                 columnSpacing: Theme.spacing.small
                 rowSpacing: Theme.spacing.small
-                LogosButton {
+                ActionButton {
                     objectName: "addAccountSafe"
                     Layout.fillWidth: true
                     text: qsTr("Safe")
                     variant: acc.openForm === "safe" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                     onClicked: acc.openForm = "safe"
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "addAccountBtc"
                     Layout.fillWidth: true
                     text: qsTr("Bitcoin multisig")
                     variant: acc.openForm === "btc" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                     onClicked: acc.openForm = "btc"
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "addAccountFrost"
                     Layout.fillWidth: true
                     text: qsTr("FROST key ceremony")
                     variant: acc.openForm === "frost" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                     onClicked: acc.openForm = "frost"
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "addAccountLez"
                     Layout.fillWidth: true
                     text: qsTr("LEZ multisig")
@@ -385,7 +385,7 @@ Item {
             RowLayout {      // visibility on a wrapper: a LogosButton's own did not take in Basecamp
                 Layout.fillWidth: true
                 visible: acc.suggestionAvailable
-                LogosButton {
+                ActionButton {
                     objectName: "discloseSuggestedSafe"
                     Layout.fillWidth: true
                     text: qsTr("Disclose the local test Safe")
@@ -410,7 +410,7 @@ Item {
                     placeholderText: qsTr("Safe address 0x…")
                 }
             }
-            LogosButton {
+            ActionButton {
                 objectName: "discloseSafe"
                 Layout.fillWidth: true
                 enabled: addrField.text.trim().length === 42 && chainField.text.trim().length > 0
@@ -434,13 +434,13 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                LogosButton {
+                ActionButton {
                     objectName: "btcFamilyP2wsh"
                     text: qsTr("P2WSH")
                     variant: acc.btcFamily === "btc.p2wsh-sortedmulti" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                     onClicked: acc.btcFamily = "btc.p2wsh-sortedmulti"
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "btcFamilyTaproot"
                     text: qsTr("Taproot")
                     variant: acc.btcFamily === "btc.tapscript-multi-a" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
@@ -467,7 +467,7 @@ Item {
                 Layout.fillWidth: true
                 placeholderText: qsTr("members' Bitcoin keys (66 hex each), comma-separated")
             }
-            LogosButton {
+            ActionButton {
                 objectName: "discloseBtc"
                 Layout.fillWidth: true
                 readonly property var keys: btcKeys.text.split(",").map(function (k) { return k.trim().replace(/^0x/i, ""); })
@@ -495,7 +495,7 @@ Item {
                 Layout.fillWidth: true
                 text: qsTr("One key the room holds t of n: to the chain, one signature and no policy.")
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
                 wrapMode: Text.WordWrap
             }
             RowLayout {
@@ -529,7 +529,7 @@ Item {
                 placeholderText: qsTr("network")
                 text: "regtest"
             }
-            LogosButton {
+            ActionButton {
                 objectName: "frostOpen"
                 Layout.fillWidth: true
                 enabled: frostCid.text.trim().length > 0
@@ -551,7 +551,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                LogosButton {
+                ActionButton {
                     objectName: "lezShowMember"
                     text: qsTr("My LEZ member account")
                     variant: LogosButton.Variant.Secondary
@@ -566,8 +566,8 @@ Item {
                           + (acc.lezMember.detail ? ": " + String(acc.lezMember.detail) : "")
                         : qsTr("give this to whoever creates the multisig")
                     color: Theme.palette.textSecondary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                 }
             }
             RowLayout {
@@ -585,10 +585,10 @@ Item {
                     objectName: "lezCreateMembers"
                     Layout.fillWidth: true
                     placeholderText: qsTr("members' LEZ accounts, comma-separated")
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                 }
             }
-            LogosButton {
+            ActionButton {
                 objectName: "lezCreate"
                 Layout.fillWidth: true
                 enabled: lezMembers.text.trim().length > 0 && lezThreshold.text.trim().length > 0
@@ -604,9 +604,9 @@ Item {
                     objectName: "lezDiscloseConfig"
                     Layout.fillWidth: true
                     placeholderText: qsTr("an existing LEZ multisig's config {program, createKey, pda, layout}")
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "lezDisclose"
                     text: qsTr("Disclose")
                     variant: LogosButton.Variant.Secondary

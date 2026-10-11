@@ -141,8 +141,8 @@ Item {
                                     return axis + "  ·  " + rung;
                                 }
                                 color: Theme.palette.text
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                                 font.weight: Theme.typography.weightMedium
                             }
                             LogosText {
@@ -150,7 +150,7 @@ Item {
                                 wrapMode: Text.WordWrap
                                 text: String((axisRow.modelData && axisRow.modelData.mechanism) || "")
                                 color: Theme.palette.textTertiary
-                                font.pixelSize: Theme.typography.badgeText
+                                font.pixelSize: MusterStyle.caption
                             }
                         }
                     }
@@ -177,8 +177,8 @@ Item {
                 LogosText {
                     text: qsTr("%1").arg(scope.roster.length)
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                     font.weight: Theme.typography.weightMedium
                 }
             }
@@ -237,7 +237,7 @@ Item {
                                 }
                                 color: Theme.palette.text
                                 font.family: (memberRow.memberAlias.length > 0 && !memberCard.revealed)
-                                    ? Theme.typography.publicSans : Theme.typography.mono
+                                    ? Theme.typography.publicSans : MusterStyle.mono
                                 font.pixelSize: Theme.typography.secondaryText
                                 font.weight: Theme.typography.weightMedium
                                 wrapMode: memberCard.revealed ? Text.WrapAnywhere : Text.NoWrap
@@ -250,8 +250,8 @@ Item {
                             LogosText {
                                 text: qsTr("signer")
                                 color: Theme.palette.textTertiary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                             }
                         }
 
@@ -277,7 +277,7 @@ Item {
             RowLayout {      // visibility on a wrapper: a LogosButton's own did not take in Basecamp
                 Layout.fillWidth: true
                 visible: scope.canAskToJoin
-                LogosButton {
+                ActionButton {
                     objectName: "requestJoinButton"
                     Layout.fillWidth: true
                     text: qsTr("Ask to join this room")
@@ -301,7 +301,7 @@ Item {
                            + "they'll see your request and can let you in — you don't need to "
                            + "do anything else. (Asking again above re-sends the request.)")
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
 
             // Where the ask stands — sealed and sent, or still waiting for the room's key.
@@ -317,7 +317,7 @@ Item {
                         ? qsTr("Your ask is sealed and sent — a member here can admit you.")
                         : qsTr("Ask: %1").arg(scope.joinStatus)
                 color: Theme.palette.textSecondary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
 
             // Pending join-requests: whoever has announced their key but is not yet
@@ -352,11 +352,11 @@ Item {
                                  : (ident.length > 14 ? ident.substring(0, 10) + "…" + ident.substring(ident.length - 4) : ident))
                               + ((modelData && modelData.bindsOwner) ? qsTr("  · owner") : "")
                         color: Theme.palette.textSecondary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                         elide: Text.ElideRight
                     }
 
-                    LogosButton {
+                    ActionButton {
                         text: qsTr("Admit")
                         onClicked: if (modelData && modelData.identity) scope.admit(String(modelData.identity))
                     }
@@ -393,8 +393,8 @@ Item {
                     Layout.fillWidth: true
                     text: qsTr("end-to-end · %1 can read").arg(scope.roster.length)
                     color: Theme.palette.textSecondary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                     elide: Text.ElideRight
                 }
             }

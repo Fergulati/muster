@@ -1,0 +1,5 @@
+{
+  "about": "A fresh install: no rooms, no invitations. Home is the first thing a person sees.",
+  "props": { "health": "ok" },
+  "steps": [ {"view": "home"}, {"shot": ""} ]
+}

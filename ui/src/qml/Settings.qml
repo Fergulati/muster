@@ -125,16 +125,14 @@ Item {
         ColumnLayout {
             id: col
             y: Theme.spacing.xlarge
-            x: (flick.width - width) / 2
-            width: Math.min(flick.width - 2 * Theme.spacing.xlarge, 560)
+            // aligned like every page (exo-720.11)
+            x: Theme.spacing.xxlarge
+            width: Math.min(flick.width - 2 * Theme.spacing.xxlarge, 720)
             spacing: Theme.spacing.large
 
-            LogosText {
-                text: qsTr("Settings")
-                color: Theme.palette.text
-                font.family: Theme.typography.publicSans
-                font.pixelSize: Theme.typography.subtitleText
-                font.weight: Theme.typography.weightBold
+            PageHeader {
+                title: qsTr("Settings")
+                subtitle: qsTr("Your identity, and the infrastructure Muster talks to. Nothing here goes to a server; there is none.")
             }
 
             // ── identity ──────────────────────────────────────────────────────
@@ -155,11 +153,10 @@ Item {
                     spacing: Theme.spacing.tiny
 
                     LogosText {
-                        text: qsTr("IDENTITY")
+                        text: qsTr("Identity")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
+                        font.pixelSize: MusterStyle.caption
+                        font.weight: Theme.typography.weightBold
                     }
 
                     Repeater {
@@ -178,16 +175,16 @@ Item {
                                 Layout.alignment: Qt.AlignTop
                                 text: modelData.k
                                 color: Theme.palette.textTertiary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                             }
                             LogosText {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WrapAnywhere
                                 text: modelData.v.length > 0 ? modelData.v : qsTr("(not loaded)")
                                 color: Theme.palette.textSecondary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                             }
                         }
                     }
@@ -195,18 +192,17 @@ Item {
                     // ── your shareable chat id ────────────────────────────────
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("YOUR CHAT ID")
+                        text: qsTr("Your chat ID")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
+                        font.pixelSize: MusterStyle.caption
+                        font.weight: Theme.typography.weightBold
                     }
                     LogosText {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         text: qsTr("Share this so someone can add you to a room. It's your two encryption keys as one string — paste it to them, or into the composer.")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -224,10 +220,10 @@ Item {
                             text: settings.chatId.length > 0 ? settings.chatId : qsTr("(not loaded)")
                             color: Theme.palette.textSecondary
                             selectionColor: Theme.palette.primary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "copyChatId"
                             text: qsTr("Copy")
                             enabled: settings.chatId.length > 0
@@ -238,11 +234,10 @@ Item {
                     // ── your Bitcoin key (exo-59c) ─────────────────────────────
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("YOUR BITCOIN KEY")
+                        text: qsTr("Your Bitcoin key")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
+                        font.pixelSize: MusterStyle.caption
+                        font.weight: Theme.typography.weightBold
                     }
                     LogosText {
                         Layout.fillWidth: true
@@ -251,7 +246,7 @@ Item {
                                  + "Bitcoin multisig). It's the public half of your authorization key, "
                                  + "compressed — the key your in-app approvals sign with.")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -266,10 +261,10 @@ Item {
                             text: String((settings.identity && settings.identity.btcPubKey) || "").replace(/^0x/i, "")
                             color: Theme.palette.textSecondary
                             selectionColor: Theme.palette.primary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "copyBtcKey"
                             text: qsTr("Copy")
                             enabled: btcKeyField.text.length > 0
@@ -284,7 +279,7 @@ Item {
                         text: qsTr("Your keys stay in the module's keystore — the client never hands them out. "
                                  + "Backup, import, and Keycard are the platform's to provide (basecamp).")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                 }
             }
@@ -307,11 +302,10 @@ Item {
                     spacing: Theme.spacing.small
 
                     LogosText {
-                        text: qsTr("INFRASTRUCTURE")
+                        text: qsTr("Infrastructure")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
+                        font.pixelSize: MusterStyle.caption
+                        font.weight: Theme.typography.weightBold
                     }
 
                     LogosText {
@@ -320,7 +314,7 @@ Item {
                         text: qsTr("Store nodes and RPC are untrusted infrastructure you choose (invariant 8). "
                                  + "Point them at your own node.")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     // ── Ethereum chains ──
@@ -334,12 +328,12 @@ Item {
                         LogosText {
                             text: qsTr("Ethereum chains  ·  from your device's chain settings (eth_rpc_module)")
                             color: Theme.palette.textSecondary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
                         RowLayout {
                             spacing: Theme.spacing.small
-                            LogosButton {
+                            ActionButton {
                                 objectName: "chainSettings"
                                 text: qsTr("Open chain settings")
                                 variant: LogosButton.Variant.Secondary
@@ -359,7 +353,7 @@ Item {
                                 visible: settings.chainNote.length > 0
                                 text: settings.chainNote
                                 color: Theme.palette.warning
-                                font.pixelSize: Theme.typography.badgeText
+                                font.pixelSize: MusterStyle.caption
                             }
                         }
                     }
@@ -373,14 +367,14 @@ Item {
                                   .arg(String((settings.s && (settings.showRpc ? settings.s.rpc
                                                                                : settings.s.rpcMasked)) || "(unset)"))
                             color: Theme.palette.textSecondary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsRpcShow"
                             visible: !!(settings.s && settings.s.rpc && settings.s.rpc !== settings.s.rpcMasked)
                             text: settings.showRpc ? qsTr("Hide") : qsTr("Show")
-                            variant: LogosButton.Variant.Tertiary
+                            variant: LogosButton.Variant.Secondary
                             onClicked: settings.showRpc = !settings.showRpc
                         }
                     }
@@ -395,9 +389,9 @@ Item {
                             objectName: "settingsRpc"
                             Layout.fillWidth: true
                             placeholderText: qsTr("new RPC URL, e.g. http://127.0.0.1:8545")
-                            font.family: Theme.typography.mono
+                            font.family: MusterStyle.mono
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsRpcSave"
                             text: qsTr("Save")
                             enabled: rpcField.text.length > 0
@@ -419,14 +413,14 @@ Item {
                                                                                   : settings.s.btcRpcMasked))
                                               || "(none — a Bitcoin payment needs one)"))
                             color: Theme.palette.textSecondary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsBtcRpcShow"
                             visible: !!(settings.s && settings.s.btcRpc && settings.s.btcRpc !== settings.s.btcRpcMasked)
                             text: settings.showBtcRpc ? qsTr("Hide") : qsTr("Show")
-                            variant: LogosButton.Variant.Tertiary
+                            variant: LogosButton.Variant.Secondary
                             onClicked: settings.showBtcRpc = !settings.showBtcRpc
                         }
                     }
@@ -441,9 +435,9 @@ Item {
                             Layout.fillWidth: true
                             // the credentials travel as Basic auth, and show above only behind Show
                             placeholderText: qsTr("your node, e.g. http://user:pass@127.0.0.1:8332")
-                            font.family: Theme.typography.mono
+                            font.family: MusterStyle.mono
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsBtcRpcSave"
                             text: qsTr("Save")
                             enabled: btcRpcField.text.length > 0
@@ -466,15 +460,15 @@ Item {
                                               || "https://testnet.lez.logos.co"))
                                   .arg(String((settings.s && settings.s.lez && settings.s.lez.chain) || "lez:testnet"))
                             color: Theme.palette.textSecondary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsLezRpcShow"
                             visible: !!(settings.s && settings.s.lez && settings.s.lez.rpc
                                         && settings.s.lez.rpc !== settings.s.lez.rpcMasked)
                             text: settings.showLezRpc ? qsTr("Hide") : qsTr("Show")
-                            variant: LogosButton.Variant.Tertiary
+                            variant: LogosButton.Variant.Secondary
                             onClicked: settings.showLezRpc = !settings.showLezRpc
                         }
                     }
@@ -488,9 +482,9 @@ Item {
                             objectName: "settingsLezRpc"
                             Layout.fillWidth: true
                             placeholderText: qsTr("your sequencer, e.g. http://127.0.0.1:3040")
-                            font.family: Theme.typography.mono
+                            font.family: MusterStyle.mono
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsLezRpcSave"
                             text: qsTr("Save")
                             enabled: lezRpcField.text.length > 0
@@ -507,8 +501,8 @@ Item {
                         text: qsTr("Delivery node config  ·  now: %1")
                               .arg(String((settings.s && settings.s.delivery) || "{}"))
                         color: Theme.palette.textSecondary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -520,9 +514,9 @@ Item {
                             objectName: "settingsDelivery"
                             Layout.fillWidth: true
                             placeholderText: qsTr("full createNode JSON, or a fleet name: 'logos.dev' or 'logos.test'")
-                            font.family: Theme.typography.mono
+                            font.family: MusterStyle.mono
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsDeliverySave"
                             text: qsTr("Save")
                             enabled: deliveryField.text.length > 0
@@ -537,13 +531,13 @@ Item {
                     // RLN membership (exo-eb6.3), so the button says so.
                     RowLayout {
                         spacing: Theme.spacing.small
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsDeliveryFleet"
                             text: qsTr("Use the logos.dev fleet")
                             variant: LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.dev")
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsDeliveryFleetTest"
                             text: qsTr("Use logos.test (needs an RLN membership)")
                             variant: LogosButton.Variant.Secondary
@@ -556,11 +550,10 @@ Item {
                     // exit that publishes it. It carries sends only, and the text says so.
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("MIXNET FOR SENDS")
+                        text: qsTr("Mixnet for sends")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
+                        font.pixelSize: MusterStyle.caption
+                        font.weight: Theme.typography.weightBold
                     }
                     LogosText {
                         objectName: "settingsMixNow"
@@ -574,24 +567,24 @@ Item {
                               + ((asked.length > 0 && asked.toLowerCase() !== (level === "off" ? "none" : level))
                                  ? qsTr("  ·  the delivery config asks for %1 itself").arg(asked) : "")
                         color: Theme.palette.textSecondary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                     }
                     RowLayout {
                         spacing: Theme.spacing.small
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsMixOff"
                             text: qsTr("Off")
                             variant: LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("mix", "off")
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsMixPreferred"
                             text: qsTr("Preferred")
                             variant: LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("mix", "preferred")
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsMixRequired"
                             text: qsTr("Required")
                             variant: LogosButton.Variant.Secondary
@@ -628,7 +621,7 @@ Item {
                         wrapMode: Text.WordWrap
                         text: String(settings.mix.remedy || "")
                         color: Theme.palette.warning
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                     LogosText {
                         Layout.fillWidth: true
@@ -640,7 +633,7 @@ Item {
                                  + "the room's topic from this node's own address. On logos.dev most mix nodes are the fleet "
                                  + "operator's, who also runs the store nodes. Applies the next time Muster starts.")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     // ── RLN membership (exo-eb6.3) ──
@@ -649,11 +642,10 @@ Item {
                     // funded, so the one thing shown to act on is that payer, whole, to copy.
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("RLN MEMBERSHIP")
+                        text: qsTr("RLN membership")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
+                        font.pixelSize: MusterStyle.caption
+                        font.weight: Theme.typography.weightBold
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -684,7 +676,7 @@ Item {
                         wrapMode: Text.WordWrap
                         text: String(settings.rln.remedy || "")
                         color: Theme.palette.warning
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -700,10 +692,10 @@ Item {
                             text: String(settings.rln.payer || "")
                             color: Theme.palette.textSecondary
                             selectionColor: Theme.palette.primary
-                            font.family: Theme.typography.mono
-                            font.pixelSize: Theme.typography.badgeText
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "copyRlnPayer"
                             text: qsTr("Copy payer")
                             onClicked: { rlnPayerField.selectAll(); rlnPayerField.copy(); rlnPayerField.deselect(); }
@@ -715,7 +707,7 @@ Item {
                         text: qsTr("On logos.test every message carries an RLN proof, so a node sends nothing until "
                                  + "it has an active membership, funded on the registry's own zone. logos.dev runs no RLN.")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     // ── EVM keystore (exo-149.1 K1) ──
@@ -724,11 +716,10 @@ Item {
                     // whether it is there and whether it sees muster's requests as muster's.
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("EVM KEYSTORE")
+                        text: qsTr("EVM keystore")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
-                        font.weight: Theme.typography.weightMedium
+                        font.pixelSize: MusterStyle.caption
+                        font.weight: Theme.typography.weightBold
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -759,7 +750,7 @@ Item {
                         wrapMode: Text.WordWrap
                         text: String(settings.keystore.remedy || "")
                         color: Theme.palette.warning
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                     // exo-d4d.2: muster never makes keys. Creating, importing and backing up an
                     // account is the platform keystore app's (evm_keystore_ui), reached by
@@ -767,7 +758,7 @@ Item {
                     RowLayout {
                         visible: (settings.keystore.identity || {}).kind === "module"
                         spacing: Theme.spacing.small
-                        LogosButton {
+                        ActionButton {
                             objectName: "keystoreManage"
                             text: (settings.keystore.accounts || []).length === 0
                                   ? qsTr("Create or import an account") : qsTr("Manage accounts")
@@ -789,7 +780,7 @@ Item {
                             visible: settings.manageNote.length > 0
                             text: settings.manageNote
                             color: Theme.palette.warning
-                            font.pixelSize: Theme.typography.badgeText
+                            font.pixelSize: MusterStyle.caption
                         }
                     }
                     Repeater {
@@ -811,11 +802,11 @@ Item {
                                       + (acctRow.modelData.label ? acctRow.modelData.label + "  " : "")
                                       + (acctRow.modelData.wallet ? "(" + acctRow.modelData.wallet + ")  " : "")
                                       + acctRow.modelData.address
-                                color: acctRow.chosen ? Theme.palette.textPrimary : Theme.palette.textSecondary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                color: acctRow.chosen ? Theme.palette.text : Theme.palette.textSecondary
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                             }
-                            LogosButton {
+                            ActionButton {
                                 objectName: "keystoreUse"
                                 visible: !acctRow.chosen && settings.keystore.on === true
                                 text: qsTr("Use for approvals")
@@ -845,26 +836,26 @@ Item {
                                 : qsTr("The account is not linked to your identity yet. Ask for the link, then approve it in the Logos Signer (%1).").arg(settings.signerPackage)
                         }
                         color: settings.keystore.binding === "valid" ? Theme.palette.textTertiary : Theme.palette.warning
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                     // what to do about it: open the request, ask again, install the signer (exo-dcc.27)
                     Flow {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         visible: !!settings.keystore.selected && settings.keystore.binding !== "valid"
-                        LogosButton {
+                        ActionButton {
                             objectName: "keystoreOpenSigner"
                             visible: settings.bindingWaiting
                             text: qsTr("Open the request in the Signer")
                             onClicked: settings.openSignerRequested(String(settings.bindingRequest.handle || ""))
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "keystoreAskAgain"
                             visible: !settings.bindingWaiting
                             text: qsTr("Ask again")
                             onClicked: if (settings.backend) settings.backend.keystoreSelect(String(settings.keystore.selected))
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "keystoreInstallSigner"
                             text: qsTr("Install the Logos Signer")
                             variant: LogosButton.Variant.Secondary
@@ -883,7 +874,7 @@ Item {
                                  : qsTr("Installing the Logos Signer did not start (%1).").arg(String(settings.signerInstall.error || st));
                         }
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
 
                     LogosText {
@@ -893,7 +884,7 @@ Item {
                         text: qsTr("RPC applies to the wallet/Safe path on next use; delivery config applies the "
                                  + "next time Muster starts (one node per run). Saved beside your keystore (settings.json), so they survive a restart; inside basecamp the platform's own settings are the eventual home.")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: Theme.typography.badgeText
+                        font.pixelSize: MusterStyle.caption
                     }
                 }
             }
@@ -920,8 +911,8 @@ Item {
                     LogosText {
                         text: qsTr("ABOUT & LEGAL")
                         color: Theme.palette.textTertiary
-                        font.family: Theme.typography.mono
-                        font.pixelSize: Theme.typography.badgeText
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightMedium
                     }
                     LogosText {

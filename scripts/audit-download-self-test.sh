@@ -90,9 +90,10 @@ check $([ -n "$DIGEST" ] && [ -n "$MD" ] && grep -q "$DIGEST" "$MD" && echo 1 ||
 
 # ── the button is wired to that slot ──────────────────────────────────────────
 WIRED=0
-grep -q 'objectName: "cardDownloadAudit"' ui/src/qml/MusterCard.qml &&
-  grep -q 'onClicked: cardRoot.downloadAudit()' ui/src/qml/MusterCard.qml &&
-  grep -q 'onDownloadAudit: if (room.backend && msg.liveIntent) room.backend.downloadAudit(' ui/src/qml/Room.qml &&
+# wherever the card and the thread live in ui/src/qml (the room was split into files, exo-720.3)
+grep -rq 'objectName: "cardDownloadAudit"' ui/src/qml/ &&
+  grep -rq 'onClicked: cardRoot.downloadAudit()' ui/src/qml/ &&
+  grep -rq 'onDownloadAudit: if (room.backend && msg.liveIntent) room.backend.downloadAudit(' ui/src/qml/ &&
   grep -q 'SLOT(void downloadAudit(const QString &intentId))' ui/src/muster_ui.rep && WIRED=1
 check "$WIRED" "the card's Download audit trail button calls backend.downloadAudit"
 

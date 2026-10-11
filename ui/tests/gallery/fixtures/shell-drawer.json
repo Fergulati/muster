@@ -1,0 +1,21 @@
+{
+  "about": "Under 900 px the sidebar is a drawer: the strip's menu opens it over the room (exo-720.6).",
+  "snapshot": "data/split-bob-agreed.json",
+  "sizes": [
+    "800x700"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "shot": "closed"
+    },
+    {
+      "click": "sidebarOpen"
+    },
+    {
+      "shot": "open"
+    }
+  ]
+}

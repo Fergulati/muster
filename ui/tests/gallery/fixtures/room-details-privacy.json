@@ -1,0 +1,29 @@
+{
+  "about": "Room details \u203a Privacy: who can see what (exo-720.8).",
+  "snapshot": "data/split-bob-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "privacy"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

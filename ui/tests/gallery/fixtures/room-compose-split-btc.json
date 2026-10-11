@@ -1,0 +1,25 @@
+{
+  "about": "The composer on Split, in Bitcoin (btc-split).",
+  "snapshot": "data/split-alice-final.json",
+  "props": {
+    "policyJson": {
+      "policy": "btc-split",
+      "kind": "btc-split",
+      "account": ""
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "click": "roomKindSplit"
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

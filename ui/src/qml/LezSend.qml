@@ -91,18 +91,12 @@ Item {
 
         ColumnLayout {
             id: col
+            // under the Wallet's header (Main.qml), aligned with it (exo-720.11)
             y: Theme.spacing.xlarge
-            x: (flick.width - width) / 2
-            width: Math.min(flick.width - 2 * Theme.spacing.xlarge, 560)
+            x: Theme.spacing.xxlarge
+            width: Math.min(flick.width - 2 * Theme.spacing.xxlarge, 640)
             spacing: Theme.spacing.large
 
-            LogosText {
-                text: qsTr("Send λ on Logos")
-                color: Theme.palette.text
-                font.family: Theme.typography.publicSans
-                font.pixelSize: Theme.typography.subtitleText
-                font.weight: Theme.typography.weightBold
-            }
             LogosText {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -110,7 +104,7 @@ Item {
                          + "for the recipient's address and send. What they share decides how "
                          + "much is revealed.")
                 color: Theme.palette.textTertiary
-                font.pixelSize: Theme.typography.badgeText
+                font.pixelSize: MusterStyle.caption
             }
 
             // ── your addresses to be paid ──────────────────────────────────────
@@ -118,13 +112,12 @@ Item {
                 Layout.fillWidth: true
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("YOUR ADDRESSES — SHARE ONE TO BE PAID")
+                    text: qsTr("Your addresses — share one to be paid")
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
-                    font.weight: Theme.typography.weightMedium
+                    font.pixelSize: MusterStyle.caption
+                    font.weight: Theme.typography.weightBold
                 }
-                LogosButton {
+                ActionButton {
                     text: qsTr("Refresh")
                     variant: LogosButton.Variant.Secondary
                     onClicked: lez.refresh()
@@ -142,8 +135,8 @@ Item {
                          + "to use the funded demo wallet, or check the sequencer/network.")
                     .arg(lez.lezError)
                 color: Theme.palette.warning
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
             }
             LogosText {
                 visible: lez.lezError.length === 0 && lez.lezAccounts.length === 0
@@ -191,8 +184,8 @@ Item {
                                 readonly property string bal: lez.balanceOf(shareRow.modelData.id)
                                 text: bal.length > 0 ? qsTr("balance: %1").arg(bal) : qsTr("balance: —")
                                 color: Theme.palette.textSecondary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                             }
                         }
                         LogosText {
@@ -200,7 +193,7 @@ Item {
                             wrapMode: Text.WordWrap
                             text: lez.shareHint(shareRow.form)
                             color: shareRow.form === "shielded" ? Theme.palette.success : Theme.palette.textTertiary
-                            font.pixelSize: Theme.typography.badgeText
+                            font.pixelSize: MusterStyle.caption
                         }
                         RowLayout {
                             Layout.fillWidth: true
@@ -213,10 +206,10 @@ Item {
                                 wrapMode: TextEdit.WrapAnywhere
                                 text: shareRow.share
                                 color: Theme.palette.textSecondary
-                                font.family: Theme.typography.mono
-                                font.pixelSize: Theme.typography.badgeText
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
                             }
-                            LogosButton {
+                            ActionButton {
                                 text: qsTr("Copy")
                                 variant: LogosButton.Variant.Secondary
                                 onClicked: { shareField.selectAll(); shareField.copy(); }
@@ -230,8 +223,8 @@ Item {
             LogosText {
                 text: qsTr("SEND")
                 color: Theme.palette.textTertiary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
                 font.weight: Theme.typography.weightMedium
             }
             // which of your accounts funds it (public or shielded — sets the rail)
@@ -241,12 +234,12 @@ Item {
                 LogosText {
                     text: qsTr("from")
                     color: Theme.palette.textTertiary
-                    font.family: Theme.typography.mono
-                    font.pixelSize: Theme.typography.badgeText
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
                 }
                 Repeater {
                     model: lez.lezAccounts
-                    delegate: LogosButton {
+                    delegate: ActionButton {
                         required property var modelData
                         text: lez.formLabel(String(modelData.form || ""))
                         variant: lez.fromId === String(modelData.id || "")
@@ -260,7 +253,7 @@ Item {
                 objectName: "lezDest"
                 Layout.fillWidth: true
                 placeholderText: qsTr("their LEZ address — a public id, or priv:npk:vpk")
-                font.family: Theme.typography.mono
+                font.family: MusterStyle.mono
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -270,10 +263,10 @@ Item {
                     objectName: "lezAmount"
                     Layout.fillWidth: true
                     placeholderText: qsTr("amount (base units)")
-                    font.family: Theme.typography.mono
+                    font.family: MusterStyle.mono
                     validator: IntValidator { bottom: 0 }
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "lezPreviewButton"
                     text: qsTr("Preview")
                     enabled: lez.fromId.length > 0 && destField.text.length > 0 && amtField.text.length > 0
@@ -300,11 +293,11 @@ Item {
                            .arg(String(p.rail || "?")).arg(what).arg(String(p.note || ""));
                 }
                 color: (lez.preview && lez.preview.error !== undefined) ? Theme.palette.warning : Theme.palette.textSecondary
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
             }
 
-            LogosButton {
+            ActionButton {
                 objectName: "lezSendButton"
                 text: qsTr("Send")
                 enabled: lez.fromId.length > 0 && destField.text.length > 0 && amtField.text.length > 0
@@ -325,8 +318,8 @@ Item {
                            .arg(String(r.rail || "?")).arg(String(r.txId || ""));
                 }
                 color: (lez.sendResult && lez.sendResult.error !== undefined) ? Theme.palette.warning : Theme.palette.success
-                font.family: Theme.typography.mono
-                font.pixelSize: Theme.typography.badgeText
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.caption
             }
         }
     }

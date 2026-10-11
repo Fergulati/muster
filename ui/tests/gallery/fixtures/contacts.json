@@ -1,0 +1,5 @@
+{
+  "about": "The address book.",
+  "snapshot": "data/split-alice-final.json",
+  "steps": [ {"view": "contacts"}, {"shot": ""} ]
+}
