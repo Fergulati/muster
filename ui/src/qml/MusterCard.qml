@@ -142,6 +142,8 @@ Rectangle {
     signal deny()
     // Save this intent's signature-audit file + report (exo-403).
     signal downloadAudit()
+    // "Who sees this?" (exo-720.10): the room opens its Privacy tab — who can see what
+    signal whoSees()
     // The outcome of the last download for THIS intent, set by the room ("" = none yet).
     property string auditStatus: ""
     // Share one of MY holdings to fill a slot this proposal asks of me (the "From you"
@@ -847,6 +849,13 @@ Rectangle {
 
             // Download audit trail (exo-403): one self-verifying file of everything this
             // intent's approvals cover, plus a readable report generated from it.
+            ActionButton {
+                objectName: "cardWhoSees"
+                quiet: true
+                visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+                text: qsTr("Who sees this?")
+                onClicked: cardRoot.whoSees()
+            }
             ActionButton {
                 quiet: true
                 objectName: "cardDownloadAudit"

@@ -1,6 +1,6 @@
 # Modernizing Muster's UI: a chat client first, the lifecycle on demand
 
-**Status:** plan agreed 2026-10-09 (§6). Done: U0b, U0c, U1 (style, components), U2 (the sidebar), U3 (the room's chrome), U4 (room details in a drawer); U0a done in the runner (Basecamp and the Nim host still to check). Next: U5 (proposing in sheets), U6 (compact cards), U7, U8. §7 has what each slice found.
+**Status:** plan agreed 2026-10-09 (§6). U0b–U8 built (2026-10-09/11), each checked in the gallery and, for what the gallery cannot show, in the real runner; U0a done in the runner, with Basecamp 0.3.2 and the Nim host still to check. §7–§9 record what each slice found and what was deferred.
 **Reads with:** `docs/01-furps.md` (U-1 to U-10), `ui/prototype/coordination-prototype-v2.html` (the reference build), `docs/labbook/qml-errors-are-invisible-to-nix-build.md`, `docs/design/seaqt-ui.md` (the QML is kept when the backend moves to Nim, so this work carries over).
 
 ## 1. What was asked
@@ -250,3 +250,31 @@ Details, and the traps behind them: `docs/labbook/screenshots-of-the-qml-that-ho
   - Privacy filtered to one proposal, and a card's own "Who sees this?" (U6);
   - which labels are monospace (the surface slices decide).
 - **Not yet checked:** all of this in Basecamp 0.3.2, and in the Nim host.
+
+## 9. U5–U8 as built (2026-10-11), and where today's right panel went
+
+- **U5.** "+" opens `RoomActionPicker`: Payment, Split a bill, Request a payment, Statement, Call a module. Each tile carries the old kind button's objectName. The chosen form opens in a titled panel above the message row, scrolling within about half the room. What came of a proposal, a payment or an approval is an `InlineNotice` with its remedies. It can be dismissed, and it comes back when a new outcome changes it (exo-408 #7).
+- **U6.** A card has a header (the kind's icon, the heading, a `StatusPill`) and one wrapping row of actions. The action that moves the card forward is Primary; Deny, Who sees this? and Download audit trail are quiet. Labels are in the body face, and monospace is for data only.
+- **U7.** Every page opens with a `PageHeader`, aligned with the sidebar: Needs you (grouped by what it asks of you), Wallet (the Balances and Send on LEZ tabs), Contacts, Learn, Settings, Start something. Decision §6.3 needed no new switch: the local test Safe already shows only where the local dev chain answers.
+- **U8.** Ctrl+K opens a room switcher (type to filter, ↑ ↓, Enter), and so does the sidebar's "Jump to…". Esc closes the drawer, else the proposal panel. ActionButton has a focus ring. Pill text clears AA (needs 5.7:1, info 6.1:1, where they were 4.4 and 3.8). These were verified in the real runner after three focus fixes: Main is the default key receiver, LogosTextField's inner input takes focus, and the switcher takes focus when it opens.
+- **ui-lint.sh** now also catches a property bound twice in one object, which qmllint misses. That error fails the whole document at runtime, and it blanked every view once.
+
+**Where each fact on today's right panel lives now** (§5's check before U4 merges):
+
+| Shown in the old column | Where it is now, one click from the room |
+|---|---|
+| Connections: delivery, RPC, each with level and what introduced it | The header's dot and its popover; a banner when one is down |
+| Accounts disclosed into the room, and the forms to add one | Room details › Accounts. A no-account refusal opens it. |
+| Room history | Room details › History, and ⋯ › Room history |
+| Who can see what | Room details › Privacy; the scope line's "Who can see what"; each card's "Who sees this?" |
+| Security level (three axes, real or null) | Room details › People |
+| The roster, and the scope line "end-to-end · N can read" | The header's faces (→ People); the scope line under the composer, always on screen (U-1) |
+| Join requests and Admit | A notice in the conversation with Admit, a dot on the header's faces, and Room details › People |
+| The room code, Rename, Leave | Invite; a click on the title; ⋯ |
+
+**Still deferred:**
+- membership seams in the thread (U-6);
+- Privacy filtered to one proposal (FlowView has no filter yet: "Who sees this?" opens the whole room's view);
+- a compact card body with its explanations behind one Details;
+- checking all of this in Basecamp 0.3.2 and in the Nim host;
+- `exo-c4f` ("Propose is off until  runs here.").

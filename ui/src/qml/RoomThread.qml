@@ -140,6 +140,7 @@ Rectangle {
                     }
                     onDeny: if (room.backend && msg.liveIntent) room.backend.declineInRoom(String(msg.liveIntent.id || ""))
                     onDownloadAudit: if (room.backend && msg.liveIntent) room.backend.downloadAudit(String(msg.liveIntent.id || ""))
+                    onWhoSees: room.openDetails("privacy")
                     auditStatus: msg.liveIntent ? room.auditStatusFor(String(msg.liveIntent.id || "")) : ""
                     // Share one of my holdings to fill a slot (the "From you" picker, K6):
                     // the module publishes only the chosen PUBLIC face (s1).
