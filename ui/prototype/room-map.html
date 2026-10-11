@@ -275,7 +275,7 @@ const INTENTS = {
      detail:"Three shares of 0.0104 ETH to Bob's shared address. Bob agrees as creditor; each debtor agrees and pays their own share.", slots:["bob","you","alice","carol"], need:4, parts:["you","alice","carol"]},
 };
 const G = {
-  message:"Sealed to the room's epoch. A member placed it; the author is what the sender wrote, not a verified signature.",
+  message:"Sealed to the room's epoch and signed by its author, bound to this room. The room's views read it only if that signature verifies.",
   propose:"Sealed to the room's epoch: only a member could have placed it. Every client re-derives the materialization (F-4).",
   policy:"Sealed to the room's epoch; every member folds the identical driver (invariant 6).",
   context:"Every attestation commits to it, so an approval is worthless in any other environment, account, slot, or after expiry (invariant 2).",

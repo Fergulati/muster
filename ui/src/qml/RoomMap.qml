@@ -146,10 +146,23 @@ Rectangle {
 
     // ── the graph, as far as the timeline has replayed it ────────────────────
     readonly property var allNodes: graph && graph.nodes ? graph.nodes : []
+    // the timeline's ticks: one per entry, or past 400 entries one per bucket of entries
+    // (blue if anything in the bucket left the room)
+    readonly property var ticks: {
+        var n = replayOrder.length, out = [];
+        var b = n > 400 ? Math.ceil(n / 400) : 1;
+        for (var i = 0; i < n; i += b) {
+            var left = false;
+            for (var j = i; j < Math.min(n, i + b); j++) if (leftAt[replayOrder[j].seq]) left = true;
+            out.push({ at: i, out: left, cls: String((replayOrder[i].attrs || {}).cls || "") });
+        }
+        return out;
+    }
     readonly property var epochBands: {
         var out = [], eps = graph && graph.epochs ? graph.epochs : [];
         for (var i = 0; i < replayOrder.length; i++) {
             var ep = replayOrder[i].epoch;
+            if (i < logLo || i > logHi) continue;
             if (out.length > 0 && out[out.length - 1].epoch === ep) continue;
             var who = "";
             for (var j = 0; j < eps.length; j++) if (Number(eps[j].epoch) === ep) who = String(eps[j].admitted || "");
@@ -184,12 +197,26 @@ Rectangle {
         return "";
     }
     function shownAt(n) { return rank(n.seq) <= map.k; }
+    // G7: past logWindow entries the Log lens shows the window around the replay point,
+    // so a long room never draws thousands of delegates at once
+    readonly property int logWindow: 240
+    readonly property int logLo: replayOrder.length > logWindow ? Math.max(0, Math.min(k - logWindow / 2, replayOrder.length - logWindow)) : 0
+    readonly property int logHi: replayOrder.length > logWindow ? logLo + logWindow - 1 : Math.max(0, replayOrder.length - 1)
+    // the log positions where something left the room, for the entry rings and ticks
+    readonly property var leftAt: {
+        var m = {};
+        for (var i = 0; i < allEdges.length; i++) if (allEdges[i].kind === "leaves") m[allEdges[i].seq] = true;
+        return m;
+    }
     readonly property var visibleNodes: {
         var out = [];
         for (var i = 0; i < allNodes.length; i++) {
             var n = allNodes[i];
             if (!shownAt(n)) continue;
-            if (lens === "log") { if (n.kind === "entry") out.push(n); continue; }
+            if (lens === "log") {
+                if (n.kind === "entry" && rank(n.seq) >= logLo && rank(n.seq) <= logHi) out.push(n);
+                continue;
+            }
             if (lens === "prov") {
                 if (n.id === "i:" + provIntent) out.push(n);
                 else if (n.kind === "entry" && String((n.attrs || {}).intent || "") === provIntent
@@ -309,14 +336,14 @@ Rectangle {
             var lanes = { "": 150 }, li = intentIds.length;
             var dy = li > 0 ? Math.min(110, 400 / li) : 0;
             for (i = 0; i < li; i++) lanes[intentIds[i].slice(2)] = 270 + i * dy;
-            var span = Math.max(1, seqMax);
+            var span = Math.max(1, logHi - logLo);
             for (i = 0; i < visibleNodes.length; i++) {
                 n = visibleNodes[i];
                 var kd = String((n.attrs || {}).kind || "");
                 var lane = lanes[String((n.attrs || {}).intent || "")];
                 if (lane === undefined) lane = 150;
                 var drop = (kd === "attest" || kd === "part-confirmed" || kd === "binding") ? 26 : 0;
-                pos[n.id] = { x: 60 + rank(n.seq) * 890 / span, y: lane + drop };
+                pos[n.id] = { x: 60 + (rank(n.seq) - logLo) * 890 / span, y: lane + drop };
             }
             return pos;
         }
@@ -524,7 +551,7 @@ Rectangle {
                 delegate: Item {
                     required property var modelData
                     required property int index
-                    readonly property real x0: 60 + Number(modelData.fromRank) * 890 / Math.max(1, map.seqMax) - 12
+                    readonly property real x0: 60 + Math.max(0, Number(modelData.fromRank) - map.logLo) * 890 / Math.max(1, map.logHi - map.logLo) - 12
                     x: x0; y: 70; width: 1000 - x0; height: 560
                     Rectangle { anchors.fill: parent; color: index % 2 ? MusterStyle.neutralSoft : "transparent"; opacity: 0.5 }
                     Rectangle { width: 1; height: parent.height; color: Theme.palette.borderSubtle }
@@ -845,11 +872,7 @@ Rectangle {
         }
         return 10;
     }
-    function entryLeft(n) {
-        for (var i = 0; i < allEdges.length; i++)
-            if (allEdges[i].kind === "leaves" && allEdges[i].seq === n.seq) return true;
-        return false;
-    }
+    function entryLeft(n) { return map.leftAt[n.seq] === true; }
     function actorName(id) {
         id = String(id || "");
         if (id.indexOf("m:") === 0) return memberName(id);
@@ -1142,16 +1165,14 @@ Rectangle {
                         color: Theme.palette.surfaceRecessed; border.color: Theme.palette.border
                     }
                     Repeater {
-                        model: map.allNodes
+                        model: map.ticks
                         delegate: Rectangle {
                             required property var modelData
-                            visible: modelData.kind === "entry"
-                            readonly property bool out: visible && map.entryLeft(modelData)
-                            x: (map.readFrom > 0 ? 14 : 0) + map.rank(modelData.seq) * (track.width - (map.readFrom > 0 ? 14 : 0)) / Math.max(1, map.seqMax) - 2
-                            y: out ? 2 : 8
-                            width: 4; height: out ? 26 : 16; radius: 1.5
-                            color: out ? MusterStyle.info : map.clsColor(String((modelData.attrs || {}).cls || ""))
-                            opacity: map.rank(modelData.seq) <= map.k ? 1 : 0.25
+                            x: (map.readFrom > 0 ? 14 : 0) + modelData.at * (track.width - (map.readFrom > 0 ? 14 : 0)) / Math.max(1, map.seqMax) - 2
+                            y: modelData.out ? 2 : 8
+                            width: map.replayOrder.length > 400 ? 2 : 4; height: modelData.out ? 26 : 16; radius: 1
+                            color: modelData.out ? MusterStyle.info : map.clsColor(modelData.cls)
+                            opacity: modelData.at <= map.k ? 1 : 0.25
                         }
                     }
                     Rectangle {
