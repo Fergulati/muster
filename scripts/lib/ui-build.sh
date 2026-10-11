@@ -69,11 +69,15 @@ ui_local_config() {
   python3 - "${1:-}" <<'EOF'
 import json, socket, sys
 s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+import tempfile
 hub = sys.argv[1]
 cfg = {"logLevel": "INFO", "listenAddress": "127.0.0.1", "tcpPort": port, "clusterId": 198,
        "numShardsInNetwork": 1, "relay": True, "store": not hub, "filter": False,
        "lightpush": False, "peerExchange": False, "discv5Discovery": False,
        "reliabilityEnabled": True}
+if not hub:
+    # the store's database in a scratch directory, never the runner's working directory
+    cfg["storeMessageDbUrl"] = "sqlite://" + tempfile.mkdtemp(prefix="muster-local-store-") + "/store.sqlite3"
 if hub:
     cfg["staticnodes"] = [hub]
     cfg["entryNodes"] = [hub]   # the hub's store: muster's catch-up peer (node_config.nim)

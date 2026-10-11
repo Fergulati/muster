@@ -14,6 +14,7 @@ import ../../src/drivers/driver
 import ../../src/drivers/manifest
 import ../../src/wallet/material
 import ../../src/intents/disclosure
+import ./oracle_emit
 
 let desc = DriverDescriptor(rounds: 1, threshold: 2,
                             finality: finExternal, serializationDomain: "eip712.safe.v1.4.1")
@@ -36,6 +37,7 @@ proc nextR(): uint64 = (rngState = rngState * 6364136223846793005'u64 + 14426950
 let baseline = $recipientOffers(m.requirements, myCat, m)
 var invariantHeld = true
 var otherTokensSeen = 0
+var observations: seq[JsonNode]   # one per trial: the trace the oracle reads (exo-3f2)
 const trials = 200
 
 for t in 0 ..< trials:
@@ -56,13 +58,16 @@ for t in 0 ..< trials:
   if $mine != baseline: invariantHeld = false
   # No other member's public/handle can appear in my offers.
   let s = $mine
+  var leakedHere = false
   for mat in theirs:
-    if s.contains(mat.public) or s.contains(mat.handle): inc otherTokensSeen
+    if s.contains(mat.public) or s.contains(mat.handle):
+      inc otherTokensSeen
+      leakedHere = true
+  observations.add flag("offers_independent_of_others", $mine == baseline and not leakedHere)
 
-let offersIndependentOfOthers = invariantHeld and otherTokensSeen == 0
-echo %*{"trials": trials, "invariantHeld": invariantHeld, "otherTokensSeen": otherTokensSeen,
-        "offers_independent_of_others": offersIndependentOfOthers}
+# stdout is the oracle's: one trace of one observation per trial (exo-3f2)
+emitTrials(observations)
 
 doAssert invariantHeld, "my offers changed when another member's catalogue changed"
 doAssert otherTokensSeen == 0, "another member's material appeared in my offers"
-echo "probe_offers_about_me_only: OK (", trials, " trials, offers invariant to others, nothing leaked)"
+stderr.writeLine "probe_offers_about_me_only: OK (", trials, " trials, offers invariant to others, nothing leaked)"

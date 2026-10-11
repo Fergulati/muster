@@ -31,3 +31,5 @@ ui/flake.lock
 module/.probe-env/
 __pycache__/
 _site/
+# a local delivery hub's store database, should one land in the working directory
+store.sqlite3*

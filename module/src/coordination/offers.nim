@@ -79,7 +79,13 @@ proc offersFor*(reqs: seq[Requirement], cat: seq[Material], m: ActionManifest,
       result.add Offer(requirement: r, candidates: @[], status: osUnknown)
       continue
     var cands: seq[OfferCandidate]
-    let rows = m.rowsForField(r.needs.field)
+    # Choosing material is choosing observers (rule s6): sharing it shows its public face
+    # to the room at once (the flow's material row), and the manifest's rows for its field
+    # are who else sees it once it leaves. The promise is both, so it equals the record.
+    var rows: seq[DisclosureRow]
+    if r.needs.field.len > 0: rows.add row(r.needs.field, obRoomMember)
+    for d in m.rowsForField(r.needs.field):
+      if d notin rows: rows.add d
     for mat in cat:
       if mat.class == r.needs.class and targetMatches(r, mat):
         cands.add OfferCandidate(material: mat.disclosable(), grade: mat.grade, discloses: rows)
