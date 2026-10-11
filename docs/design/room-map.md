@@ -137,8 +137,7 @@ Each slice's accept criteria become a test before the code (working agreement).
 
 ## 9. What is not true yet
 
-- **Replay is not chronology.** `session.publish` sets no parents, so most events are roots, and canonical order sorts roots by content id. Within an epoch, the timeline's order is the log's, not the order things happened; the timeline says so. Making replay mean "how it happened" is designed in [causal-parents.md](causal-parents.md) (exo-655): each event carries `after`, the heads its publisher had seen, outside its identity and outside every fold, so ids, the provenance record, the audit and state are untouched and only views reorder.
-- **A proposal's state is the end state.** The graph gives each intent its state at the end of the log; while replaying, its pill reads "Now: …". A per-step state needs the fold to emit each intent's state after each of its entries, which only means something once replay order does.
+- **Replay order is what members saw** (exo-655, `docs/design/causal-parents.md`). Each event carries `after`, the heads its publisher had seen, and the map replays by `causalOrder`; each proposal's state is shown as of the replay point. Until `after` is signed (C5) a member could reorder what the map shows, never what the room agreed to, so the timeline says "in the order members saw them". Events from clients before this change replay in content-id order among themselves.
 - **G6 in the Nim host** and on a display are not checked yet; the gallery covers the C++ host offscreen.
 - **The sealed count.** The session drops envelopes it cannot open, so the map says "sealed to you" without a number.
 

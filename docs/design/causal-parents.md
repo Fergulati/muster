@@ -1,6 +1,6 @@
 # Causal order: events that say what they followed (exo-655, epic exo-dde)
 
-**Status:** proposal, 2026-10-11. Nothing built.
+**Status:** C1–C4 built 2026-10-11, with §5's decisions as recommended (an annotation outside identity; unsigned for now; the room map and the activity feed move to causal order). C5 (signing `after`) is later. Tests: `causal_order_test`, `after_state_test`, `causal_publish_test`, `room_graph_test` §11.
 **Reads with:** [room-map.md](room-map.md) §9 (why replay is not chronology yet); `log/log.nim` (the log and its order); `coordination/attest.nim` and `coordination/audit.nim` (the code that relies on `parents` as it is); spec `derived-exo-403` (the audit file).
 **Paths:** short paths are under `module/src/`.
 
@@ -60,7 +60,7 @@ The room map, its replay and the activity feed move to `causalOrder`. Folds, sig
 
 `publish` stamps `after` and keeps everything else:
 
-- **A new event:** `after` = the heads of the log, meaning events no other held event names through `parents` or `after`. At most 8; past that, the 8 with the largest causal rank, which in practice never happens. Callers keep setting `parents` exactly as now.
+- **A new event:** `after` = the heads of the log, meaning events no other held event names through `parents` or `after` (`Log.heads`). At most 8; past that, the 8 latest in causal order, which in practice never happens. Callers keep setting `parents` exactly as now.
 - **An event the log already holds** (same id): re-seal the **stored** copy, with its original `after`. Re-announce then carries the true order to a joiner instead of a fresh one. This also covers the second submit and re-proposing the same effect.
 - **Author-signed events:** `claimOf` signs `parents`, not `after`. So `publishAuthored` signs as now and `publish` stamps `after` afterwards, without breaking the signature. §5 covers whether `after` should be signed.
 
@@ -99,7 +99,15 @@ Each slice's acceptance becomes a test before the code.
 | **C4** | the room graph replays by `causalOrder`; each intent's state per step; the activity feed in causal order | `room_graph_test`: replay order follows causality in a two-member run; an intent's state at each step equals `reduceIntentViews` of the causal prefix; the map's "Now:" pill is gone |
 | **C5** (optional) | `after` signed on author-bearing kinds (claim v2) | `authorship_test`: a re-published author-signed copy with a changed `after` no longer verifies |
 
-## 7. What could go wrong
+## 7. As built
+
+- `log.nim`: `Event.after`, `afterDigest` / `keep` (the copy kept per id), `causalOrder`, `Log.find`, `Log.heads`. `Log.ingest` replaces a held copy only with the one `keep` chooses.
+- `session.nim`: `publish` re-seals the stored copy of a held event, else stamps `Log.heads()`; `encodeEvent` writes `after` only when non-empty, `decodeEvent` reads it.
+- `room_graph.nim`: positions are causal; each intent carries `steps`, its state and approvals after each of its entries (the fold over the causal prefix, kept where they change). The fold's cost is quadratic in the log; G7 bounds it.
+- `intents.nim` `reduceActivity`: sorts by causal position; `seq` stays canonical.
+- `RoomMap.qml`: replays by causal position, shows each proposal's state at the replay point, and says "in the order members saw them" (until C5).
+
+## 8. What could go wrong
 
 - **A large `after`.** Concurrency is low in a room, and the cap is 8. A log of thousands of events adds about 1–3 ids per event on the wire, inside the sealed envelope.
 - **A misleading order from a hostile member.** Bounded by §3's rule: views only, never state. Until C5, the timeline should say "in the order members saw them".
