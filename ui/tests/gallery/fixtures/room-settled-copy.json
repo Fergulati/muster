@@ -1,0 +1,15 @@
+{
+  "about": "A settled transaction's hash can be selected, and Copy hash copies it (seen 2026-10-11: it could not be highlighted).",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": ["1440x900"],
+  "props": {"roomSubmitJson": {"id": "0xa566cea2c7c46cff", "onchain": "final", "txHash": "0x4b1d8e0a3c5f27e9d6b0a1c2e3f4a5b6c7d8e9f00112233445566778899aabbc"}},
+  "steps": [
+    {"view": "room"},
+    {"expectProp": ["roomOutcomeText", "text", "~0x4b1d8e0a3c5f27e9"]},
+    {"expectProp": ["roomOutcomeText", "selectByMouse", true]},
+    {"expectProp": ["roomCopyTx", "visible", true]},
+    {"click": "roomCopyTx"},
+    {"expectProp": ["roomCopyTx", "text", "✓ Copied"]},
+    {"shot": ""}
+  ]
+}

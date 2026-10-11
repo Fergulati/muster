@@ -1,0 +1,11 @@
+{
+  "about": "The + opens the action picker as wide as the composer allows, up to 560 px: its own parent is the 40 px button (seen 2026-10-11, a picker as narrow as the button).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": ["1440x900", "1024x700"],
+  "steps": [
+    {"view": "room"},
+    {"click": "roomProposeButton"},
+    {"expectProp": ["roomActionPicker", "width", 560]},
+    {"shot": ""}
+  ]
+}
