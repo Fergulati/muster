@@ -61,260 +61,259 @@ Item {
         return n;
     }
 
-    // The state band down the left of each row: the accent when it wants you,
-    // green when it is done, a muted line otherwise — read at a glance without
-    // parsing the words.
-    function bandColor(state) {
-        if (state === "needs")
-            return Theme.palette.warning;
-        if (state === "settled")
-            return Theme.palette.success;
-        return Theme.palette.borderSubtle;
-    }
+    // the groups, in the order they are read: what waits on you first (F-18)
+    readonly property var groups: [
+        { state: "needs", title: qsTr("Waits on you"), hot: true },
+        { state: "waiting", title: qsTr("Waiting on others"), hot: false },
+        { state: "settled", title: qsTr("Settled"), hot: false },
+        { state: "idle", title: qsTr("Quiet rooms"), hot: false }
+    ]
+    function rowsIn(state) { return (home.actions || []).filter(function (r) { return r && r.state === state; }); }
+    function tone(state) { return state === "needs" ? "needs" : state === "settled" ? "settled" : "waiting"; }
 
-    ColumnLayout {
+    // ── the page (exo-720.11, docs/design/ui-modernization.md §4 U7; reference
+    // ui/prototype/desktop-v3.html): a title that answers "why am I here", then the doing ──
+    Flickable {
+        id: page
         anchors.fill: parent
-        anchors.margins: Theme.spacing.large
-        spacing: Theme.spacing.medium
+        clip: true
+        contentWidth: width
+        contentHeight: col.implicitHeight + 2 * Theme.spacing.xxlarge
+        boundsBehavior: Flickable.StopAtBounds
 
-        // The heading answers "why am I here" before the list does.
-        LogosText {
-            Layout.fillWidth: true
-            text: home.needsCount > 0
-                  ? qsTr("%1 waiting on you").arg(home.needsCount)
-                  : qsTr("Nothing waiting on you")
-            color: home.needsCount > 0 ? Theme.palette.text : Theme.palette.textTertiary
-            font.family: Theme.typography.publicSans
-            font.pixelSize: Theme.typography.subtitleText
-            font.weight: Theme.typography.weightBold
-            elide: Text.ElideRight
-        }
+        ColumnLayout {
+            id: col
+            width: Math.min(page.width - 2 * Theme.spacing.xxlarge, 880)
+            x: (page.width - width) / 2
+            y: Theme.spacing.xlarge + 8
+            spacing: Theme.spacing.large
 
-        // ── getting set up (a fresh install, exo-d4d.6) ─────────────────────
-        // Muster never makes keys or chains: each step hands off to the app that owns it.
-        Rectangle {
-            objectName: "homeSetup"
-            visible: !!home.setup.show
-            Layout.fillWidth: true
-            implicitHeight: setupCol.implicitHeight + 2 * Theme.spacing.medium
-            radius: Theme.spacing.radiusMedium
-            color: Theme.palette.surface
-            border.width: 1
-            border.color: Theme.palette.warning
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.medium
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    LogosText {
+                        text: qsTr("Needs you")
+                        color: Theme.palette.text
+                        font.pixelSize: MusterStyle.title
+                        font.weight: Theme.typography.weightBold
+                    }
+                    LogosText {
+                        objectName: "homeHeadline"
+                        text: home.needsCount > 0 ? qsTr("%1 waiting on you").arg(home.needsCount)
+                                                  : qsTr("Nothing waiting on you")
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: MusterStyle.body
+                    }
+                }
+                Item { Layout.fillWidth: true }
+                ActionButton {
+                    objectName: "startSomethingButton"
+                    text: qsTr("Start something")
+                    icon.source: MusterStyle.icon("plus")
+                    icon.color: Theme.palette.background
+                    variant: LogosButton.Variant.Primary
+                    onClicked: home.newActivity()
+                }
+            }
+
+            // ── getting set up (a fresh install, exo-d4d.6) ─────────────────────
+            // Muster never makes keys or chains: each step hands off to the app that owns it.
+            InlineNotice {
+                objectName: "homeSetup"
+                visible: !!home.setup.show
+                tone: "warning"
+                title: String(home.setup.title || "")
+                text: String(home.setup.detail || "")
+                ActionButton {
+                    objectName: "homeSetupAction"
+                    compact: true
+                    text: home.setup.action === "accounts" ? qsTr("Create or import an account")
+                                                           : qsTr("Open Settings")
+                    onClicked: home.setup.action === "accounts" ? home.manageAccounts() : home.openSettings()
+                }
+            }
+
+            // ── invitations: someone opened a room with you; it reached your inbox ──
             ColumnLayout {
-                id: setupCol
-                anchors.fill: parent
-                anchors.margins: Theme.spacing.medium
+                Layout.fillWidth: true
+                visible: (home.invites || []).length > 0
+                spacing: Theme.spacing.small
+                SectionHeader { text: qsTr("Invitations"); count: String((home.invites || []).length); hot: true }
+                Repeater {
+                    model: home.invites || []
+                    delegate: Surface {
+                        required property var modelData
+                        tone: "needs"
+                        Layout.fillWidth: true
+                        implicitHeight: inviteRow.implicitHeight + 2 * Theme.spacing.medium
+                        RowLayout {
+                            id: inviteRow
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacing.medium
+                            spacing: Theme.spacing.medium
+                            Avatar { identity: String(modelData.from || ""); name: String(modelData.fromAlias || "") }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                LogosText {
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    text: {
+                                        var who = String(modelData.fromAlias || "").length > 0
+                                            ? String(modelData.fromAlias)
+                                            : String(modelData.from || "someone").substring(0, 10) + "…";
+                                        return who + qsTr(" invited you to a room");
+                                    }
+                                    color: Theme.palette.text
+                                    font.pixelSize: MusterStyle.body
+                                    font.weight: Theme.typography.weightBold
+                                }
+                                LogosText {
+                                    visible: String(modelData.note || "").length > 0
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    text: String(modelData.note || "")
+                                    color: Theme.palette.textSecondary
+                                    font.pixelSize: MusterStyle.caption
+                                }
+                            }
+                            ActionButton {
+                                objectName: "joinInviteButton"
+                                compact: true
+                                text: qsTr("Join")
+                                variant: LogosButton.Variant.Primary
+                                onClicked: home.joinInvite(String(modelData.topic || ""))
+                            }
+                            ActionButton {
+                                objectName: "dismissInviteButton"
+                                compact: true
+                                quiet: true
+                                text: qsTr("Dismiss")
+                                onClicked: home.dismissInvite(String(modelData.topic || ""))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── the action list, grouped by what it asks of you ───────────────
+            Repeater {
+                objectName: "actionList"
+                model: home.groups
+                delegate: ColumnLayout {
+                    id: group
+                    required property var modelData
+                    readonly property var rows: home.rowsIn(modelData.state)
+                    visible: rows.length > 0
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    SectionHeader { text: group.modelData.title; count: String(group.rows.length); hot: group.modelData.hot }
+                    Surface {
+                        Layout.fillWidth: true
+                        implicitHeight: rowsCol.implicitHeight + 2
+                        ColumnLayout {
+                            id: rowsCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 1
+                            spacing: 0
+                            Repeater {
+                                model: group.rows
+                                delegate: Rectangle {
+                                    id: row
+                                    required property var modelData
+                                    required property int index
+                                    objectName: "homeRow"
+                                    Layout.fillWidth: true
+                                    implicitHeight: rowBody.implicitHeight + 2 * Theme.spacing.medium
+                                    color: rowHover.hovered ? Theme.palette.backgroundSecondary : "transparent"
+                                    radius: Theme.spacing.radiusLarge
+                                    Accessible.role: Accessible.Button
+                                    Accessible.name: String(modelData.title || "") + ": " + String(modelData.action || "")
+                                    Rectangle {
+                                        visible: row.index > 0
+                                        anchors.top: parent.top
+                                        width: parent.width; height: 1
+                                        color: Theme.palette.borderSubtle
+                                    }
+                                    RowLayout {
+                                        id: rowBody
+                                        anchors.fill: parent
+                                        anchors.leftMargin: Theme.spacing.large
+                                        anchors.rightMargin: Theme.spacing.medium
+                                        spacing: Theme.spacing.medium
+                                        Avatar { identity: String(row.modelData.topic || ""); name: String(row.modelData.title || ""); room: true }
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+                                            LogosText {
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                                text: String(row.modelData.title || "")
+                                                color: Theme.palette.text
+                                                font.pixelSize: MusterStyle.body
+                                                font.weight: Theme.typography.weightBold
+                                            }
+                                            LogosText {
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                                text: String(row.modelData.detail || "")
+                                                visible: text.length > 0
+                                                color: Theme.palette.textSecondary
+                                                font.pixelSize: MusterStyle.caption
+                                            }
+                                        }
+                                        StatusPill { text: String(row.modelData.action || ""); tone: home.tone(row.modelData.state) }
+                                        LogosIcon {
+                                            Layout.preferredWidth: 16; Layout.preferredHeight: 16
+                                            source: MusterStyle.icon("chevron-right")
+                                            color: Theme.palette.textTertiary
+                                        }
+                                    }
+                                    HoverHandler { id: rowHover; cursorShape: Qt.PointingHandCursor }
+                                    TapHandler { onTapped: home.activated(String(row.modelData.topic || "")) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Nothing on yet — the invitation to start, standing in for the list.
+            EmptyState {
+                objectName: "homeEmpty"
+                visible: (home.actions || []).length === 0
+                Layout.fillWidth: true
+                text: qsTr("Nothing on yet. Start something with someone, or join a room with its code.")
+            }
+
+            // ── join with a room code (exo-dcc.28) ────────────────────────────
+            // Someone shared a room's code: join it from here. Joining asks the room's
+            // members to let you in.
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.spacing.small
                 spacing: Theme.spacing.small
                 LogosText {
-                    text: String(home.setup.title || "")
-                    color: Theme.palette.text
-                    font.weight: Theme.typography.weightBold
+                    text: qsTr("Have a room code?")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: MusterStyle.body
                 }
-                LogosText {
+                LogosTextField {
+                    id: codeField
+                    objectName: "homeRoomCodeField"
                     Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: String(home.setup.detail || "")
-                    color: Theme.palette.textSecondary
-                    font.pixelSize: Theme.typography.secondaryText
+                    placeholderText: qsTr("/muster/1/muster.room.…/proto")
                 }
-                RowLayout {
-                    LogosButton {
-                        objectName: "homeSetupAction"
-                        text: home.setup.action === "accounts" ? qsTr("Create or import an account")
-                                                               : qsTr("Open Settings")
-                        onClicked: home.setup.action === "accounts" ? home.manageAccounts() : home.openSettings()
-                    }
-                }
-            }
-        }
-
-        LogosButton {
-            objectName: "startSomethingButton"
-            text: qsTr("Start something")
-            onClicked: home.newActivity()
-        }
-
-        // ── join with a room code (exo-dcc.28) ────────────────────────────
-        // Someone shared a room's code (the room's "Copy room code"): join it from here,
-        // whatever room is open. Joining asks the room's members to let you in.
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: Theme.spacing.small
-            LogosTextField {
-                id: codeField
-                objectName: "homeRoomCodeField"
-                Layout.fillWidth: true
-                placeholderText: qsTr("Have a room code? Paste it here")
-            }
-            LogosButton {
-                objectName: "homeJoinCodeButton"
-                text: qsTr("Join")
-                enabled: codeField.text.trim().length > 0
-                onClicked: { home.joinCode(codeField.text.trim()); codeField.text = ""; }
-            }
-        }
-
-        // ── invitations ───────────────────────────────────────────────────
-        // Someone opened a room with you; it arrived on your inbox. Join opens it
-        // (and auto-asks to join). Shown only when there are any.
-        ColumnLayout {
-            Layout.fillWidth: true
-            visible: (home.invites || []).length > 0
-            spacing: Theme.spacing.tiny
-
-            LogosText {
-                text: qsTr("Invitations")
-                color: Theme.palette.text
-                font.family: Theme.typography.publicSans
-                font.pixelSize: Theme.typography.secondaryText
-                font.weight: Theme.typography.weightBold
-            }
-
-            Repeater {
-                model: home.invites || []
-                delegate: Rectangle {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    implicitHeight: inviteBody.implicitHeight + 2 * Theme.spacing.medium
-                    radius: Theme.spacing.radiusSmall
-                    color: Theme.palette.surfaceRaised
-                    border.width: 1
-                    border.color: Theme.palette.warning
-
-                    RowLayout {
-                        id: inviteBody
-                        anchors.fill: parent
-                        anchors.margins: Theme.spacing.medium
-                        spacing: Theme.spacing.small
-
-                        LogosText {
-                            Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                            text: {
-                                var who = String(modelData.fromAlias || "").length > 0
-                                    ? String(modelData.fromAlias)
-                                    : String(modelData.from || "someone").substring(0, 10) + "…";
-                                var n = String(modelData.note || "");
-                                return who + qsTr(" invited you to a room")
-                                     + (n.length > 0 ? "  ·  " + n : "");
-                            }
-                            color: Theme.palette.text
-                            font.pixelSize: Theme.typography.secondaryText
-                        }
-
-                        LogosButton {
-                            objectName: "joinInviteButton"
-                            text: qsTr("Join")
-                            onClicked: home.joinInvite(String(modelData.topic || ""))
-                        }
-
-                        LogosButton {
-                            objectName: "dismissInviteButton"
-                            text: qsTr("Dismiss")
-                            variant: LogosButton.Variant.Secondary
-                            onClicked: home.dismissInvite(String(modelData.topic || ""))
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── the action list (or the empty state) ──────────────────────────
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            radius: Theme.spacing.radiusMedium
-            color: Theme.palette.surface
-            border.width: 1
-            border.color: Theme.palette.borderSubtle
-
-            // Nothing on yet — the invitation, centered, standing in for the list.
-            LogosText {
-                anchors.centerIn: parent
-                width: parent.width - 2 * Theme.spacing.large
-                visible: (home.actions || []).length === 0
-                text: qsTr("Nothing on yet. Start something with someone.")
-                color: Theme.palette.textTertiary
-                font.family: Theme.typography.publicSans
-                font.pixelSize: Theme.typography.secondaryText
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-            }
-
-            ListView {
-                id: actionList
-                objectName: "actionList"
-                anchors.fill: parent
-                anchors.margins: Theme.spacing.small
-                clip: true
-                spacing: Theme.spacing.tiny
-                model: home.actions
-
-                delegate: Rectangle {
-                    id: row
-                    width: actionList.width
-                    implicitHeight: rowBody.implicitHeight + 2 * Theme.spacing.medium
-                    radius: Theme.spacing.radiusSmall
-                    color: rowHover.containsMouse
-                           ? Theme.palette.surfaceRaised
-                           : Theme.palette.surface
-
-                    // Clicking anywhere on the row opens its room.
-                    MouseArea {
-                        id: rowHover
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: home.activated(modelData ? String(modelData.topic || "") : "")
-                    }
-
-                    RowLayout {
-                        id: rowBody
-                        anchors.fill: parent
-                        anchors.margins: Theme.spacing.medium
-                        spacing: Theme.spacing.small
-
-                        // The state band — a column the eye can scan, not five
-                        // separate marks.
-                        Rectangle {
-                            Layout.alignment: Qt.AlignVCenter
-                            Layout.preferredWidth: 3
-                            Layout.preferredHeight: 34
-                            radius: 1.5
-                            color: home.bandColor(modelData ? modelData.state : "idle")
-                            opacity: (modelData && modelData.state === "idle") ? 0.4 : 1.0
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-
-                            // The headline: what there is to do.
-                            LogosText {
-                                Layout.fillWidth: true
-                                text: modelData ? String(modelData.action || "") : ""
-                                color: Theme.palette.text
-                                font.family: Theme.typography.publicSans
-                                font.pixelSize: Theme.typography.primaryText
-                                font.weight: Theme.typography.weightBold
-                                elide: Text.ElideRight
-                            }
-
-                            // "title · detail" — whose it is and why it sits here.
-                            LogosText {
-                                Layout.fillWidth: true
-                                text: {
-                                    var t = modelData ? String(modelData.title || "") : "";
-                                    var d = modelData ? String(modelData.detail || "") : "";
-                                    return d.length > 0 ? (t + "  ·  " + d) : t;
-                                }
-                                color: Theme.palette.textSecondary
-                                font.family: Theme.typography.publicSans
-                                font.pixelSize: Theme.typography.secondaryText
-                                elide: Text.ElideRight
-                            }
-                        }
-                    }
+                ActionButton {
+                    objectName: "homeJoinCodeButton"
+                    text: qsTr("Join")
+                    enabled: codeField.text.trim().length > 0
+                    onClicked: { home.joinCode(codeField.text.trim()); codeField.text = ""; }
                 }
             }
         }

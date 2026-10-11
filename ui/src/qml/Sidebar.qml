@@ -17,8 +17,8 @@ import Logos.Icons
 // It reads Main's state (`app`) and changes only `app.view` and the active room, through
 // app.enterRoom: the same paths the old nav bar took. The old buttons' objectNames ride on
 // the rows that do their job, so the UI harness (ui/tests/muster-ui-test.mjs) still finds
-// them: homeToggle, roomToggle, dashboardToggle, lezToggle, contactsToggle,
-// walkthroughToggle, settingsToggle.
+// them: homeToggle, roomToggle, dashboardToggle, contactsToggle, walkthroughToggle,
+// settingsToggle (lezToggle is the Wallet's Send on LEZ tab now).
 Rectangle {
     id: side
 
@@ -211,20 +211,12 @@ Rectangle {
                 label: qsTr("Wallet")
                 icon: MusterStyle.icon("wallet")
                 rail: side.rail
-                current: side.app.view === "dashboard"
+                current: side.app.view === "dashboard" || side.app.view === "lez"
                 onClicked: {
                     side.go("dashboard");
                     // re-read on entry, so the card recovers if the read at startup came too early
                     if (side.app.backend) { side.app.backend.loadAccount(); side.app.backend.loadBalances(); }
                 }
-            }
-            SidebarRow {
-                objectName: "lezToggle"
-                label: qsTr("Send λ")
-                icon: MusterStyle.icon("lez")
-                rail: side.rail
-                current: side.app.view === "lez"
-                onClicked: { side.go("lez"); if (side.app.backend) side.app.backend.loadWalletAccounts(); }
             }
             SidebarRow {
                 objectName: "contactsToggle"

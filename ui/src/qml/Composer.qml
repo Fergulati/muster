@@ -174,16 +174,14 @@ Item {
         ColumnLayout {
             id: stack
             y: Theme.spacing.xlarge
-            x: (flick.width - width) / 2
-            width: Math.min(flick.width - 2 * Theme.spacing.xlarge, 560)
+            // aligned like every page (exo-720.11)
+            x: Theme.spacing.xxlarge
+            width: Math.min(flick.width - 2 * Theme.spacing.xxlarge, 720)
             spacing: Theme.spacing.large
 
-            LogosText {
-                text: qsTr("Start something")
-                color: Theme.palette.text
-                font.family: Theme.typography.publicSans
-                font.pixelSize: Theme.typography.subtitleText
-                font.weight: Theme.typography.weightBold
+            PageHeader {
+                title: qsTr("Start something")
+                subtitle: qsTr("What you are doing, and who with. Only the people in the room can read it.")
             }
 
             // ── 1. what ───────────────────────────────────────────────────────
@@ -386,7 +384,7 @@ Item {
                     spacing: Theme.spacing.small
                     Repeater {
                         model: composer.assetCandidates()
-                        delegate: LogosButton {
+                        delegate: ActionButton {
                             required property var modelData
                             objectName: "assetCandidate"
                             text: String(modelData["public"]) + " (" + String(modelData.grade) + ")"
@@ -418,7 +416,7 @@ Item {
                                                       : qsTr("send to (address)")
                     onTextChanged: composer.destination = text
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "askRoomToggle"
                     text: composer.askRoom ? qsTr("✓ ask the room for the address")
                                            : qsTr("ask the room for the address instead")
@@ -436,7 +434,7 @@ Item {
                 wrapMode: Text.WordWrap
             }
 
-            LogosButton {
+            ActionButton {
                 objectName: "openRoomButton"
                 Layout.fillWidth: true
                 text: composer.confirmLabel

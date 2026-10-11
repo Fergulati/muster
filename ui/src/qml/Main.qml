@@ -343,7 +343,7 @@ Item {
                 text: root.view === "room" ? (root.titleOf(root.roomTopic) || (root.roomTopic.length > 0 ? root.shortRoom(root.roomTopic) : qsTr("Join a room")))
                     : root.view === "home" || root.view === "compose" ? qsTr("Needs you")
                     : root.view === "dashboard" ? qsTr("Wallet")
-                    : root.view === "lez" ? qsTr("Send λ")
+                    : root.view === "lez" ? qsTr("Wallet")
                     : root.view === "contacts" ? qsTr("Contacts")
                     : root.view === "walkthrough" ? qsTr("Learn")
                     : root.view === "settings" ? qsTr("Settings") : ""
@@ -536,10 +536,68 @@ Item {
         backend: root.backend
     }
 
+    // ── the Wallet (exo-720.11, decision §6.3): the Account surface and Send on LEZ, as two
+    // tabs of one page. The local test Safe on the Account surface already shows only where
+    // the local dev chain (31337) answers — a fresh install never sees it.
+    Rectangle {
+        id: walletHeader
+        objectName: "walletHeader"
+        visible: root.view === "dashboard" || root.view === "lez"
+        anchors.top: contentArea.top
+        anchors.left: contentArea.left
+        anchors.right: parent.right
+        height: visible ? walletHeaderCol.implicitHeight : 0
+        color: Theme.palette.background
+        ColumnLayout {
+            id: walletHeaderCol
+            anchors.left: parent.left
+            anchors.right: parent.right
+            spacing: 0
+            ColumnLayout {
+                Layout.leftMargin: Theme.spacing.xxlarge
+                Layout.topMargin: Theme.spacing.xlarge
+                spacing: 2
+                LogosText {
+                    text: qsTr("Wallet")
+                    color: Theme.palette.text
+                    font.pixelSize: MusterStyle.title
+                    font.weight: Theme.typography.weightBold
+                }
+                LogosText {
+                    text: qsTr("What you hold on the chains you set up, each balance saying whether your own client checked it.")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.body
+                }
+            }
+            LogosTabBar {
+                Layout.leftMargin: Theme.spacing.xxlarge - Theme.spacing.small
+                Layout.topMargin: Theme.spacing.medium
+                currentIndex: root.view === "lez" ? 1 : 0
+                LogosTabButton {
+                    objectName: "walletBalancesTab"
+                    text: qsTr("Balances")
+                    onClicked: {
+                        root.view = "dashboard";
+                        if (root.backend) { root.backend.loadAccount(); root.backend.loadBalances(); }
+                    }
+                }
+                LogosTabButton {
+                    objectName: "lezToggle"
+                    text: qsTr("Send on LEZ")
+                    onClicked: {
+                        root.view = "lez";
+                        if (root.backend) root.backend.loadWalletAccounts();
+                    }
+                }
+            }
+            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.palette.borderSubtle }
+        }
+    }
+
     // Send assets via Logos (the LEZ) — Mode A: request → share → send.
     LezSend {
         objectName: "lezSendSurface"
-        anchors.top: contentArea.top
+        anchors.top: walletHeader.bottom
         anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -550,7 +608,7 @@ Item {
     // The Account surface (AccountPage.qml).
     AccountPage {
         root: mainItem
-        anchors.top: contentArea.top
+        anchors.top: walletHeader.bottom
         anchors.left: contentArea.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -750,13 +808,13 @@ Item {
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.caption
             }
-            LogosButton {
+            ActionButton {
                 objectName: "signerInstall"
                 visible: root.signerMissing
                 text: qsTr("Install the Logos Signer")
                 onClicked: root.requestPackageInstall(root.signerPackage)
             }
-            LogosButton {
+            ActionButton {
                 text: qsTr("Dismiss")
                 onClicked: root.signerNote = ""
             }

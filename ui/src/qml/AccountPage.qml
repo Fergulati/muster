@@ -14,22 +14,14 @@ Item {
     ColumnLayout {
         id: page
         visible: root.view === "dashboard"
+        // under the Wallet's header (Main.qml), aligned with it (exo-720.11)
         anchors.top: parent.top
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: Theme.spacing.large
+        anchors.left: parent.left
+        anchors.leftMargin: Theme.spacing.xxlarge
+        anchors.topMargin: Theme.spacing.xlarge
         anchors.bottomMargin: Theme.spacing.xlarge
         spacing: Theme.spacing.large
-        width: Math.min(parent.width - 2 * Theme.spacing.xlarge, 520)
-
-        // ── header ───────────────────────────────────────────────────────────
-        LogosText {
-            text: qsTr("Muster")
-            color: Theme.palette.text
-            font.family: Theme.typography.publicSans
-            font.pixelSize: Theme.typography.subtitleText
-            font.weight: Theme.typography.weightBold
-            Layout.alignment: Qt.AlignHCenter
-        }
+        width: Math.min(parent.width - 2 * Theme.spacing.xxlarge, 640)
 
         LogosText {
             text: (root.account && root.account.available === false)
@@ -39,7 +31,6 @@ Item {
             color: Theme.palette.textTertiary
             font.pixelSize: Theme.typography.secondaryText
             wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignHCenter
             Layout.fillWidth: true
         }
 
@@ -209,7 +200,7 @@ Item {
                     }
                 }
 
-                LogosButton {
+                ActionButton {
                     objectName: "proposeButton"
                     Layout.fillWidth: true
                     variant: LogosButton.Variant.Primary
@@ -408,7 +399,7 @@ Item {
                         font.family: MusterStyle.mono
                     }
 
-                    LogosButton {
+                    ActionButton {
                         objectName: "approveButton"
                         Layout.fillWidth: true
                         variant: LogosButton.Variant.Primary
@@ -454,7 +445,7 @@ Item {
                         font.weight: Theme.typography.weightMedium
                     }
 
-                    LogosButton {
+                    ActionButton {
                         objectName: "submitButton"
                         Layout.fillWidth: true
                         visible: root.isExecutable
@@ -487,7 +478,7 @@ Item {
                         font.weight: Theme.typography.weightMedium
                     }
 
-                    LogosButton {
+                    ActionButton {
                         objectName: "newProposalButton"
                         Layout.fillWidth: true
                         visible: root.isFinal
@@ -529,7 +520,7 @@ Item {
                 }
 
                 // Recovery from any error — including a submit that never landed.
-                LogosButton {
+                ActionButton {
                     objectName: "errorResetButton"
                     visible: root.hasIntent
                     text: qsTr("New proposal")
@@ -615,7 +606,7 @@ Item {
                     font.pixelSize: MusterStyle.caption
                 }
 
-                LogosButton {
+                ActionButton {
                     Layout.fillWidth: true
                     variant: LogosButton.Variant.Primary
                     text: qsTr("Refresh balances")

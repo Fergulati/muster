@@ -1,0 +1,5 @@
+{
+  "about": "Home with something that waits on you: a payment to approve (recorded from two-instance-proof.sh).",
+  "snapshot": "data/statement-proposed.json",
+  "steps": [ {"view": "home"}, {"shot": ""} ]
+}

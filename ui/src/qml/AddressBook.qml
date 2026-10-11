@@ -43,16 +43,14 @@ Item {
         ColumnLayout {
             id: col
             y: Theme.spacing.xlarge
-            x: (flick.width - width) / 2
-            width: Math.min(flick.width - 2 * Theme.spacing.xlarge, 560)
+            // aligned like every page (exo-720.11)
+            x: Theme.spacing.xxlarge
+            width: Math.min(flick.width - 2 * Theme.spacing.xxlarge, 720)
             spacing: Theme.spacing.large
 
-            LogosText {
-                text: qsTr("Address book")
-                color: Theme.palette.text
-                font.family: Theme.typography.publicSans
-                font.pixelSize: Theme.typography.subtitleText
-                font.weight: Theme.typography.weightBold
+            PageHeader {
+                title: qsTr("Contacts")
+                subtitle: qsTr("Names you give the ids you coordinate with. They stay on this device and never reach a room.")
             }
 
             // ── add a contact ─────────────────────────────────────────────────
@@ -73,11 +71,10 @@ Item {
                     spacing: Theme.spacing.small
 
                     LogosText {
-                        text: qsTr("ADD SOMEONE")
+                        text: qsTr("Add someone")
                         color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
                         font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightMedium
+                        font.weight: Theme.typography.weightBold
                     }
                     LogosText {
                         Layout.fillWidth: true
@@ -102,7 +99,7 @@ Item {
                             Layout.fillWidth: true
                             placeholderText: qsTr("name, e.g. Alice")
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "contactAddButton"
                             text: qsTr("Add")
                             enabled: newIdField.text.length > 0 && newAliasField.text.length > 0
@@ -170,7 +167,7 @@ Item {
                                     }
                                 }
                             }
-                            LogosButton {
+                            ActionButton {
                                 objectName: "contactRemove"
                                 text: qsTr("Remove")
                                 variant: LogosButton.Variant.Secondary

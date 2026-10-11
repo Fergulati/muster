@@ -125,16 +125,14 @@ Item {
         ColumnLayout {
             id: col
             y: Theme.spacing.xlarge
-            x: (flick.width - width) / 2
-            width: Math.min(flick.width - 2 * Theme.spacing.xlarge, 560)
+            // aligned like every page (exo-720.11)
+            x: Theme.spacing.xxlarge
+            width: Math.min(flick.width - 2 * Theme.spacing.xxlarge, 720)
             spacing: Theme.spacing.large
 
-            LogosText {
-                text: qsTr("Settings")
-                color: Theme.palette.text
-                font.family: Theme.typography.publicSans
-                font.pixelSize: Theme.typography.subtitleText
-                font.weight: Theme.typography.weightBold
+            PageHeader {
+                title: qsTr("Settings")
+                subtitle: qsTr("Your identity, and the infrastructure Muster talks to. Nothing here goes to a server; there is none.")
             }
 
             // ── identity ──────────────────────────────────────────────────────
@@ -155,11 +153,10 @@ Item {
                     spacing: Theme.spacing.tiny
 
                     LogosText {
-                        text: qsTr("IDENTITY")
+                        text: qsTr("Identity")
                         color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
                         font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightMedium
+                        font.weight: Theme.typography.weightBold
                     }
 
                     Repeater {
@@ -195,11 +192,10 @@ Item {
                     // ── your shareable chat id ────────────────────────────────
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("YOUR CHAT ID")
+                        text: qsTr("Your chat ID")
                         color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
                         font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightMedium
+                        font.weight: Theme.typography.weightBold
                     }
                     LogosText {
                         Layout.fillWidth: true
@@ -227,7 +223,7 @@ Item {
                             font.family: MusterStyle.mono
                             font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "copyChatId"
                             text: qsTr("Copy")
                             enabled: settings.chatId.length > 0
@@ -238,11 +234,10 @@ Item {
                     // ── your Bitcoin key (exo-59c) ─────────────────────────────
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("YOUR BITCOIN KEY")
+                        text: qsTr("Your Bitcoin key")
                         color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
                         font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightMedium
+                        font.weight: Theme.typography.weightBold
                     }
                     LogosText {
                         Layout.fillWidth: true
@@ -269,7 +264,7 @@ Item {
                             font.family: MusterStyle.mono
                             font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "copyBtcKey"
                             text: qsTr("Copy")
                             enabled: btcKeyField.text.length > 0
@@ -307,11 +302,10 @@ Item {
                     spacing: Theme.spacing.small
 
                     LogosText {
-                        text: qsTr("INFRASTRUCTURE")
+                        text: qsTr("Infrastructure")
                         color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
                         font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightMedium
+                        font.weight: Theme.typography.weightBold
                     }
 
                     LogosText {
@@ -339,7 +333,7 @@ Item {
                         }
                         RowLayout {
                             spacing: Theme.spacing.small
-                            LogosButton {
+                            ActionButton {
                                 objectName: "chainSettings"
                                 text: qsTr("Open chain settings")
                                 variant: LogosButton.Variant.Secondary
@@ -376,7 +370,7 @@ Item {
                             font.family: MusterStyle.mono
                             font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsRpcShow"
                             visible: !!(settings.s && settings.s.rpc && settings.s.rpc !== settings.s.rpcMasked)
                             text: settings.showRpc ? qsTr("Hide") : qsTr("Show")
@@ -397,7 +391,7 @@ Item {
                             placeholderText: qsTr("new RPC URL, e.g. http://127.0.0.1:8545")
                             font.family: MusterStyle.mono
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsRpcSave"
                             text: qsTr("Save")
                             enabled: rpcField.text.length > 0
@@ -422,7 +416,7 @@ Item {
                             font.family: MusterStyle.mono
                             font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsBtcRpcShow"
                             visible: !!(settings.s && settings.s.btcRpc && settings.s.btcRpc !== settings.s.btcRpcMasked)
                             text: settings.showBtcRpc ? qsTr("Hide") : qsTr("Show")
@@ -443,7 +437,7 @@ Item {
                             placeholderText: qsTr("your node, e.g. http://user:pass@127.0.0.1:8332")
                             font.family: MusterStyle.mono
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsBtcRpcSave"
                             text: qsTr("Save")
                             enabled: btcRpcField.text.length > 0
@@ -469,7 +463,7 @@ Item {
                             font.family: MusterStyle.mono
                             font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsLezRpcShow"
                             visible: !!(settings.s && settings.s.lez && settings.s.lez.rpc
                                         && settings.s.lez.rpc !== settings.s.lez.rpcMasked)
@@ -490,7 +484,7 @@ Item {
                             placeholderText: qsTr("your sequencer, e.g. http://127.0.0.1:3040")
                             font.family: MusterStyle.mono
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsLezRpcSave"
                             text: qsTr("Save")
                             enabled: lezRpcField.text.length > 0
@@ -522,7 +516,7 @@ Item {
                             placeholderText: qsTr("full createNode JSON, or a fleet name: 'logos.dev' or 'logos.test'")
                             font.family: MusterStyle.mono
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsDeliverySave"
                             text: qsTr("Save")
                             enabled: deliveryField.text.length > 0
@@ -537,13 +531,13 @@ Item {
                     // RLN membership (exo-eb6.3), so the button says so.
                     RowLayout {
                         spacing: Theme.spacing.small
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsDeliveryFleet"
                             text: qsTr("Use the logos.dev fleet")
                             variant: LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.dev")
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsDeliveryFleetTest"
                             text: qsTr("Use logos.test (needs an RLN membership)")
                             variant: LogosButton.Variant.Secondary
@@ -556,11 +550,10 @@ Item {
                     // exit that publishes it. It carries sends only, and the text says so.
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("MIXNET FOR SENDS")
+                        text: qsTr("Mixnet for sends")
                         color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
                         font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightMedium
+                        font.weight: Theme.typography.weightBold
                     }
                     LogosText {
                         objectName: "settingsMixNow"
@@ -579,19 +572,19 @@ Item {
                     }
                     RowLayout {
                         spacing: Theme.spacing.small
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsMixOff"
                             text: qsTr("Off")
                             variant: LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("mix", "off")
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsMixPreferred"
                             text: qsTr("Preferred")
                             variant: LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("mix", "preferred")
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "settingsMixRequired"
                             text: qsTr("Required")
                             variant: LogosButton.Variant.Secondary
@@ -649,11 +642,10 @@ Item {
                     // funded, so the one thing shown to act on is that payer, whole, to copy.
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("RLN MEMBERSHIP")
+                        text: qsTr("RLN membership")
                         color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
                         font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightMedium
+                        font.weight: Theme.typography.weightBold
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -703,7 +695,7 @@ Item {
                             font.family: MusterStyle.mono
                             font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "copyRlnPayer"
                             text: qsTr("Copy payer")
                             onClicked: { rlnPayerField.selectAll(); rlnPayerField.copy(); rlnPayerField.deselect(); }
@@ -724,11 +716,10 @@ Item {
                     // whether it is there and whether it sees muster's requests as muster's.
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("EVM KEYSTORE")
+                        text: qsTr("EVM keystore")
                         color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
                         font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightMedium
+                        font.weight: Theme.typography.weightBold
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -767,7 +758,7 @@ Item {
                     RowLayout {
                         visible: (settings.keystore.identity || {}).kind === "module"
                         spacing: Theme.spacing.small
-                        LogosButton {
+                        ActionButton {
                             objectName: "keystoreManage"
                             text: (settings.keystore.accounts || []).length === 0
                                   ? qsTr("Create or import an account") : qsTr("Manage accounts")
@@ -815,7 +806,7 @@ Item {
                                 font.family: MusterStyle.mono
                                 font.pixelSize: MusterStyle.caption
                             }
-                            LogosButton {
+                            ActionButton {
                                 objectName: "keystoreUse"
                                 visible: !acctRow.chosen && settings.keystore.on === true
                                 text: qsTr("Use for approvals")
@@ -852,19 +843,19 @@ Item {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         visible: !!settings.keystore.selected && settings.keystore.binding !== "valid"
-                        LogosButton {
+                        ActionButton {
                             objectName: "keystoreOpenSigner"
                             visible: settings.bindingWaiting
                             text: qsTr("Open the request in the Signer")
                             onClicked: settings.openSignerRequested(String(settings.bindingRequest.handle || ""))
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "keystoreAskAgain"
                             visible: !settings.bindingWaiting
                             text: qsTr("Ask again")
                             onClicked: if (settings.backend) settings.backend.keystoreSelect(String(settings.keystore.selected))
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "keystoreInstallSigner"
                             text: qsTr("Install the Logos Signer")
                             variant: LogosButton.Variant.Secondary

@@ -91,18 +91,12 @@ Item {
 
         ColumnLayout {
             id: col
+            // under the Wallet's header (Main.qml), aligned with it (exo-720.11)
             y: Theme.spacing.xlarge
-            x: (flick.width - width) / 2
-            width: Math.min(flick.width - 2 * Theme.spacing.xlarge, 560)
+            x: Theme.spacing.xxlarge
+            width: Math.min(flick.width - 2 * Theme.spacing.xxlarge, 640)
             spacing: Theme.spacing.large
 
-            LogosText {
-                text: qsTr("Send λ on Logos")
-                color: Theme.palette.text
-                font.family: Theme.typography.publicSans
-                font.pixelSize: Theme.typography.subtitleText
-                font.weight: Theme.typography.weightBold
-            }
             LogosText {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
@@ -118,13 +112,12 @@ Item {
                 Layout.fillWidth: true
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("YOUR ADDRESSES — SHARE ONE TO BE PAID")
+                    text: qsTr("Your addresses — share one to be paid")
                     color: Theme.palette.textTertiary
-                    font.family: MusterStyle.mono
                     font.pixelSize: MusterStyle.caption
-                    font.weight: Theme.typography.weightMedium
+                    font.weight: Theme.typography.weightBold
                 }
-                LogosButton {
+                ActionButton {
                     text: qsTr("Refresh")
                     variant: LogosButton.Variant.Secondary
                     onClicked: lez.refresh()
@@ -216,7 +209,7 @@ Item {
                                 font.family: MusterStyle.mono
                                 font.pixelSize: MusterStyle.caption
                             }
-                            LogosButton {
+                            ActionButton {
                                 text: qsTr("Copy")
                                 variant: LogosButton.Variant.Secondary
                                 onClicked: { shareField.selectAll(); shareField.copy(); }
@@ -246,7 +239,7 @@ Item {
                 }
                 Repeater {
                     model: lez.lezAccounts
-                    delegate: LogosButton {
+                    delegate: ActionButton {
                         required property var modelData
                         text: lez.formLabel(String(modelData.form || ""))
                         variant: lez.fromId === String(modelData.id || "")
@@ -273,7 +266,7 @@ Item {
                     font.family: MusterStyle.mono
                     validator: IntValidator { bottom: 0 }
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "lezPreviewButton"
                     text: qsTr("Preview")
                     enabled: lez.fromId.length > 0 && destField.text.length > 0 && amtField.text.length > 0
@@ -304,7 +297,7 @@ Item {
                 font.pixelSize: MusterStyle.caption
             }
 
-            LogosButton {
+            ActionButton {
                 objectName: "lezSendButton"
                 text: qsTr("Send")
                 enabled: lez.fromId.length > 0 && destField.text.length > 0 && amtField.text.length > 0

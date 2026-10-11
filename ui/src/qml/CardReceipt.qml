@@ -44,10 +44,10 @@ ColumnLayout {
     LogosText {
         Layout.fillWidth: true
         Layout.topMargin: Theme.spacing.tiny
-        text: qsTr("WHAT LEFT THE ROOM")
+        text: qsTr("What left the room")
         color: Theme.palette.textTertiary
         font.pixelSize: MusterStyle.caption
-        font.weight: Theme.typography.weightMedium
+        font.weight: Theme.typography.weightBold
     }
 
     Repeater {
