@@ -44,24 +44,39 @@ proc foundersOf*(events: seq[Event], roster: seq[string]): seq[string] =
     if m.toLowerAscii() notin admitted: result.add m
 
 proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
-                 founders: seq[string]): seq[FlowRow] =
+                 founders: seq[string], sealedIn = initTable[string, int]()): seq[FlowRow] =
   ## `founders` are the members present at epoch 0 (the current roster minus every
   ## joiner the log admits — the caller derives it; the log does not name founders).
+  ## `sealedIn` is the session's record of which epoch's key opened each event
+  ## (CoordinationSession.sealedIn). An entry's epoch comes from it, and its readers are
+  ## the founders plus everyone admitted at or before that epoch. Only an event it does
+  ## not name falls back to the admissions before it in canonical order — right only
+  ## for a log whose events carry their parents (exo-dde.9).
   let ordered = canonicalOrder(events)
   var epoch = 0
-  var present = initHashSet[string]()
-  for f in founders: present.incl f
+  var admittedAt = initTable[string, int]()   # joiner → the epoch its admission opened
+  for e in ordered:
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
+      try:
+        let ep = parseInt(p[1])
+        admittedAt[p[3]] = min(admittedAt.getOrDefault(p[3], ep), ep)
+      except ValueError: discard
   var manifests = initTable[string, ActionManifest]()   # intent id → manifest
   let partsAt = countedPartIndexes(events, driverFor)
-  proc membersNow(): seq[string] =
+  proc membersAt(ep: int): seq[string] =
+    var present = initHashSet[string]()
+    for f in founders: present.incl f
+    for j, at in admittedAt: (if at <= ep: present.incl j)
     for m in present: result.add m
     result.sort()
+  var entryEpoch = 0
   proc addRows(res: var seq[FlowRow], i: int, kind, intentId: string,
                rows: seq[DisclosureRow], declared: bool) =
     for d in rows:
       res.add FlowRow(seq: i, kind: kind, intentId: intentId, field: d.field, to: d.to,
-                      members: (if d.to == obRoomMember: membersNow() else: @[]),
-                      epoch: epoch, declared: declared)
+                      members: (if d.to == obRoomMember: membersAt(entryEpoch) else: @[]),
+                      epoch: entryEpoch, declared: declared)
   let envelope = @[row("timing", obStoreNode), row("topic", obStoreNode)]
   for i in 0 ..< ordered.len:
     let e = ordered[i]
@@ -69,9 +84,10 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
     if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
       try: epoch = max(epoch, parseInt(p[1]))
       except ValueError: discard
-      present.incl p[3]
+      entryEpoch = sealedIn.getOrDefault(eventId(e), epoch)
       result.addRows(i, "admit", "", @[row("membership", obRoomMember)] & envelope, true)
       continue
+    entryEpoch = sealedIn.getOrDefault(eventId(e), epoch)
     if p.len >= 2 and p[0] == "message":
       result.addRows(i, "message", "", baselineDisclosure(), true)
       continue

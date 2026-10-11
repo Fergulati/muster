@@ -157,7 +157,7 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
     "k:" & a
 
   # ── entries: every event the client holds, attributed where the log proves it ──
-  let prov = logProvenance(events, driverFor)
+  let prov = logProvenance(events, driverFor, sealedIn)
   var provAt = initTable[int, LogProvItem]()
   for it in prov:
     var item = it
@@ -220,13 +220,18 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
     let p = e.key.split('/')
     if p.len >= 3 and p[0] == "intent" and p[1] notin firstSeq: firstSeq[p[1]] = i
   # each intent's state after each of its entries: the fold over the causal prefix, kept
-  # where (state, approvals) changes — a pure function of a set of events, so honest
+  # where (state, approvals) changes — a pure function of a set of events, so honest. An
+  # intent's view reads only its own `intent/<id>/…` entries, so the prefix folded is
+  # that intent's entries up to this one, not the whole log (G7: quadratic in one
+  # intent's entries, not in the room's).
   var steps = initTable[string, JsonNode]()
   var lastStep = initTable[string, string]()
+  var own = initTable[string, seq[Event]]()
   for i, e in ordered:
     let p = e.key.split('/')
     if p.len < 3 or p[0] != "intent": continue
-    for v in reduceIntentViews(ordered[0 .. i], driverFor):
+    own.mgetOrPut(p[1], @[]).add e
+    for v in reduceIntentViews(own[p[1]], driverFor):
       if v.id != p[1] or v.effectJson.len == 0: continue
       let sig = v.state & "/" & $v.approvals
       if lastStep.getOrDefault(v.id, "") == sig: continue
@@ -291,7 +296,7 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   # ── what left, and to whom (reduceFlow, outside rows only) ───────────────────
   addNode("o:" & $obStoreNode, "observer", -1, 0, newJObject())   # every envelope reaches it (FS-9)
   var leaves = initOrderedTable[string, tuple[src, obs: string, seq: int, fields: seq[string], declared: bool]]()
-  for r in reduceFlow(events, driverFor, founders):
+  for r in reduceFlow(events, driverFor, founders, sealedIn):
     if r.to in {obRoomMember, obStoreNode} or r.intentId.len == 0: continue
     if "i:" & r.intentId notin nodeAt: continue
     let at = pos(r.seq)

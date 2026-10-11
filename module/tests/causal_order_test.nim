@@ -106,4 +106,19 @@ block:
   doAssert reduce(es & @[h]).stateDigest == reduce(stripped).stateDigest
   echo "6. canonicalOrder and reduce ignore after entirely OK"
 
+block:
+  # the eventId memo (G7) returns exactly the uncached digest, and never conflates inputs
+  # that differ only in where one field ends and the next begins
+  let tricky = @[
+    Event(key: "a:1b", value: "c"), Event(key: "a", value: "1bc"), Event(key: "a:", value: "1b:c"),
+    Event(parents: @["p:q"], key: "k", value: "v"), Event(parents: @["p", "q"], key: "k", value: "v"),
+    Event(parents: @[], key: "1:p:qk", value: "v")]
+  var seen: seq[EventId]
+  for e in tricky:
+    doAssert eventId(e) == eventIdUncached(e)
+    doAssert eventId(e) == eventId(e)          # a second, memoized call
+    doAssert eventId(e) notin seen, "two different events share an id: " & e.key
+    seen.add eventId(e)
+  echo "7. the eventId memo returns the exact digest and never conflates inputs OK"
+
 echo "causal_order_test: all OK"

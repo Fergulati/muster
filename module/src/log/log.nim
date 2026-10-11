@@ -43,9 +43,8 @@ type
   State* = object
     entries*: Table[string, string]
 
-proc eventId*(e: Event): EventId =
-  ## Content address: the digest of a domain-separated record over the event's
-  ## parents (order-normalised) and payload. Identical events share an id.
+proc eventIdUncached*(e: Event): EventId =
+  ## The digest itself, never memoized (what eventId caches).
   var ps = e.parents
   sort(ps)
   var parentsArr: seq[CborValue]
@@ -55,6 +54,27 @@ proc eventId*(e: Event): EventId =
     ("key", cbText(e.key)),
     ("value", cbText(e.value)),
   ])))
+
+var idMemo {.threadvar.}: Table[string, EventId]
+  ## eventId is a pure function of (parents, key, value), and folds recompute it for the
+  ## same events many times over (a room's views fold the whole log once per intent). A
+  ## per-thread memo keyed by the exact inputs returns the identical id without the
+  ## dCBOR encode + SHA-256 (G7). Bounded: cleared past MaxIdMemo entries.
+const MaxIdMemo = 50_000
+
+proc eventId*(e: Event): EventId =
+  ## Content address: the digest of a domain-separated record over the event's
+  ## parents (order-normalised) and payload. Identical events share an id.
+  # length-prefixed, so no two different inputs share a key
+  var memoKey = newStringOfCap(e.key.len + e.value.len + 70 * e.parents.len + 32)
+  memoKey.add $e.parents.len; memoKey.add ':'
+  for p in e.parents: (memoKey.add $p.len; memoKey.add ':'; memoKey.add p)
+  memoKey.add $e.key.len; memoKey.add ':'; memoKey.add e.key
+  memoKey.add $e.value.len; memoKey.add ':'; memoKey.add e.value
+  if memoKey in idMemo: return idMemo[memoKey]
+  result = eventIdUncached(e)
+  if idMemo.len >= MaxIdMemo: idMemo.clear()
+  idMemo[memoKey] = result
 
 proc afterDigest*(e: Event): string =
   ## What picks the kept copy among copies of one event: the digest of its sorted `after`.

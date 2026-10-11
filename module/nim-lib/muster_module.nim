@@ -2969,7 +2969,7 @@ proc musterCoordinateProvenance(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   var arr = newJArray()
-  for it in logProvenance(gSession.roomEvents(), driverFor):
+  for it in logProvenance(gSession.roomEvents(), driverFor, gSession.sealedIn):
     let alias = (if it.account.len > 0: contactBook().nameFor(it.account) else: "")
     arr.add %*{"seq": it.seq, "class": $it.cls, "kind": it.kind, "intentId": it.intentId,
                "account": it.account, "alias": alias, "accountable": it.accountable,
@@ -3044,7 +3044,7 @@ proc musterCoordinateFlow(): string =
   if gSession == nil: return $(%*{"rows": [], "matrix": {}})
   gSession.poll()
   let events = gSession.roomEvents()
-  let rows = reduceFlow(events, driverFor, gSession.roomFounders(events))
+  let rows = reduceFlow(events, driverFor, gSession.roomFounders(events), gSession.sealedIn)
   result = $(%*{"rows": rows.toJson(),
                  "matrix": rows.observerMatrix(introducedObservers(events, driverFor))})
   if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)

@@ -34,7 +34,7 @@ block:
            counts["decline"] == 1 and counts["admit"] == 1 and counts["submit"] == 1 and counts["final"] == 1,
            $counts
   doAssert items.byKind("message").cls == icPeerMessage and items.byKind("message").account == "alice-hex"
-  doAssert "not a verified signature" in items.byKind("message").guarantee
+  doAssert "signed by its author" in items.byKind("message").guarantee   # exo-37e: true since exo-f76
   doAssert items.byKind("sig").cls == icContribution and items.byKind("sig").account in ["A", "B"]
   doAssert items.byKind("submit").cls == icExternalRead and items.byKind("final").cls == icExternalRead
   doAssert items.byKind("admit").account == "dave-hex" and "F-16" in items.byKind("admit").guarantee
