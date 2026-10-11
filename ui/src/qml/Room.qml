@@ -177,7 +177,7 @@ Item {
             if (arr[i] && arr[i].self) return String(arr[i].identity || "");
         return "";
     }
-    // Join-requests not yet admitted: [{ identity, bindsOwner }]. The scope panel
+    // Join-requests not yet admitted: [{ identity, alias }]. The scope panel
     // lists these with an Admit action (the membership handshake).
     readonly property var pending: {
         try { return JSON.parse(backend ? backend.pendingJson : "[]"); }

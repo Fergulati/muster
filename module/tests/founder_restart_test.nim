@@ -94,7 +94,6 @@ proc holds(s: CoordinationSession, body: string): bool =
   reduceMessages(s.roomEvents()).anyIt(it.body == body)
 
 let net = newLocalNetwork()
-let ctx = LinkContext(account: topic, slot: "0", expiry: high(uint64))
 
 # ── 1. Alice founds the room and uses it before anyone joins ────────────────────
 let aliceKs = keystoreOf("alice")
@@ -114,7 +113,7 @@ echo "1. Alice founds the room; a message and a proposal before anyone joins OK"
 # ── 2. Bob joins by name; Alice admits him; Bob speaks in epoch 1 ────────────────
 let bobKs = keystoreOf("bob")
 let bob = net.join(bobKs)
-bob.requestJoin(bobKs.bindingFor(ctx))
+bob.requestJoin(bobKs.joinRequestFor(topic, high(uint64)))
 doAssert bobKs.encIdentity() in alice.pendingJoins(), "Alice sees Bob ask"
 alice.admit(bobKs.encIdentity())
 doAssert bob.members().len == 2, "Bob is admitted"
@@ -148,7 +147,7 @@ doAssert effectJsonOf(bob2.roomEvents(), intentId) == "", "F-16: nor the pre-adm
 
 let carolKs = keystoreOf("carol")
 let carol = net.join(carolKs)
-carol.requestJoin(carolKs.bindingFor(ctx))
+carol.requestJoin(carolKs.joinRequestFor(topic, high(uint64)))
 doAssert carolKs.encIdentity() in alice2.pendingJoins(), "the restarted founder sees Carol ask"
 alice2.admit(carolKs.encIdentity())
 doAssert carol.members().len == 3, "Carol is admitted by the restarted founder"

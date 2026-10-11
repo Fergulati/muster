@@ -412,7 +412,7 @@ void MusterUiBackend::scheduleJoinRetry()
 void MusterUiBackend::loadPending()
 {
     // coordinate_pending → identities that asked to join but aren't admitted yet,
-    // as [{identity, bindsOwner}]. A member reviews these and decides whom to admit.
+    // as [{identity, alias}]. A member reviews these and decides whom to admit.
     // Drives inbound delivery first, so a request from another host shows up here.
     setPendingJson(modules().muster_module.coordinate_pending());
 }

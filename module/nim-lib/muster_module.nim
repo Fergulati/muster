@@ -4062,13 +4062,13 @@ proc musterCoordinateAvailableActions(): string =
 
 proc musterCoordinateRequestJoin(): string =
   if gSession == nil: return "not-joined"
-  # A join request is scoped to the ROOM (no account yet — a joiner has disclosed
-  # nothing); the admitter checks the binding's signer against the room's disclosed
-  # accounts' signers (coordinate_pending.bindsOwner), never a module-global Safe.
+  # A join request names our encryption identity, signed by it for this room, and
+  # nothing else (exo-a87): no secp key, so asking discloses no address. Our address
+  # reaches the room only through an act (an approval, an address share, an account).
   # Sealed to the room's announced join key (exo-661.7): only its members read who asks.
   gSession.poll()
-  if gSession.requestJoin(moduleKeystore().bindingFor(
-      LinkContext(account: gTopic, slot: "0", expiry: uint64(epochTime()) + 86_400))):
+  if gSession.requestJoin(moduleKeystore().joinRequestFor(
+      gSession.topic, uint64(epochTime()) + 86_400)):
     "ok"
   else:
     "waiting-for-room-key"
@@ -4085,18 +4085,16 @@ proc musterContactRemove(identityHex: string): string =
   contactBook().remove(identityHex); "ok"
 
 proc musterCoordinatePending(): string =
-  ## Each pending requester with whether its binding proves Safe ownership (F-9),
-  ## so a host admits knowingly rather than blindly. Carries the address-book alias
-  ## (if any) so the admit prompt shows a name, not raw hex.
+  ## Each pending requester: the encryption identity it asked as (the only thing a
+  ## request discloses, exo-a87) and the address-book alias, if any, so the admit prompt
+  ## shows a name, not raw hex. Nothing says whether they hold an account: they have
+  ## disclosed none.
   if gSession == nil: return "[]"
   gSession.poll()
-  let nowSec = uint64(epochTime())
   var arr = newJArray()
-  for st in gSession.pendingBindings():
-    let idHex = toHex(st.enc.toBytes())
-    arr.add %*{"identity": idHex,
-               "alias": contactBook().aliasOf(idHex),
-               "bindsOwner": bindingBinds(st, allSigners(roomAccounts()), nowSec)}
+  for r in gSession.pendingRequests():
+    let idHex = toHex(r.enc.toBytes())
+    arr.add %*{"identity": idHex, "alias": contactBook().aliasOf(idHex)}
   if gLpDebug:
     # the same line as ever ("pending=N members=M msgs=K": scripts grep it), now on change
     let line = "pending=" & $arr.len & " members=" & $gSession.members().len &
@@ -4462,26 +4460,20 @@ proc musterWalletVerifiedBalance(accountId, stateRootHex: string): string =
     $(%*{"error": e.msg})
 
 proc musterCoordinateAdmit(identityHex: string): string =
-  ## Admit a requester the model is "a member decides": an existing member chooses
-  ## whom to let in. The binding must be VALID (F-9 — unexpired and self-consistent:
-  ## its secp signature recovers a real signer over exactly this encryption identity,
-  ## so it can't be forged or replayed), but admission does NOT additionally require
-  ## the signer to be a Safe owner — that is one driver's policy, not the membership
-  ## model. Whether the requester is an owner is surfaced to the admitter as
-  ## `bindsOwner` in coordinate_pending, so a Safe room can still choose owners-only.
+  ## Admit a requester: "a member decides" — an existing member chooses whom to let in.
+  ## The request must be VALID: for this room, unexpired, and signed by the encryption
+  ## identity it names, so no one is admitted on a request made in their name (exo-a87).
+  ## It carries no secp key, so nothing says whether the requester holds an account; a
+  ## room that wants owners only learns it when they act (an approval names its signer).
   if gSession == nil: return "not-joined"
   let b = hexToBytes(identityHex)
   if b.len != 64: return "bad-key"          # a member identity: ed25519(32) ++ x25519(32)
   let m = encIdentityFromBytes(b)
   let nowSec = uint64(epochTime())
   var verified = false
-  for st in gSession.pendingBindings():
-    if st.enc == m:
-      try:
-        discard bindingSigner(st, nowSec)   # F-9: recovers a signer, raises if expired
-        verified = true
-      except CatchableError: discard        # malformed/expired binding — not admissible
-  if not verified: return "unverified"      # no valid binding for this identity
+  for r in gSession.pendingRequests():
+    if r.enc == m and joinRequestValid(r, gSession.topic, nowSec): verified = true
+  if not verified: return "unverified"      # no valid request from this identity
   gSession.admit(m)
   "ok"
 
