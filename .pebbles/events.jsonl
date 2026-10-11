@@ -2306,3 +2306,5 @@
 {"type":"close","timestamp":"2026-10-10T15:11:56.457999539Z","issue_id":"exo-720.7","payload":{}}
 {"type":"comment","timestamp":"2026-10-10T15:11:56.676922677Z","issue_id":"exo-720.8","payload":{"body":"Done: RoomDetails drawer (People/Accounts/History/Privacy), closed by default, docked when the thread keeps \u003e=640 px, else over it; opened by the header, the scope line, a no-account refusal. Deferred to U6: Privacy filtered to one proposal, a card's own 'Who sees this?'. Before merging the epic: list every fact the old column showed and its path now (ui-modernization.md §5)."}}
 {"type":"close","timestamp":"2026-10-10T15:11:56.918690998Z","issue_id":"exo-720.8","payload":{}}
+{"type":"close","timestamp":"2026-10-11T11:41:26.575917732Z","issue_id":"exo-720.9","payload":{}}
+{"type":"close","timestamp":"2026-10-11T11:41:26.575917732Z","issue_id":"exo-720.10","payload":{}}
