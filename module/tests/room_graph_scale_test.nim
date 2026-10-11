@@ -2,8 +2,8 @@
 ## proposals with their approvals and settlement, each event naming the one before it in
 ## `after` as a live room's would. causalOrder (which the graph and the activity feed
 ## replay by) stays within its budget, and the graph costs little beyond the folds it
-## joins (logProvenance, reduceIntentViews, reduceFlow). Those folds' own cost — about
-## 5 s each here, quadratic in proposals × log — is exo-53d's, not the map's.
+## joins (logProvenance, reduceIntentViews, reduceFlow). Those folds took ~10 s here
+## until canonicalOrder moved to a min-heap (exo-53d); they are held under 4 s.
 ## Stub driver; pure Nim. Timings are printed so a regression shows in the log.
 
 import std/[times, monotimes, strutils, json]
@@ -56,5 +56,7 @@ block:
   doAssert intents == 50
   echo "the folds the graph joins: ", base.ms, " ms; reduceRoomGraph: ", dt.ms, " ms"
   doAssert dt.ms < base.ms * 1.3 + 500, "the graph adds too much beyond its folds: " & $dt.ms & " vs " & $base.ms
+  # exo-53d: canonicalOrder's heap took these folds from ~10 s to ~1.4 s here; hold the line
+  doAssert base.ms < 4000, "the folds regressed: " & $base.ms & " ms"
 
 echo "room_graph_scale_test: all OK"

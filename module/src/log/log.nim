@@ -27,7 +27,7 @@
 ## `after`; the one whose sorted `after` has the smallest digest is kept, so the choice
 ## is a function of the copies held, never of their arrival order.
 
-import std/[algorithm, tables, sets, sequtils]
+import std/[algorithm, tables, sets, sequtils, heapqueue]
 import ../dcbor/dcbor
 import ../hashing/hash_input
 
@@ -111,21 +111,20 @@ proc canonicalOrder*(events: seq[Event]): seq[Event] =
         indeg[id] = indeg[id] + 1
         children[p].add id
 
-  var ready: seq[EventId]
+  # deterministic tiebreak: smallest ready id first, from a min-heap — the same order a
+  # re-sort of the ready list each step gives, in n log n instead of n² log n when most
+  # events are roots (exo-53d)
+  var ready = initHeapQueue[EventId]()
   for id in byId.keys:
-    if indeg[id] == 0: ready.add id
+    if indeg[id] == 0: ready.push id
 
   result = @[]
   while ready.len > 0:
-    sort(ready)                 # deterministic tiebreak: smallest id first
-    let id = ready[0]
-    ready.delete(0)
+    let id = ready.pop()
     result.add byId[id]
-    var unblocked = children[id]
-    sort(unblocked)
-    for c in unblocked:
+    for c in children[id]:
       indeg[c] = indeg[c] - 1
-      if indeg[c] == 0: ready.add c
+      if indeg[c] == 0: ready.push c
 
 proc causalOrder*(events: seq[Event]): seq[Event] =
   ## The order views replay: topological over `parents` (hard edges, acyclic by
@@ -165,17 +164,15 @@ proc causalOrder*(events: seq[Event]): seq[Event] =
   for (child, target) in soft:
     if child in children[target]: continue      # already ordered that way
     if not reaches(child, target): addEdge(target, child)
-  var ready: seq[EventId]
+  var ready = initHeapQueue[EventId]()
   for id in byId.keys:
-    if indeg[id] == 0: ready.add id
+    if indeg[id] == 0: ready.push id
   while ready.len > 0:
-    sort(ready)
-    let id = ready[0]
-    ready.delete(0)
+    let id = ready.pop()
     result.add byId[id]
     for c in children[id]:
       indeg[c] = indeg[c] - 1
-      if indeg[c] == 0: ready.add c
+      if indeg[c] == 0: ready.push c
 
 proc applyEvent(s: var State, e: Event) =
   ## The P0 reducer step: last-write-wins on a key. Idempotent by construction —

@@ -121,4 +121,43 @@ block:
     seen.add eventId(e)
   echo "7. the eventId memo returns the exact digest and never conflates inputs OK"
 
+block:
+  # exo-53d: canonicalOrder's min-heap gives exactly the order the original re-sort did
+  proc reference(events: seq[Event]): seq[EventId] =
+    ## the algorithm as it was before the heap, verbatim in its ordering rule
+    var byId = initTable[EventId, Event]()
+    for e in events: byId[eventId(e)] = e
+    var indeg = initTable[EventId, int]()
+    var children = initTable[EventId, seq[EventId]]()
+    for id in byId.keys: (indeg[id] = 0; children[id] = @[])
+    for id, e in byId:
+      for p in e.parents:
+        if p in byId: (indeg[id] = indeg[id] + 1; children[p].add id)
+    var ready: seq[EventId]
+    for id in byId.keys: (if indeg[id] == 0: ready.add id)
+    while ready.len > 0:
+      sort(ready)
+      let id = ready[0]
+      ready.delete(0)
+      result.add id
+      var unblocked = children[id]
+      sort(unblocked)
+      for c in unblocked:
+        indeg[c] = indeg[c] - 1
+        if indeg[c] == 0: ready.add c
+  var r = initRand(53)
+  for trial in 0 ..< 200:
+    var es: seq[Event]
+    for i in 0 ..< r.rand(1 .. 40):
+      var ps: seq[EventId]
+      for _ in 0 ..< r.rand(0 .. 3):
+        if es.len > 0: ps.add eventId(es[r.rand(es.len - 1)])
+      if r.rand(9) == 0: ps.add "absent-" & $i          # a parent this log does not hold
+      es.add ev("h" & $trial & "-" & $i, ps)
+    var s = es
+    for _ in 0 .. r.rand(5): s.add es[r.rand(es.len - 1)]
+    r.shuffle(s)
+    doAssert canonicalOrder(s).ids == reference(s), "trial " & $trial
+  echo "8. canonicalOrder's heap gives exactly the original order OK"
+
 echo "causal_order_test: all OK"
