@@ -15,7 +15,7 @@
 ## (each founds its own epoch), one asks and the other admits, then a third asks and
 ## a NON-founding member admits them — and then reads the topic as the store node
 ## does: every retained frame. It asserts:
-##   1. no member's Ed25519 key, X25519 key, secp256k1 address or binding signature
+##   1. no member's Ed25519 key, X25519 key, secp256k1 address or join-request signature
 ##      appears anywhere in any frame (a conservation check: sentinels in, zero out);
 ##   2. no two data frames, and no two grant frames, share their first or last four
 ##      bytes — a deterministic epoch tag at either end fails this;
@@ -44,7 +44,6 @@ let aliceKs = newInMemoryKeystore(seed(0x11), seed(0x21))
 let bobKs   = newInMemoryKeystore(seed(0x12), seed(0x22))
 let carolKs = newInMemoryKeystore(seed(0x13), seed(0x23))
 const topic = "/muster/1/store-node-view/proto"
-let ctx = LinkContext(account: topic, slot: "0", expiry: high(uint64))
 
 let net = newLocalNetwork()
 # Both Alice and Bob joined the room by name, so each founded its own epoch (the app's
@@ -56,8 +55,8 @@ let carol = newCoordinationSession(newLocalTransport(net), newEpochJoiner(carolK
 alice.publish(Event(key: "msg/a0", value: "alice alone"))
 
 # Bob asks; Alice admits him.
-let bobBinding = bobKs.bindingFor(ctx)
-bob.requestJoin(bobBinding)
+let bobRequest = bobKs.joinRequestFor(topic, high(uint64))
+bob.requestJoin(bobRequest)
 doAssert bobKs.encIdentity() in alice.pendingJoins(), "Alice sees Bob's request"
 alice.admit(bobKs.encIdentity())
 doAssert bob.members().len == 2 and alice.members().len == 2, "Alice and Bob share an epoch"
@@ -65,8 +64,8 @@ alice.publish(Event(key: "msg/a1", value: "alice to bob"))
 bob.publish(Event(key: "msg/b1", value: "bob to alice"))
 
 # Carol asks; BOB (not the founder) admits her.
-let carolBinding = carolKs.bindingFor(ctx)
-carol.requestJoin(carolBinding)
+let carolRequest = carolKs.joinRequestFor(topic, high(uint64))
+carol.requestJoin(carolRequest)
 doAssert carolKs.encIdentity() in bob.pendingJoins(), "Bob, a member, sees Carol's request"
 bob.admit(carolKs.encIdentity())
 doAssert carol.members().len == 3 and alice.members().len == 3, "all three share the new epoch"
@@ -96,8 +95,8 @@ block:
     sentinels.add (name & " ed25519", @(id.ed))
     sentinels.add (name & " x25519", @(id.x))
     sentinels.add (name & " secp256k1 address", @(ks.address()))
-  sentinels.add ("bob's binding signature", @(bobBinding.sig))
-  sentinels.add ("carol's binding signature", @(carolBinding.sig))
+  sentinels.add ("bob's join request signature", @(bobRequest.sig))
+  sentinels.add ("carol's join request signature", @(carolRequest.sig))
   var leaks: seq[string]
   for (name, bytes) in sentinels:
     var n = 0

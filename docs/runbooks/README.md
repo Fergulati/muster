@@ -3,6 +3,7 @@
 Repeatable scripts for demos and posts. Not specs — the specs are `docs/01-furps.md` and
 `contracts/specs/`; these are how to *show* what the specs guarantee.
 
+- [`ui-redesign-review.md`](ui-redesign-review.md): what the UI redesign (exo-720) still needs from a person. The new UI in the standalone app with two peers, card by card, then installed into a fresh Basecamp 0.3.2 from a catalogue served on this machine (`scripts/basecamp-local-catalogue.sh`). It ends with what to send back.
 - [`install-from-catalogue.md`](install-from-catalogue.md): install Muster in Logos Basecamp 0.3.2 from Muster's own catalogue. Add the URL, install from Applications, untick the full Monero node, and read what adding the catalogue trusts. These are the stranger-facing steps the campaign page reuses. The maintainers' section tests a release from a local https server.
 - [`basecamp-fresh-install.md`](basecamp-fresh-install.md): Muster in a fresh Basecamp,
   nothing seeded. Two people, each on their own machine, set up an account and chains, make

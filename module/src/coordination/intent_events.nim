@@ -3,13 +3,16 @@
 ## attestation layer can use them while the fold in intents.nim uses attestations).
 ## intents.nim re-exports all of this; import intents, not this, from outside.
 
-import std/[json, sets, strutils, algorithm]
+import std/[json, sets, strutils, algorithm, tables]
 import ../log/log
 import ../intents/materialization
 import ../drivers/driver
 import ../drivers/invoke          # invokeDomain — the invoke effect's schema id
 import ../dcbor/dcbor
 import ../hashing/keccak256
+import ../crypto/binding         # a key binding's signer: who a decliner's addresses are (declineFold)
+import ../crypto/secp256k1
+import ../crypto/curve25519       # EncIdentity.toBytes
 
 type DriverFor* = proc(kind: string): Driver
   ## Resolve a policy kind to its driver. Each intent folds under the driver of the
@@ -446,9 +449,9 @@ proc submitEvent*(intentId: string, parents: seq[EventId] = @[], chainRef = ""):
 
 proc declineEvent*(intentId, who: string, parents: seq[EventId] = @[]): Event =
   ## A member declines to take part in an intent (the card's Deny, exo-002.3). It is
-  ## informational: it never blocks the driver's threshold — whether a decline by a
-  ## required signer should DROP the intent is driver policy, not core policy. `who`
-  ## dedups one decline per member, and the view names who declined. The value is a
+  ## final (exo-720, declineFold): their approval counts for nothing, and an intent too many
+  ## of its signers declined is declined. `who` (the member's encryption identity) dedups
+  ## one decline per member, and the view names who declined. The value is a
   ## JSON object so it can carry `who`'s author signature (authorship.nim, exo-f76).
   Event(parents: parents, key: "intent/" & intentId & "/decline/" & who, value: "{}")
 
@@ -650,3 +653,49 @@ proc sharedMoneroAddressOf*(events: seq[Event], who, chain: string): string =
       let a = b{"address"}.getStr()
       if a.len > 0: result = a
     except CatchableError: discard
+
+
+# ── declines: a member who declined does not approve (the card's Deny, exo-720) ──
+
+proc declineFold*(events: seq[Event]): Table[string, seq[seq[string]]] =
+  ## For each intent a decline still applies to, the names each decliner is known by, as
+  ## bare lowercase hex (bareNames): their encryption identity, whole and its Ed25519 half
+  ## (how room-roster drivers name an approver), and every secp address bound to that
+  ## identity by a key binding the address's OWN key signed, so nobody can void another's
+  ## approval by binding that person's address to themselves. An intent the room already
+  ## submitted, finalized or paid toward (a submit, final or part event) is absent: the
+  ## chain has acted, and a decline that raced it changes nothing. A function of the event
+  ## SET, so every member folds the same declines whatever order they arrived in.
+  var acted = initHashSet[string]()
+  var bound = initTable[string, seq[string]]()       # enc identity hex -> addresses it signed for
+  for e in events:
+    let p = e.key.split('/')
+    if p.len < 3 or p[0] != "intent": continue
+    if p[2] in ["submit", "final", "part"]: acted.incl p[1]
+    if p[2] == "binding" and p.len >= 4:
+      try:
+        let st = decodeLink(hexToBytes(e.value))
+        let signer = bytesHex(ecrecover(linkDigest(st.enc, st.ctx), st.sig))[2 .. ^1]
+        let named = bareNames([p[3]])
+        if named.len == 1 and named[0] == signer:
+          bound.mgetOrPut(bytesHex(st.enc.toBytes())[2 .. ^1], @[]).add signer
+      except CatchableError: discard
+  for e in events:
+    let p = e.key.split('/')
+    if p.len < 4 or p[0] != "intent" or p[2] != "decline" or p[1] in acted: continue
+    let who = bareNames([p[3]])[0]
+    if who.len != 128: continue                        # an encryption identity: ed25519 ++ x25519
+    var names = @[who, who[0 ..< 64]]
+    for a in bound.getOrDefault(who, @[]):
+      if a notin names: names.add a
+    var list = result.getOrDefault(p[1], @[])
+    if names notin list: list.add names
+    result[p[1]] = list
+
+proc voidedByDecline*(decl: Table[string, seq[seq[string]]], intentId, who: string): bool =
+  ## Whether the approval named `who` is a decliner's: it does not count.
+  if intentId notin decl: return false
+  let w = bareNames([who])
+  for names in decl[intentId]:
+    for n in w:
+      if n in names: return true

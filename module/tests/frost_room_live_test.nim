@@ -67,4 +67,38 @@ block:
   auditVerifies("pasted", r, id, 1, "unattested")
   echo "2. room FROST: a pasted signature lands unattested, and the audit verifies OK"
 
+# ── 3. approve once: round 2 follows on the tick (exo-720) ───────────────────────
+# The card offers Approve until a member has approved; nothing contributed round 2 for them,
+# so a room-FROST proposal stalled at "round 2 of 2 (0 of 2 this round)" (2026-10-11).
+block:
+  var r = newRoom("/muster/1/720-rounds/proto")
+  let id = r.proposeFrost(3)
+  let ctxFor = proc(i: string): LinkContext = bindCtx()
+  r.alice.poll()
+  doAssert liveContribute(r.alice, aliceKs, dFor, id, "", "", bindCtx(), Now) == "collecting"
+  doAssert liveNextRounds(r.alice, aliceKs, dFor, ctxFor, Now).len == 0, "round 1 is still open: nothing follows yet"
+  r.bob.poll()
+  doAssert liveContribute(r.bob, bobKs, dFor, id, "", "", bindCtx(), Now) == "collecting"
+  doAssert reduceIntents(r.events(), dFor)[id].collection.round == 2, "round 1 closed"
+  let a = liveNextRounds(r.alice, aliceKs, dFor, ctxFor, Now)
+  doAssert a.len == 1 and a[0].id == id and a[0].outcome == "collecting", "Alice's round 2 follows: " & $a
+  doAssert liveNextRounds(r.alice, aliceKs, dFor, ctxFor, Now).len == 0, "once, not again"
+  let b = liveNextRounds(r.bob, bobKs, dFor, ctxFor, Now)
+  doAssert b.len == 1 and b[0].outcome == "executable", "Bob's round 2 completes it: " & $b
+  doAssert approvalGrades(r.events(), dFor, id).allIt(it.grade == agCommitted)
+  echo "3. room FROST: each member approves once; round 2 follows on the tick, executable OK"
+
+# ── 4. a member who declined is not carried into round 2 ─────────────────────────
+block:
+  var r = newRoom("/muster/1/720-rounds-decline/proto")
+  let id = r.proposeFrost(4)
+  let ctxFor = proc(i: string): LinkContext = bindCtx()
+  r.alice.poll()
+  doAssert liveContribute(r.alice, aliceKs, dFor, id, "", "", bindCtx(), Now) == "collecting"
+  r.bob.poll()
+  doAssert liveContribute(r.bob, bobKs, dFor, id, "", "", bindCtx(), Now) == "collecting"
+  r.alice.publishAuthored(aliceKs, declineEvent(id, hexOf(aliceKs.encIdentity().toBytes())))
+  doAssert liveNextRounds(r.alice, aliceKs, dFor, ctxFor, Now).len == 0, "a member who declined does not approve round 2"
+  echo "4. a member who declined is not carried into round 2 OK"
+
 echo "frost_room_live_test: all OK"

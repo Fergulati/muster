@@ -211,8 +211,12 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     for e in admittedAttestations(events, driverFor, id):
       let p = e.key.split('/')
       attests.mgetOrPut(p[1] & "/" & p[3] & "/" & p[4], @[]).add e.value
+  # A member who declined does not approve (the card's Deny): their approval counts toward
+  # nothing, whichever arrived first, until the room has acted on the chain (declineFold).
+  let declined = declineFold(events)
   for s in sigs:
     if s.round != result[s.id].collection.round: continue   # not its round: counts toward no other (exo-e42)
+    if voidedByDecline(declined, s.id, s.who): continue
     # A contribution under a name that is not its signer's (exo-a5a), or one its driver does
     # not verify (exo-c00), is nobody's approval: dropped BEFORE dedup, so it can neither
     # count twice nor take the named member's slot and leave their real one uncounted.
@@ -233,6 +237,24 @@ proc reduceIntents*(events: seq[Event], driverFor: DriverFor): Table[string, Int
     it.apply(driver, IntentEvent(kind: ieContribute, now: now,
                                  contribution: Contribution(bytes: hexToBytes(s.value))))
     result[s.id] = it
+
+  # An intent that too many of those who could approve have declined can never reach its
+  # threshold: it is declined. A decliner counts only when their driver names them among
+  # the signers (mayContribute over the names declineFold knows them by): a member whose key
+  # the room has never seen may not be a signer at all, so their decline closes nothing.
+  for id, decliners in declined:
+    if id notin result or result[id].state notin {lsProposed, lsCollecting}: continue
+    let driver = driverOf(id)
+    let desc = describeFor(driver, result[id].effect)
+    let prof = driver.profile()
+    let n = (if prof.n > 0: prof.n else: desc.threshold)
+    var gone = 0
+    for names in decliners:
+      if driver.mayContribute(result[id].effect, names) == elYes: inc gone
+    if n - gone < desc.threshold:
+      var it = result[id]
+      it.state = lsDeclined
+      result[id] = it
 
   # An intent whose family settles in parts moves past executable only on its parts
   # (pass 5): a bare submit / final names no author, so it never settles one.
@@ -324,7 +346,7 @@ type IntentView* = object
   roundApprovals*: int    ## distinct contributors folded in THE CURRENT round — the honest
                           ## "M of N this round" for a multi-round driver; equals `approvals`
                           ## when rounds == 1
-  declines*: int          ## distinct members who declined to take part (informational)
+  declines*: int          ## distinct members who declined to take part (final: declineFold)
   decliners*: seq[string] ## who declined, sorted
   proposers*: seq[string] ## who proposed it, by their signed claim, in log order ([] = unattributed)
   schemaId*: string       ## the effect's declared schema id (v0 vocabulary, ADR-009)
@@ -868,7 +890,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
       seenDecline.incl(id & "/" & p[3])
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "decline", intentId: id,
         account: p[3], accountable: true, what: "a decline",
-        detail: "", guarantee: "sealed to the room's epoch; informational — the threshold is unchanged",
+        detail: "", guarantee: "sealed to the room's epoch; final — the decliner's approval counts for nothing",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "material":
       if p.len < 5: continue

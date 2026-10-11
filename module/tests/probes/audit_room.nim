@@ -71,7 +71,7 @@ proc exportAs*(r: Room, who, id: string): AuditResult =
 # ── Carol joins mid-intent: request → alice admits (re-key) → alice re-announces ──
 proc joinCarol*(r: var Room): CoordinationSession =
   let carol = newCoordinationSession(newLocalTransport(r.net), newEpochJoiner(carolKs), r.topic)
-  carol.requestJoin(carolKs.bindingFor(bindCtx()))
+  carol.requestJoin(carolKs.joinRequestFor(r.topic, high(uint64)))
   r.alice.poll()
   r.alice.admit(carolKs.encIdentity())
   r.bob.poll(); carol.poll()

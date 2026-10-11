@@ -46,7 +46,7 @@ alice.publishAuthored(aliceKs, newMessageEvent(aliceId, 1, "before bob", 1)[1])
 alice.publish(proposeEvent(idBefore, effectBefore))
 
 # bob is admitted over the handshake (re-key forward, an admit entry under the new epoch)
-bob.requestJoin(bobKs.bindingFor(LinkContext(account: "room", slot: "0", expiry: high(uint64))))
+bob.requestJoin(bobKs.joinRequestFor(topic, high(uint64)))
 alice.admit(bobKs.encIdentity())
 
 # epoch 1: both act; a message with a forged author never reaches a map

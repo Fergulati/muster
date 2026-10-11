@@ -12,6 +12,7 @@ import Logos.Controls
 // "+" → kind → policy → Propose path is the same.
 Popup {
     id: picker
+    objectName: "roomActionPicker"
     required property var room
 
     width: Math.min(560, parent ? parent.width : 560)

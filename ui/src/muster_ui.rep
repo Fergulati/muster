@@ -445,8 +445,8 @@ class MusterUi
     PROP(QString conversationsJson="[]" READONLY)
 
     // Join-requests not yet admitted (coordinate_pending): a JSON array of
-    // {identity, bindsOwner} — 64-byte encryption identity hex, and whether its
-    // binding recovers to a Safe owner (F-9). The scope panel lists these with an
+    // {identity, alias} — 64-byte encryption identity hex and its address-book name.
+    // A request discloses nothing else (exo-a87). The scope panel lists these with an
     // Admit action; admitting re-keys the room forward (F-16).
     PROP(QString pendingJson="[]" READONLY)
     // The last join ask's outcome (coordinate_request_join): "ok" (sent, sealed to the

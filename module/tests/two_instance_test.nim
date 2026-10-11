@@ -60,8 +60,7 @@ echo "1. Alice founds the room; Bob is outside OK"
 
 # 2. Bob asks to join (discovery, no authority); Alice verifies his F-9 binding and
 #    admits him — re-key forward, so Bob reads from his epoch on (F-16).
-let ctx = LinkContext(account: "room-safe", slot: "0", expiry: high(uint64))
-bob.requestJoin(bobKs.bindingFor(ctx))
+bob.requestJoin(bobKs.joinRequestFor(topic, high(uint64)))
 doAssert bobPub in alice.pendingJoins(), "Alice sees Bob's request as pending"
 alice.admit(bobPub)
 doAssert bobPub notin alice.pendingJoins(), "the request clears once admitted"

@@ -94,11 +94,10 @@ ColumnLayout {
 
     // The tx id, last and quietest — the thing you would take to an
     // explorer, and the least interesting fact on the card.
-    LogosText {
+    SelectableText {
+        objectName: "receiptTx"
         Layout.fillWidth: true
         visible: !!(cardRoot.card && cardRoot.card.tx)
-        wrapMode: Text.WrapAnywhere
-        elide: Text.ElideRight
         text: String((cardRoot.card && cardRoot.card.tx) || "")
         color: Theme.palette.textTertiary
         font.family: MusterStyle.mono

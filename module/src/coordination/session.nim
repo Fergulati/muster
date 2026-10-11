@@ -16,10 +16,11 @@ import std/[json, sequtils, sets, tables, times]
 import ../transport/transport
 import ../crypto/conversation
 import ../crypto/binding
+import ../crypto/join_request
 import ../crypto/sodium   # randomBytes: a beacon request's nonce
 import ../log/log
 import ./intents   # membershipEvent (the admit as a log entry)
-export log, binding
+export log, binding, join_request
 
 type
   CoordinationSession* = ref object
@@ -27,7 +28,7 @@ type
     crypto: ConversationCrypto
     topic: string
     log*: Log
-    pending: seq[LinkStatement]  ## join-requests seen but not yet admitted (each carries a binding; no authority)
+    pending: seq[JoinRequest]    ## join requests seen but not yet admitted (each names an encryption identity; no authority)
     invites: seq[seq[byte]]      ## invite frames seen on this (inbox) topic — opaque, sealed to the owner; the module opens them
     beacons: seq[seq[byte]]      ## join keys other rooms on this topic announced, most recent last (at most MaxBeacons)
     lastBeacon: seq[byte]        ## the join key we last announced
@@ -46,7 +47,7 @@ type
 # no frame carries a member identity, address, binding or epoch number in the clear.
 const
   FrameData = 0x00'u8          ## body = epoch-sealed event envelope (no epoch number in the clear)
-  FrameJoinRequest = 0x01'u8   ## body = the requester's binding, sealed to a room's join key (a beacon) — no authority
+  FrameJoinRequest = 0x01'u8   ## body = a JoinRequest (the asker's encryption identity, self-signed for this room), sealed to a room's join key (a beacon) — no authority, no secp key (exo-a87)
   FrameControl = 0x02'u8       ## body = an opaque membership control frame (a grant, sealed whole to one member)
   FrameInvite = 0x03'u8        ## body = a sealed-box invite to THIS topic's owner (an inbox drop). Not epoch-sealed, so it needs no shared membership — anyone may drop, only the owner opens (sealed to their X25519).
   FrameBeacon = 0x04'u8        ## body = a room's current join key (32 bytes, derived from its epoch key; names no member)
@@ -113,10 +114,13 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
       let id = eventId(ev)
       if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
     of FrameJoinRequest:
-      let st = decodeLink(s.crypto.openJoinRequest(body))   # sealed to a join key; only a member opens it
-      let m = st.enc
+      # sealed to a join key; only a member opens it. A request for another room, expired,
+      # or not signed by the identity it names is dropped here: nobody asks in another's name
+      let r = decodeJoinRequest(s.crypto.openJoinRequest(body))
+      if not joinRequestValid(r, s.topic, uint64(epochTime())): return
+      let m = r.enc
       if m notin s.crypto.members() and not s.pending.anyIt(it.enc == m):
-        s.pending.add st
+        s.pending.add r
     of FrameControl:
       discard s.crypto.ingestControl(body)     # a grant; ours to open or not
     of FrameInvite:
@@ -175,12 +179,13 @@ proc receivedInvites*(s: CoordinationSession): seq[seq[byte]] = s.invites
 
 proc catchUp*(s: CoordinationSession)
 
-proc requestJoin*(s: CoordinationSession, binding: LinkStatement): bool {.discardable.} =
-  ## Ask to be admitted: send our binding, sealed to each join key the room has
+proc requestJoin*(s: CoordinationSession, request: JoinRequest): bool {.discardable.} =
+  ## Ask to be admitted: send our join request, sealed to each join key the room has
   ## announced, so only its members can read who is asking (FS-7) — the store node sees
-  ## that someone asked, not who. The binding lets a member VERIFY we are who we claim
-  ## (our encryption identity is signed by our secp key) before admitting, but carries
-  ## no authority on its own: a member still has to decide. Discovery, not entry.
+  ## that someone asked, not who. The request names our encryption identity and is signed
+  ## by it, so a member can tell we hold the key we name; it carries no secp key, so
+  ## asking discloses nothing else (exo-a87), and no authority: a member still has to
+  ## decide. Discovery, not entry.
   ##
   ## With no join key seen yet we pull the store's retained frames, and if there is
   ## still none, ask the room to announce one; a synchronous transport answers inside
@@ -190,9 +195,9 @@ proc requestJoin*(s: CoordinationSession, binding: LinkStatement): bool {.discar
   if s.beacons.len == 0:
     discard s.transport.publish(s.topic, @[FrameBeaconRequest] & randomBytes(16))
   if s.beacons.len == 0: return false
-  let request = encodeLink(binding)
+  let bytes = encodeJoinRequest(request)
   for b in s.beacons:
-    discard s.transport.publish(s.topic, @[FrameJoinRequest] & s.crypto.sealJoinRequest(b, request))
+    discard s.transport.publish(s.topic, @[FrameJoinRequest] & s.crypto.sealJoinRequest(b, bytes))
   true
 
 proc members*(s: CoordinationSession): seq[Member] = s.crypto.members()
@@ -203,7 +208,7 @@ proc securityLevel*(s: CoordinationSession): SecurityLevel = s.crypto.securityLe
   ## and the log's (provenance); the hosted `security_levels` combines all three.
   ## The current membership epoch (monotonic; bumps on every admit/removal).
   ## The ADMITTED roster of the current epoch (recipients of the epoch key) —
-  ## distinct from `pendingBindings` (join-requests not yet admitted).
+  ## distinct from `pendingRequests` (join requests not yet admitted).
 
 proc nodeInfo*(s: CoordinationSession): string = s.transport.nodeInfo()
 proc rlnState*(s: CoordinationSession): string = s.transport.rlnState()
@@ -215,15 +220,15 @@ proc mixInputs*(s: CoordinationSession): MixInputs = s.transport.mixInputs()
 proc selfIdentity*(s: CoordinationSession): Member = s.crypto.identity()
   ## Our own member key, so the roster can flag which entry is us.
 
-proc pendingBindings*(s: CoordinationSession): seq[LinkStatement] =
-  ## Bindings awaiting an admission decision — the caller verifies each against its
-  ## owner set (F-9, bindingBinds) before deciding, then calls admit. A relaunch's
-  ## catch-up replays the topic in order, so a request is read before the grant that
-  ## answered it (exo-7b3): anyone the current epoch already holds is not waiting.
+proc pendingRequests*(s: CoordinationSession): seq[JoinRequest] =
+  ## Join requests awaiting a member's decision, each already checked to be signed by the
+  ## identity it names, for this room. A relaunch's catch-up replays the topic in order, so
+  ## a request is read before the grant that answered it (exo-7b3): anyone the current
+  ## epoch already holds is not waiting.
   let members = s.crypto.members()
   s.pending.filterIt(it.enc notin members)
 
-proc pendingJoins*(s: CoordinationSession): seq[Member] = s.pendingBindings().mapIt(it.enc)
+proc pendingJoins*(s: CoordinationSession): seq[Member] = s.pendingRequests().mapIt(it.enc)
 
 proc admit*(s: CoordinationSession, joiner: Member) =
   ## Admit a joiner (an existing member's decision): re-key forward and publish the

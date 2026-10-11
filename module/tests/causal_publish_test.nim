@@ -33,7 +33,7 @@ let net = newLocalNetwork()
 let alice = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs, topic), topic)
 let bob = newCoordinationSession(newLocalTransport(net), newEpochJoiner(bobKs), topic)
 let ctx = LinkContext(account: "room", slot: "0", expiry: high(uint64))
-bob.requestJoin(bobKs.bindingFor(ctx))
+bob.requestJoin(bobKs.joinRequestFor(topic, high(uint64)))
 alice.admit(bobKs.encIdentity())
 
 proc held(s: CoordinationSession, k: string): Event =
@@ -69,7 +69,7 @@ block:
   let original = alice.held("intent/" & id & "/propose")
   doAssert original.after.len > 0
   let carol = newCoordinationSession(newLocalTransport(net), newEpochJoiner(carolKs), topic)
-  carol.requestJoin(carolKs.bindingFor(ctx))
+  carol.requestJoin(carolKs.joinRequestFor(topic, high(uint64)))
   alice.admit(carolKs.encIdentity())
   alice.publish(proposeEvent(id, effectJson))          # the re-announce: rebuilt, so no after
   doAssert alice.held("intent/" & id & "/propose").after == original.after, "the stored copy is kept"

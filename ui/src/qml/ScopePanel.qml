@@ -32,8 +32,8 @@ Item {
     // The room topic — the thing the scope is drawn around.
     property string topic: ""
 
-    // Join-requests not yet admitted: [{ identity, bindsOwner }], identity a
-    // 64-byte hex. A parse failure upstream yields [] (absent), never fiction.
+    // Join-requests not yet admitted: [{ identity, alias }], identity a 64-byte hex.
+    // A request discloses the encryption identity and nothing else (exo-a87). A parse failure upstream yields [] (absent), never fiction.
     property var pending: []
 
     // The last ask's outcome (coordinate_request_join): "ok" | "waiting-for-room-key" | ""
@@ -350,7 +350,6 @@ Item {
                         text: (alias.length > 0
                                  ? alias
                                  : (ident.length > 14 ? ident.substring(0, 10) + "…" + ident.substring(ident.length - 4) : ident))
-                              + ((modelData && modelData.bindsOwner) ? qsTr("  · owner") : "")
                         color: Theme.palette.textSecondary
                         font.pixelSize: MusterStyle.caption
                         elide: Text.ElideRight
