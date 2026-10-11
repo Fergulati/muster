@@ -23,8 +23,26 @@ Item {
     // crowd the roster/history in the side column. The heading (with the action count)
     // stays; click it to reveal "who can see what".
     property bool collapsed: true
-    readonly property var rows: (flowView.flow && flowView.flow.rows) ? flowView.flow.rows : []
-    readonly property var matrix: (flowView.flow && flowView.flow.matrix) ? flowView.flow.matrix : ({})
+    // One proposal's flow (exo-720.10, a card's "Who sees this?"): its intent id, else "".
+    // Filtered, the matrix is rebuilt from that proposal's rows alone, over the same
+    // observers the room's matrix lists — the store node always among them (FS-9).
+    property string intentFilter: ""
+    readonly property var allRows: (flowView.flow && flowView.flow.rows) ? flowView.flow.rows : []
+    readonly property var rows: flowView.intentFilter.length === 0 ? flowView.allRows
+        : flowView.allRows.filter(function (r) { return String(r.intentId || "") === flowView.intentFilter; })
+    readonly property var roomMatrix: (flowView.flow && flowView.flow.matrix) ? flowView.flow.matrix : ({})
+    readonly property var matrix: {
+        if (flowView.intentFilter.length === 0) return flowView.roomMatrix;
+        var m = {};
+        for (var o in flowView.roomMatrix) m[o] = [];
+        for (var i = 0; i < flowView.rows.length; ++i) {
+            var r = flowView.rows[i], to = String(r.to || ""), f = String(r.field || "");
+            if (!(to in m)) m[to] = [];
+            if (f.length > 0 && m[to].indexOf(f) < 0) m[to].push(f);
+        }
+        for (var k in m) m[k].sort();
+        return m;
+    }
 
     readonly property var observerOrder: ["room-member", "store-node", "rpc-provider", "chain-observer", "target-module"]
     function observerLabel(o) {

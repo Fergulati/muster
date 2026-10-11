@@ -49,8 +49,13 @@ Item {
     }
     property alias detailsOpen: roomPrefs.detailsOpen
     property alias detailsTab: roomPrefs.detailsTab
-    function openDetails(tab) { if (tab) room.detailsTab = tab; room.detailsOpen = true; }
-    function closeDetails() { room.detailsOpen = false; }
+    function openDetails(tab) { if (tab) room.detailsTab = tab; room.detailsIntent = ""; room.detailsOpen = true; }
+    function closeDetails() { room.detailsOpen = false; room.detailsIntent = ""; }
+    // A card's "Who sees this?": Privacy, showing that one proposal's flow. Cleared when the
+    // drawer closes or another tab opens, so a filtered view never passes for the room's.
+    property string detailsIntent: ""
+    function showWhoSees(intentId) { room.detailsTab = "privacy"; room.detailsOpen = true; room.detailsIntent = String(intentId || ""); }
+    onDetailsTabChanged: if (room.detailsTab !== "privacy") room.detailsIntent = ""
     // The pinned line's Review: the thread scrolls to that proposal's card.
     signal jumpRequested(string intentId)
 

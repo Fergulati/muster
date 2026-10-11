@@ -147,14 +147,56 @@ Rectangle {
             Flickable {
                 clip: true
                 contentWidth: width
-                contentHeight: flowView.implicitHeight
+                contentHeight: privacyCol.implicitHeight
                 boundsBehavior: Flickable.StopAtBounds
-                FlowView {
-                    id: flowView
-                    objectName: "flowView"
+                ColumnLayout {
+                    id: privacyCol
                     width: parent.width
-                    flow: details.room.flow
-                    collapsed: false
+                    spacing: Theme.spacing.medium
+                    // one proposal's flow, from its card's "Who sees this?" — say so, and offer
+                    // the whole room's
+                    Rectangle {
+                        objectName: "flowFilterChip"
+                        visible: details.room.detailsIntent.length > 0
+                        Layout.fillWidth: true
+                        implicitHeight: chipRow.implicitHeight + 2 * Theme.spacing.small
+                        radius: Theme.spacing.radiusLarge
+                        color: MusterStyle.needsSoft
+                        RowLayout {
+                            id: chipRow
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacing.medium
+                            anchors.rightMargin: Theme.spacing.tiny
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: {
+                                    var it = details.room.intentById(details.room.detailsIntent);
+                                    var what = it && it.summary ? String(it.summary.text || "") : "";
+                                    return what.length > 0 ? qsTr("Showing one proposal: %1").arg(what)
+                                                           : qsTr("Showing one proposal");
+                                }
+                                color: MusterStyle.needsText
+                                font.pixelSize: MusterStyle.caption
+                                font.weight: Theme.typography.weightBold
+                            }
+                            IconAction {
+                                objectName: "flowFilterClear"
+                                size: 24
+                                label: qsTr("Show the whole room")
+                                icon: LogosIcons.close
+                                onClicked: details.room.detailsIntent = ""
+                            }
+                        }
+                    }
+                    FlowView {
+                        id: flowView
+                        objectName: "flowView"
+                        Layout.fillWidth: true
+                        flow: details.room.flow
+                        intentFilter: details.room.detailsIntent
+                        collapsed: false
+                    }
                 }
             }
         }
