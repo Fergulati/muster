@@ -31,7 +31,7 @@ ColumnLayout {
         }
         Repeater {
             model: room.accountsForKind(room.policyKind)
-            delegate: LogosButton {
+            delegate: ActionButton {
                 required property var modelData
                 objectName: "roomAccount_" + String(modelData.id)
                 Layout.preferredWidth: 170

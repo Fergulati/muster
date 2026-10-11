@@ -44,6 +44,35 @@ for path in sorted(glob.glob("ui/src/qml/*.qml")):
     for key in re.findall(r"Theme\.palette\.(\w+)", open(path).read()):
         if key not in theme:
             found[f"{os.path.basename(path)} · palette-key · Theme.palette.{key} is not in the theme"] += 1
+# A property bound twice in one object: Qt 6.9's qmllint says nothing, and at runtime the
+# whole document fails to load ("Property value set multiple times"), blanking every view
+# that uses it. Read each object's own bindings (one level in), skipping JS blocks.
+OBJ = re.compile(r"^(\s*)([A-Z][\w.]*)\s*\{\s*$")
+BIND = re.compile(r"^(\s*)([a-z][\w.]*)\s*:(?!:)")
+for path in sorted(glob.glob("ui/src/qml/*.qml")):
+    stack = []          # (indent, "object" | "code", names-seen)
+    for n, line in enumerate(open(path), 1):
+        raw = line.rstrip("\n")
+        code = re.sub(r"//.*$", "", re.sub(r'"(?:[^"\\]|\\.)*"', '""', raw))
+        if not code.strip():
+            continue
+        ind = len(code) - len(code.lstrip())
+        if code.lstrip().startswith("}"):
+            while stack and stack[-1][0] >= ind:
+                stack.pop()
+        m = OBJ.match(code)
+        if m:
+            stack.append((ind, "object", {}))
+            continue
+        b = BIND.match(code)
+        if b and stack and stack[-1][1] == "object" and len(b.group(1)) == stack[-1][0] + 4 \
+                and b.group(2) not in ("property", "readonly", "required", "signal", "function", "default"):
+            seen = stack[-1][2]
+            if b.group(2) in seen:
+                found[f"{os.path.basename(path)} · duplicate-binding · {b.group(2)} set twice in one object"] += 1
+            seen[b.group(2)] = n
+        if code.rstrip().endswith("{") and not m:
+            stack.append((ind, "code", {}))
 base = json.load(open(baseline_path)) if os.path.exists(baseline_path) else {}
 if mode == "--update":
     json.dump(dict(sorted(found.items())), open(baseline_path, "w"), indent=1)

@@ -526,6 +526,30 @@ Rectangle {
     signal useAddress(string address)
 
     readonly property string kind: cardRoot.card ? String(cardRoot.card.kind || "") : ""
+    // the header's icon and status (exo-720.10): the same facts the card shows below, in a word
+    readonly property string headerIcon: {
+        var c = cardRoot.card || {};
+        if (cardRoot.kind === "address-request") return "ask-address";
+        if (cardRoot.kind === "address-share") return "link";
+        if (cardRoot.kind === "send-receipt" || cardRoot.kind === "intent-approve") return "check";
+        if (c.split || c.settleUp) return "split";
+        if (String(c.statement || "").length > 0) return "check";
+        if (String(c.action || "").length > 0) return "code";
+        return "coin";
+    }
+    readonly property string stateWord: {
+        var st = String((cardRoot.card && cardRoot.card.state) || "");
+        return st === "proposed" ? qsTr("Proposed") : st === "collecting" ? qsTr("Collecting")
+             : st === "executable" ? qsTr("Ready") : st === "submitted" ? qsTr("Submitted")
+             : st === "settling" ? qsTr("Settling") : st === "final" ? qsTr("Final")
+             : st === "declined" ? qsTr("Declined") : st === "expired" ? qsTr("Expired")
+             : st === "ready" ? qsTr("Ready") : st.length > 0 ? st.charAt(0).toUpperCase() + st.slice(1) : "";
+    }
+    readonly property string stateTone: {
+        var st = String((cardRoot.card && cardRoot.card.state) || "");
+        return st === "final" ? "settled" : st === "submitted" || st === "settling" ? "info"
+             : st === "declined" || st === "expired" ? "refused" : "waiting";
+    }
 
     // The kinds this component knows how to draw. Anything else is not ours to
     // render, so we disappear and let the thread show plain text.
@@ -580,9 +604,9 @@ Rectangle {
     Layout.fillWidth: true
     implicitHeight: cardRoot.known ? body.implicitHeight + 2 * Theme.spacing.medium : 0
 
-    radius: Theme.spacing.radiusMedium
     // The receipt is the one moment value leaves the room, so it carries the
     // outside ground inside it — every other kind stays on the raised surface.
+    radius: Theme.spacing.radiusLarge
     color: cardRoot.kind === "send-receipt"
         ? Theme.palette.surfaceRecessed
         : Theme.palette.surfaceRaised
@@ -595,24 +619,46 @@ Rectangle {
         anchors.margins: Theme.spacing.medium
         spacing: Theme.spacing.tiny
 
-        // ── a one-line heading, in mono — the "this is data" voice ─────────
-        LogosText {
+        // ── the header (exo-720.10): what kind of card, what it is, where it stands ──
+        RowLayout {
+            objectName: "cardHeader"
             Layout.fillWidth: true
-            text: cardRoot.kind === "address-request" ? qsTr("Asked for an address")
-                : cardRoot.kind === "address-share" ? qsTr("Shared an address")
-                : cardRoot.kind === "intent-propose"
-                  ? (String((cardRoot.card && cardRoot.card.heading) || "").length > 0 ? String(cardRoot.card.heading)
-                     : String((cardRoot.card && cardRoot.card.statement) || "").length > 0 ? qsTr("Proposed a statement")
-                     : String((cardRoot.card && cardRoot.card.action) || "").length > 0 ? qsTr("Proposed an action")
-                     : qsTr("Proposed a payment"))
-                : cardRoot.kind === "intent-approve" ? qsTr("Approved")
-                : qsTr("Payment sent")
-            color: cardRoot.kind === "send-receipt"
-                ? Theme.palette.textSecondary
-                : Theme.palette.textTertiary
-            font.family: MusterStyle.mono
-            font.pixelSize: MusterStyle.caption
-            font.weight: Theme.typography.weightMedium
+            Layout.bottomMargin: Theme.spacing.tiny
+            spacing: Theme.spacing.small
+            Rectangle {
+                implicitWidth: 26; implicitHeight: 26
+                radius: Theme.spacing.radiusMedium
+                color: cardRoot.kind === "send-receipt" ? MusterStyle.settledSoft : MusterStyle.needsSoft
+                LogosIcon {
+                    anchors.centerIn: parent
+                    width: 16; height: 16
+                    source: MusterStyle.icon(cardRoot.headerIcon)
+                    color: cardRoot.kind === "send-receipt" ? MusterStyle.settled : MusterStyle.needs
+                }
+            }
+            LogosText {
+                objectName: "cardHeading"
+                Layout.fillWidth: true
+                elide: Text.ElideRight
+                text: cardRoot.kind === "address-request" ? qsTr("Asked for an address")
+                    : cardRoot.kind === "address-share" ? qsTr("Shared an address")
+                    : cardRoot.kind === "intent-propose"
+                      ? (String((cardRoot.card && cardRoot.card.heading) || "").length > 0 ? String(cardRoot.card.heading)
+                         : String((cardRoot.card && cardRoot.card.statement) || "").length > 0 ? qsTr("Proposed a statement")
+                         : String((cardRoot.card && cardRoot.card.action) || "").length > 0 ? qsTr("Proposed an action")
+                         : qsTr("Proposed a payment"))
+                    : cardRoot.kind === "intent-approve" ? qsTr("Approved")
+                    : qsTr("Payment sent")
+                color: Theme.palette.text
+                font.pixelSize: MusterStyle.body
+                font.weight: Theme.typography.weightBold
+            }
+            StatusPill {
+                objectName: "cardStatePill"
+                visible: cardRoot.kind === "intent-propose" && cardRoot.stateWord.length > 0
+                text: cardRoot.stateWord
+                tone: cardRoot.stateTone
+            }
         }
 
         // address-request (CardAddressRequest.qml)
@@ -668,88 +714,6 @@ Rectangle {
         CardNeeds { cardRoot: cardItem }
 
         // ── actions ────────────────────────────────────────────────────────
-        // address-request: the reader answers with an address.
-        LogosButton {
-            objectName: "cardShareAddress"
-            // only to someone asked, and only until they have answered (exo-8e2)
-            visible: cardRoot.kind === "address-request" && cardRoot.askedOfMe && !cardRoot.answeredByMe
-            Layout.fillWidth: true
-            text: String((cardRoot.card && cardRoot.card.asset) || "ETH") === "BTC" ? qsTr("Share my Bitcoin address")
-                  : String((cardRoot.card && cardRoot.card.asset) || "ETH") === "XMR" ? qsTr("Share my Monero address")
-                  : qsTr("Share an address")
-            onClicked: cardRoot.shareAddress()
-        }
-
-        // intent-propose: approve while it still needs you. Settling a ready
-        // Safe intent is the room's "Settle on-chain" affordance (Room.qml's
-        // ready box), driven by the verified fold — not a card button. The old
-        // "Pay it"/"Drop it" buttons had no wired path (no coordinate_drop, and
-        // paying flows through propose→approve→settle), so they only ever fired
-        // signals nothing listened to; removed rather than leave dead controls.
-        LogosButton {
-            objectName: "cardApprove"
-            visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
-                && !(cardRoot.card && cardRoot.card.approvedByMe)
-                && !cardRoot.ready
-                // a split: only who it names agrees — each debtor, and the creditor to payTo
-                // being theirs (exo-770), never to an address this client does not hold
-                && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && (cardRoot.payToMine || cardRoot.payToMineUnknown)))
-                && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
-                && !cardRoot.vouchedNotMine    // never vouch for an address this client does not hold
-                && !cardRoot.splitExpired      // past its expiry an agreement is refused (inv 2)
-            Layout.fillWidth: true
-            text: cardRoot.isSettleUp ? qsTr("Agree to settle up")
-                : !cardRoot.isSplit ? qsTr("Approve")
-                : cardRoot.iAmDebtor ? qsTr("Agree to my share")
-                : qsTr("Agree — I paid, and %1 is mine").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
-            onClicked: cardRoot.approve()
-        }
-
-        // Deny: decline to take part while it still needs signers. Informational —
-        // the threshold is unchanged; the room sees who is out. One per member; folds once.
-        LogosButton {
-            objectName: "cardDeny"
-            visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
-                && !(cardRoot.card && cardRoot.card.approvedByMe)
-                && !cardRoot.declinedByMe
-                && !cardRoot.ready
-                && (!cardRoot.isSplit || cardRoot.iAmDebtor || cardRoot.iAmCreditor)
-            Layout.fillWidth: true
-            text: qsTr("Deny")
-            variant: LogosButton.Variant.Secondary
-            onClicked: cardRoot.deny()
-        }
-
-        // A settle-up (exo-3c6): once every party agreed, each pays their own net payments —
-        // derived from the agreed settle-up, one at a time; the recipient's client confirms.
-        LogosButton {
-            objectName: "cardPaySettle"
-            visible: cardRoot.kind === "intent-propose" && cardRoot.isSettleUp && cardRoot.ready
-                && !cardRoot.settleUp.expired
-                && cardRoot.myTransfer !== null
-            Layout.fillWidth: true
-            text: cardRoot.myTransfer
-                  ? qsTr("Pay %1 %2 to %3").arg(cardRoot.eth(cardRoot.myTransfer.amount)).arg(cardRoot.unit)
-                        .arg(String(cardRoot.myTransfer.toName || "").length > 0 ? cardRoot.myTransfer.toName
-                             : String(cardRoot.myTransfer.to).slice(0, 10) + "…")
-                  : ""
-            onClicked: cardRoot.settlePart()
-        }
-
-        // A split (exo-a90): once everyone named has agreed, each pays their OWN share from
-        // their own wallet. The module derives the payment from the agreed split — this
-        // button carries no amount and no address.
-        LogosButton {
-            objectName: "cardPayShare"
-            visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor && !cardRoot.isXmr
-                && cardRoot.ready && !cardRoot.paid && !cardRoot.splitExpired
-                && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
-                && !cardRoot.myPart.covered
-            Layout.fillWidth: true
-            text: cardRoot.myPart ? qsTr("Pay my share — %1 %2").arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit)
-                                  : qsTr("Pay my share")
-            onClicked: cardRoot.settlePart()
-        }
         // Past its expiry (exo-a90.15) no share of a split is paid. Say so, and — while a share
         // is unpaid and not already being settled — offer to renew those shares: a settle-up
         // of this split, which everyone they name agrees to again, under a fresh expiry.
@@ -769,14 +733,7 @@ Rectangle {
             color: Theme.palette.warning
             font.pixelSize: MusterStyle.caption
         }
-        LogosButton {
-            objectName: "cardRenewSplit"
-            visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.splitExpired
-                     && cardRoot.ready && !!cardRoot.split.renewable && (cardRoot.iAmDebtor || cardRoot.iAmCreditor)
-            Layout.fillWidth: true
-            text: qsTr("Renew the unpaid shares")
-            onClicked: cardRoot.renewSplit()
-        }
+
         LogosText {
             objectName: "cardSplitNote"
             visible: cardRoot.isSplit && cardRoot.splitNote.length > 0
@@ -787,16 +744,118 @@ Rectangle {
             font.pixelSize: MusterStyle.caption
         }
 
-        // Download audit trail (exo-403): one self-verifying file of everything this
-        // intent's approvals cover, plus a readable report generated from it.
-        LogosButton {
-            objectName: "cardDownloadAudit"
-            visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+        // the card's actions in one row (exo-720.10): the one that moves it forward first and
+        // Primary, the rest quiet. Each keeps the rule for when it shows, as before.
+        Flow {
+            objectName: "cardActions"
             Layout.fillWidth: true
-            text: qsTr("Download audit trail")
-            variant: LogosButton.Variant.Secondary
-            onClicked: cardRoot.downloadAudit()
+            // no `visible` here: a child reads as hidden while its parent is, so a row shown
+            // only when a child shows would never show. Empty, it takes no height.
+            Layout.topMargin: childrenRect.height > 0 ? Theme.spacing.small : 0
+            spacing: Theme.spacing.small
+
+            // address-request: the reader answers with an address.
+            ActionButton {
+                variant: LogosButton.Variant.Primary
+                objectName: "cardShareAddress"
+                // only to someone asked, and only until they have answered (exo-8e2)
+                visible: cardRoot.kind === "address-request" && cardRoot.askedOfMe && !cardRoot.answeredByMe
+                text: String((cardRoot.card && cardRoot.card.asset) || "ETH") === "BTC" ? qsTr("Share my Bitcoin address")
+                      : String((cardRoot.card && cardRoot.card.asset) || "ETH") === "XMR" ? qsTr("Share my Monero address")
+                      : qsTr("Share an address")
+                onClicked: cardRoot.shareAddress()
+            }
+
+            // intent-propose: approve while it still needs you. Settling a ready
+            // Safe intent is the room's "Settle on-chain" affordance (Room.qml's
+            // ready box), driven by the verified fold — not a card button. The old
+            // "Pay it"/"Drop it" buttons had no wired path (no coordinate_drop, and
+            // paying flows through propose→approve→settle), so they only ever fired
+            // signals nothing listened to; removed rather than leave dead controls.
+            ActionButton {
+                variant: LogosButton.Variant.Primary
+                objectName: "cardApprove"
+                visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+                    && !(cardRoot.card && cardRoot.card.approvedByMe)
+                    && !cardRoot.ready
+                    // a split: only who it names agrees — each debtor, and the creditor to payTo
+                    // being theirs (exo-770), never to an address this client does not hold
+                    && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && (cardRoot.payToMine || cardRoot.payToMineUnknown)))
+                    && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
+                    && !cardRoot.vouchedNotMine    // never vouch for an address this client does not hold
+                    && !cardRoot.splitExpired      // past its expiry an agreement is refused (inv 2)
+                text: cardRoot.isSettleUp ? qsTr("Agree to settle up")
+                    : !cardRoot.isSplit ? qsTr("Approve")
+                    : cardRoot.iAmDebtor ? qsTr("Agree to my share")
+                    : qsTr("Agree — I paid, and %1 is mine").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
+                onClicked: cardRoot.approve()
+            }
+
+            // A settle-up (exo-3c6): once every party agreed, each pays their own net payments —
+            // derived from the agreed settle-up, one at a time; the recipient's client confirms.
+            ActionButton {
+                variant: LogosButton.Variant.Primary
+                objectName: "cardPaySettle"
+                visible: cardRoot.kind === "intent-propose" && cardRoot.isSettleUp && cardRoot.ready
+                    && !cardRoot.settleUp.expired
+                    && cardRoot.myTransfer !== null
+                text: cardRoot.myTransfer
+                      ? qsTr("Pay %1 %2 to %3").arg(cardRoot.eth(cardRoot.myTransfer.amount)).arg(cardRoot.unit)
+                            .arg(String(cardRoot.myTransfer.toName || "").length > 0 ? cardRoot.myTransfer.toName
+                                 : String(cardRoot.myTransfer.to).slice(0, 10) + "…")
+                      : ""
+                onClicked: cardRoot.settlePart()
+            }
+
+            // A split (exo-a90): once everyone named has agreed, each pays their OWN share from
+            // their own wallet. The module derives the payment from the agreed split — this
+            // button carries no amount and no address.
+            ActionButton {
+                variant: LogosButton.Variant.Primary
+                objectName: "cardPayShare"
+                visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor && !cardRoot.isXmr
+                    && cardRoot.ready && !cardRoot.paid && !cardRoot.splitExpired
+                    && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
+                    && !cardRoot.myPart.covered
+                text: cardRoot.myPart ? qsTr("Pay my share — %1 %2").arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit)
+                                      : qsTr("Pay my share")
+                onClicked: cardRoot.settlePart()
+            }
+
+            ActionButton {
+                variant: LogosButton.Variant.Primary
+                objectName: "cardRenewSplit"
+                visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.splitExpired
+                         && cardRoot.ready && !!cardRoot.split.renewable && (cardRoot.iAmDebtor || cardRoot.iAmCreditor)
+                text: qsTr("Renew the unpaid shares")
+                onClicked: cardRoot.renewSplit()
+            }
+
+            // Deny: decline to take part while it still needs signers. Informational —
+            // the threshold is unchanged; the room sees who is out. One per member; folds once.
+            ActionButton {
+                quiet: true
+                objectName: "cardDeny"
+                visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+                    && !(cardRoot.card && cardRoot.card.approvedByMe)
+                    && !cardRoot.declinedByMe
+                    && !cardRoot.ready
+                    && (!cardRoot.isSplit || cardRoot.iAmDebtor || cardRoot.iAmCreditor)
+                text: qsTr("Deny")
+                onClicked: cardRoot.deny()
+            }
+
+            // Download audit trail (exo-403): one self-verifying file of everything this
+            // intent's approvals cover, plus a readable report generated from it.
+            ActionButton {
+                quiet: true
+                objectName: "cardDownloadAudit"
+                visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+                text: qsTr("Download audit trail")
+                onClicked: cardRoot.downloadAudit()
+            }
         }
+
         LogosText {
             objectName: "cardAuditStatus"
             visible: cardRoot.auditStatus.length > 0

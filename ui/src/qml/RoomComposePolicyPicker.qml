@@ -42,7 +42,7 @@ RowLayout {
         spacing: Theme.spacing.small
     Repeater {
         model: room.policiesForKind(room.composeType)
-        delegate: LogosButton {
+        delegate: ActionButton {
             required property var modelData
             readonly property var info: room.kindInfo(modelData)
             readonly property string label: info && info.label ? String(info.label) : String(modelData)

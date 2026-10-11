@@ -277,7 +277,7 @@ Item {
             RowLayout {      // visibility on a wrapper: a LogosButton's own did not take in Basecamp
                 Layout.fillWidth: true
                 visible: scope.canAskToJoin
-                LogosButton {
+                ActionButton {
                     objectName: "requestJoinButton"
                     Layout.fillWidth: true
                     text: qsTr("Ask to join this room")
@@ -356,7 +356,7 @@ Item {
                         elide: Text.ElideRight
                     }
 
-                    LogosButton {
+                    ActionButton {
                         text: qsTr("Admit")
                         onClicked: if (modelData && modelData.identity) scope.admit(String(modelData.identity))
                     }

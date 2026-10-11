@@ -64,14 +64,20 @@ Item {
         }
     }
 
-    function find(item, name) {
+    // by objectName, through visual children and `data` (where a Popup lives), and into a
+    // Popup's contentItem (reparented to the window's overlay, so no `children` reach it)
+    function find(item, name, seen) {
         if (!item) return null;
+        seen = seen || [];
+        if (seen.indexOf(item) >= 0) return null;
+        seen.push(item);
         if (item.objectName === name) return item;
-        var kids = item.children || [];
+        var kids = item.data || item.children || [];
         for (var i = 0; i < kids.length; ++i) {
-            var hit = find(kids[i], name);
+            var hit = find(kids[i], name, seen);
             if (hit) return hit;
         }
+        if (item.contentItem && item.contentItem !== item) return find(item.contentItem, name, seen);
         return null;
     }
 

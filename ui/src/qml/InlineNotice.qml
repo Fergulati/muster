@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Logos.Theme
 import Logos.Controls
+import Logos.Icons
 
 // Something to know, said where it happened (exo-720.5): a refusal in the form that was
 // refused, a join request in the thread, an RPC that is down above the room. One shape for
@@ -10,6 +11,8 @@ import Logos.Controls
 //   title     the outcome, short: "Nothing was proposed."
 //   text      the cause, and what to do
 //   (children) the remedies, as buttons, at the right
+//   dismissible  a × that hides it until its words change: a new outcome always shows.
+//                A consumer ANDs `!dismissed` into its own `visible`.
 Rectangle {
     id: notice
 
@@ -17,6 +20,9 @@ Rectangle {
     property string title: ""
     property string text: ""
     default property alias actions: remedies.data
+    property bool dismissible: false
+    property string dismissedFor: ""
+    readonly property bool dismissed: dismissible && dismissedFor.length > 0 && dismissedFor === title + "\n" + text
 
     readonly property color accent: tone === "error" ? MusterStyle.refused
                                   : tone === "warning" ? MusterStyle.warning : MusterStyle.info
@@ -65,10 +71,19 @@ Rectangle {
                 font.pixelSize: MusterStyle.caption
             }
         }
-        Row {
+        Flow {
             id: remedies
             Layout.alignment: Qt.AlignVCenter
+            Layout.maximumWidth: notice.width * 0.5
             spacing: Theme.spacing.small
+        }
+        IconAction {
+            visible: notice.dismissible
+            Layout.alignment: Qt.AlignTop
+            size: 24
+            label: qsTr("Dismiss")
+            icon: LogosIcons.close
+            onClicked: notice.dismissedFor = notice.title + "\n" + notice.text
         }
     }
 }

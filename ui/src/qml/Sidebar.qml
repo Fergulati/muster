@@ -49,11 +49,12 @@ Rectangle {
         if (side.mode === "drawer") side.closeRequested();
     }
     function roomDetail(c) {
-        var ns = Array.isArray(c.needs) ? c.needs : [];
+        // not Array.isArray: through a Repeater's modelData the array is a Qt list
+        var ns = (c.needs && c.needs.length > 0) ? c.needs : [];
         if (ns.length > 0) return side.app.needsHeadline(String(ns[0].what || ""));
         if (Number(c.waiting || 0) > 0) return qsTr("Waiting on others");
         if (Number(c.settled || 0) > 0) return qsTr("Done");
-        return qsTr("No proposals yet");
+        return qsTr("Nothing waits on you");
     }
 
     Rectangle {      // the edge against the content
@@ -178,7 +179,7 @@ Rectangle {
                         objectName: active ? "roomToggle" : "sidebarRoom"
                         label: side.app.titleOf(topic) || side.app.shortRoom(topic)
                         detail: side.roomDetail(modelData)
-                        detailHot: Array.isArray(modelData.needs) && modelData.needs.length > 0
+                        detailHot: !!(modelData.needs && modelData.needs.length > 0)
                         needs: detailHot
                         avatarId: topic
                         rail: side.rail

@@ -75,7 +75,7 @@ ColumnLayout {
     // recipient of the payment being composed, instead of retyping it. Only for
     // a public account (form 1) that carries an address, and never on the
     // reader's own card: that would pay themselves (exo-1d9).
-    LogosButton {
+    ActionButton {
         objectName: "cardUseAddress"
         visible: cardRoot.card && !cardRoot.postedByMe && Number(cardRoot.card.form || 0) === 1
             && String(cardRoot.card.asset || "") !== "XMR"     // muster never sends Monero

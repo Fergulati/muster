@@ -52,7 +52,7 @@ ColumnLayout {
             RowLayout {
                 visible: composeNeed.installable || !!(composeNeed.req && composeNeed.req.state === "failed")
                 spacing: Theme.spacing.small
-                LogosButton {
+                ActionButton {
                     objectName: "composeNeedInstall_" + String(composeNeed.modelData.name || "")
                     visible: composeNeed.installable
                     enabled: !(composeNeed.req && composeNeed.req.state === "asking")
@@ -61,7 +61,7 @@ ColumnLayout {
                     onClicked: room.askInstall(composeNeed.modelData)
                 }
                 // not in any enabled catalogue: show it in Package Manager
-                LogosButton {
+                ActionButton {
                     objectName: "composeInstallShow_" + composeNeed.pkg
                     visible: !!(composeNeed.req && composeNeed.req.state === "failed")
                     text: qsTr("Open Package Manager")

@@ -292,7 +292,7 @@ ColumnLayout {
                     font.pixelSize: MusterStyle.caption
                 }
                 // the creditor's word: a share paid in cash, or anywhere muster cannot see
-                LogosButton {
+                ActionButton {
                     objectName: "cardMarkReceived"
                     visible: cardRoot.iAmCreditor && cardRoot.ready && !cardRoot.paid && !modelData.confirmed
                     text: qsTr("Mark received")
@@ -468,7 +468,7 @@ ColumnLayout {
                 visible: xmrPayBox.linkShown
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                LogosButton {
+                ActionButton {
                     id: copyLink
                     objectName: "cardXmrCopy"
                     property bool copied: false
@@ -490,7 +490,7 @@ ColumnLayout {
                 // go across separately. Muster still sends nothing and approves nothing
                 // (ADR-018); a review of a send Muster prepared waits on the wallet app
                 // (exo-dcc.6).
-                LogosButton {
+                ActionButton {
                     objectName: "cardXmrPayWithWallet"
                     text: qsTr("Pay with Monero Wallet")
                     onClicked: {
@@ -501,7 +501,7 @@ ColumnLayout {
                         cardRoot.openMoneroWallet("");
                     }
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "cardXmrCopyAmount"
                     visible: xmrPayBox.walletAsked
                     text: qsTr("Copy amount")
@@ -543,7 +543,7 @@ ColumnLayout {
                     placeholderText: qsTr("transaction id (optional)")
                     font.family: MusterStyle.mono
                 }
-                LogosButton {
+                ActionButton {
                     objectName: "cardXmrPaid"
                     readonly property string tx: String(xmrTx.text || "").trim().toLowerCase()
                     enabled: tx.length === 0 || /^[0-9a-f]{64}$/.test(tx)
@@ -591,7 +591,7 @@ ColumnLayout {
             // several that could be it, one button each; none at all, set one up there
             readonly property var choices: Array.isArray(xmrWalletBox.w.wallets) ? xmrWalletBox.w.wallets : []
             readonly property bool asks: !xmrWalletBox.w.ready && String(xmrWalletBox.w.request || "") === "monero.wallet.unlock"
-            LogosButton {
+            ActionButton {
                 objectName: "cardXmrOpenWallet"
                 visible: xmrWalletBox.asks && xmrWalletBox.choices.length < 2
                 text: xmrWalletBox.w.noWallet ? qsTr("Set up a wallet in Monero Wallet") : qsTr("Open Monero Wallet")
@@ -613,7 +613,7 @@ ColumnLayout {
                 spacing: Theme.spacing.tiny
                 Repeater {
                     model: xmrWalletBox.asks && xmrWalletBox.choices.length > 1 ? xmrWalletBox.choices : []
-                    delegate: LogosButton {
+                    delegate: ActionButton {
                         required property var modelData
                         objectName: "cardXmrOpenWallet_" + String(modelData)
                         text: qsTr("Open %1").arg(String(modelData))
@@ -675,7 +675,6 @@ ColumnLayout {
             id: effectTrace
             text: qsTr("⌕ trace this")
             color: Theme.palette.textTertiary
-            font.family: MusterStyle.mono
             font.pixelSize: MusterStyle.caption
         }
         MouseArea {
@@ -732,7 +731,6 @@ ColumnLayout {
                     text: step.modelData.t
                     color: step.lit ? Theme.palette.textSecondary
                                     : Theme.palette.textTertiary
-                    font.family: MusterStyle.mono
                     font.pixelSize: MusterStyle.caption
                 }
 
@@ -809,7 +807,6 @@ ColumnLayout {
                 ? qsTr("%1 of %2").arg(cardRoot.approvals).arg(cardRoot.threshold)
                 : ""
             color: Theme.palette.textSecondary
-            font.family: MusterStyle.mono
             font.pixelSize: MusterStyle.caption
             font.weight: Theme.typography.weightMedium
         }
@@ -860,7 +857,6 @@ ColumnLayout {
             id: approvalsTrace
             text: qsTr("⌕ trace the approvals")
             color: Theme.palette.textTertiary
-            font.family: MusterStyle.mono
             font.pixelSize: MusterStyle.caption
         }
         MouseArea {
@@ -916,7 +912,6 @@ ColumnLayout {
                     color: modelData.credibility === "exposed" ? Theme.palette.error
                          : modelData.credibility === "motivational" ? Theme.palette.warning
                          : Theme.palette.textTertiary
-                    font.family: MusterStyle.mono
                     font.pixelSize: MusterStyle.caption
                 }
                 LogosText {
@@ -980,7 +975,6 @@ ColumnLayout {
                 LogosText {
                     text: cardRoot.verifyOpen ? "−" : "+"
                     color: Theme.palette.success
-                    font.family: MusterStyle.mono
                     font.pixelSize: Theme.typography.secondaryText
                 }
             }
@@ -1005,7 +999,6 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignTop
                         text: modelData.k
                         color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
                         font.pixelSize: MusterStyle.caption
                     }
 
@@ -1067,7 +1060,6 @@ ColumnLayout {
                         .arg(cardRoot.card && cardRoot.card.provenance
                              ? cardRoot.card.provenance.length : 0)
                     color: Theme.palette.textSecondary
-                    font.family: MusterStyle.mono
                     font.pixelSize: MusterStyle.caption
                     font.weight: Theme.typography.weightMedium
                 }
@@ -1075,7 +1067,6 @@ ColumnLayout {
                 LogosText {
                     text: cardRoot.provOpen ? "−" : "+"
                     color: Theme.palette.textSecondary
-                    font.family: MusterStyle.mono
                     font.pixelSize: Theme.typography.secondaryText
                 }
             }

@@ -213,7 +213,7 @@ Rectangle {
                 // Advanced: paste a signature produced elsewhere (a Safe owner on
                 // another device, or a member signing off-app). Hidden behind a
                 // toggle — one-click in-app Approve above is the primary path.
-                LogosButton {
+                ActionButton {
                     objectName: "roomApprovePasteToggle"
                     // a split is agreed with the debtor's room key — there is no
                     // outside signature to paste (exo-a90)
@@ -264,7 +264,7 @@ Rectangle {
                             }
                         }
 
-                        LogosButton {
+                        ActionButton {
                             objectName: "roomApproveSubmit"
                             text: qsTr("Add")
                             enabled: sigField.text.length > 0
@@ -282,7 +282,7 @@ Rectangle {
                 // a Bitcoin intent exports as a PSBT a hardware signer, Sparrow or
                 // Bitcoin Core signs; what comes back is verified by the driver like
                 // an in-app approval, counts, and is shown as signed outside muster.
-                LogosButton {
+                ActionButton {
                     objectName: "roomOutsideToggle"
                     visible: msg.isIntentRef && msg.liveIntent !== null && room.isBtcIntent(msg.liveIntent)
                              && !msg.outsideOpen
@@ -357,7 +357,7 @@ Rectangle {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
-                        LogosButton {
+                        ActionButton {
                             objectName: "roomOutsideCopy"
                             visible: !!(outsideBox.exp && outsideBox.exp.encoded)
                             text: qsTr("Copy PSBT")
@@ -371,7 +371,7 @@ Rectangle {
                             placeholderText: qsTr("the signed PSBT (base64)")
                             font.family: MusterStyle.mono
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "roomOutsideImportSubmit"
                             text: qsTr("Import")
                             enabled: psbtIn.text.length > 0
@@ -380,7 +380,7 @@ Rectangle {
                                 psbtIn.text = "";
                             }
                         }
-                        LogosButton {
+                        ActionButton {
                             text: qsTr("Close")
                             variant: LogosButton.Variant.Secondary
                             onClicked: msg.outsideOpen = false
@@ -508,14 +508,14 @@ Rectangle {
                             font.weight: Theme.typography.weightMedium
                         }
                         // invoke: run the action FROM the room (coordinate_execute).
-                        LogosButton {
+                        ActionButton {
                             objectName: "roomExecuteButton"
                             visible: readyBox.isInvoke && readyBox.st === "executable"
                             text: qsTr("Run the action")
                             onClicked: if (room.backend)
                                            room.backend.executeInRoom(String((msg.liveIntent && msg.liveIntent.id) || ""));
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "roomSubmitButton"
                             // only while it is actually executable — once it is
                             // submitted/final there is nothing left to settle.

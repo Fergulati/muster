@@ -57,7 +57,6 @@ Rectangle {
             LogosText {
                 text: cardRoot.needsOpen ? "−" : "+"
                 color: Theme.palette.textSecondary
-                font.family: MusterStyle.mono
                 font.pixelSize: Theme.typography.secondaryText
             }
         }
@@ -133,7 +132,7 @@ Rectangle {
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                     }
-                    LogosButton {
+                    ActionButton {
                         objectName: "needRemedy_" + String(modelData.kind)
                         visible: ((modelData.kind === "infra" && modelData.name !== "lez-account")
                                   || modelData.kind === "environment")
@@ -144,7 +143,7 @@ Rectangle {
                     }
                     // a Monero wallet that is closed or on another network (exo-dcc.5):
                     // Monero Wallet opens it; muster never holds its password
-                    LogosButton {
+                    ActionButton {
                         objectName: "needRequest_" + String(modelData.name)
                         visible: String(modelData.request || "") === "monero.wallet.unlock"
                                  && modelData.status !== "met"
@@ -163,7 +162,7 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.spacing.medium
                     spacing: Theme.spacing.tiny
-                    LogosButton {
+                    ActionButton {
                         objectName: "needInstall_" + String(needRow.modelData.name)
                         visible: cardRoot.canInstall(needRow.modelData)
                         enabled: !(needRow.req && needRow.req.state === "asking")
@@ -183,7 +182,7 @@ Rectangle {
                     }
                     // not in any enabled catalogue: show the package in Package
                     // Manager, where the catalogues are
-                    LogosButton {
+                    ActionButton {
                         objectName: "installShow_" + needRow.pkg
                         visible: !!(needRow.req && needRow.req.state === "failed")
                         text: qsTr("Open Package Manager")
@@ -204,7 +203,7 @@ Rectangle {
                     }
                     // read readiness again on demand: the module may have been
                     // installed or started since (and the re-read window is over)
-                    LogosButton {
+                    ActionButton {
                         objectName: "needRecheck_" + String(needRow.modelData.name)
                         visible: !cardRoot.installAwaited
                         text: qsTr("Check again")
@@ -267,7 +266,7 @@ Rectangle {
                             color: Theme.palette.textSecondary
                             font.pixelSize: MusterStyle.caption
                         }
-                        LogosButton {
+                        ActionButton {
                             objectName: "shareCandidate"
                             text: qsTr("Share")
                             variant: LogosButton.Variant.Secondary

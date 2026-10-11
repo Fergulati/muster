@@ -37,6 +37,9 @@ QtObject {
     readonly property color infoSoft: tint(Theme.palette.info, 0.16)
     readonly property color neutralSoft: tint(Theme.colors.white, 0.07)
 
+    // A notice draws its own glyph: the ⚠ / ⏳ the old one-line notices led with go.
+    function plain(s) { return String(s || "").replace(/^(⚠|⏳|✓)\uFE0F?\s*/, ""); }
+
     // ── icons: icons/<name>.svg, stroke icons in the grey LogosIcon tints ─────
     // For what Logos.Icons lacks (more, close, copy, search, warning come from there).
     // An icon draws only where Qt Quick renders with GL (MultiEffect): an icon-only

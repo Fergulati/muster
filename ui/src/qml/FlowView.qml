@@ -128,7 +128,7 @@ Item {
                 }
 
                 // per-action rows, on demand
-                LogosButton {
+                ActionButton {
                     objectName: "flowRowsToggle"
                     visible: !flowView.collapsed && flowView.rows.length > 0
                     text: flowView.rowsOpen ? qsTr("Hide per-action rows") : qsTr("Show per-action rows")
