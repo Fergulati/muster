@@ -36,6 +36,11 @@ QtObject {
     readonly property color info: Theme.palette.info                // what left the room (U-2)
     readonly property color infoSoft: tint(Theme.palette.info, 0.16)
     readonly property color neutralSoft: tint(Theme.colors.white, 0.07)
+    // A status's words on its own tint, at the pill's 11 px, must clear WCAG AA's 4.5:1
+    // (U-10): the theme's orange there is 4.4:1 and its blue 3.8:1, so a pill's text is a
+    // step lighter — 5.7:1 and 6.1:1 (exo-720.12).
+    readonly property color needsText: Qt.lighter(Theme.palette.primary, 1.15)
+    readonly property color infoText: Qt.lighter(Theme.palette.info, 1.3)
 
     // A notice draws its own glyph: the ⚠ / ⏳ the old one-line notices led with go.
     function plain(s) { return String(s || "").replace(/^(⚠|⏳|✓)\uFE0F?\s*/, ""); }

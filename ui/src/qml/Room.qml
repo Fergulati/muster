@@ -1336,6 +1336,20 @@ Item {
         room.composing = false;
     }
 
+    // Esc in a room closes what is on top of the conversation: the details drawer, else the
+    // proposal panel (exo-720.12, U-10). A popup (Invite, ⋯, the picker) closes itself first.
+    Shortcut {
+        sequences: [StandardKey.Cancel]
+        enabled: room.visible && (room.detailsShown || room.composing)
+        onActivated: room.detailsShown ? room.closeDetails() : (room.composing = false)
+    }
+    // the same, for a host where the Shortcut does not fire (see Main.qml's Ctrl+K)
+    Keys.onEscapePressed: function (event) {
+        if (room.detailsShown) { room.closeDetails(); event.accepted = true; }
+        else if (room.composing) { room.composing = false; event.accepted = true; }
+        else event.accepted = false;
+    }
+
     // ── the room's layout (exo-720.7, exo-720.8) ──────────────────────────
     // The conversation owns the screen: the header, the pinned proposal, the thread, the
     // join requests, the composer, the scope line. Room details is a drawer: beside the

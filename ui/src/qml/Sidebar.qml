@@ -27,6 +27,7 @@ Rectangle {
     readonly property bool rail: mode === "rail"
     signal collapseToggled()
     signal closeRequested()
+    signal jumpRequested()      // Ctrl+K's room switcher (RoomSwitcher)
 
     implicitWidth: rail ? 60 : mode === "drawer" ? 272 : 248
     color: Theme.palette.backgroundTertiary
@@ -125,6 +126,13 @@ Rectangle {
                 width: scroller.width - 2 * Theme.spacing.small
                 spacing: 2
 
+                SidebarRow {
+                    objectName: "sidebarJump"
+                    label: qsTr("Jump to…  Ctrl K")
+                    icon: LogosIcons.search
+                    rail: side.rail
+                    onClicked: side.jumpRequested()
+                }
                 SidebarRow {
                     objectName: "homeToggle"
                     label: qsTr("Needs you")

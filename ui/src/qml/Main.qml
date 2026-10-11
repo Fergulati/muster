@@ -372,6 +372,24 @@ Item {
         TapHandler { onTapped: root.sidebarOpen = false }
     }
 
+    // ── keyboard (exo-720.12, U-10) ──────────────────────────────────────
+    // Ctrl+K: jump to a room by name, from anywhere.
+    RoomSwitcher { id: roomSwitcher; app: mainItem }
+    Shortcut {
+        sequences: ["Ctrl+K"]
+        context: Qt.ApplicationShortcut
+        onActivated: roomSwitcher.opened ? roomSwitcher.close() : roomSwitcher.open()
+    }
+    // A Shortcut fires only while Qt counts the window active, which a host embedding this
+    // view may not report; the key itself still reaches the focused item and bubbles up
+    // here, so take it then too (whichever comes first consumes it).
+    Keys.onPressed: function (event) {
+        if (event.key === Qt.Key_K && (event.modifiers & Qt.ControlModifier)) {
+            roomSwitcher.opened ? roomSwitcher.close() : roomSwitcher.open();
+            event.accepted = true;
+        }
+    }
+
     Sidebar {
         id: sidebar
         objectName: "sidebar"
@@ -384,6 +402,7 @@ Item {
         width: implicitWidth
         onCollapseToggled: uiPrefs.sidebarCollapsed = (root.sideMode === "rail" ? 0 : 1)
         onCloseRequested: root.sidebarOpen = false
+        onJumpRequested: roomSwitcher.open()
     }
 
     // ── the product surfaces (one shown at a time), below the nav bar ─────

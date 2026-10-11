@@ -14,11 +14,11 @@ Rectangle {
     property string text: ""
     property string tone: "waiting"
 
-    readonly property color fg: tone === "needs" ? MusterStyle.needs
+    readonly property color fg: tone === "needs" ? MusterStyle.needsText
                               : tone === "settled" ? MusterStyle.settled
                               : tone === "refused" ? MusterStyle.refused
                               : tone === "warning" ? MusterStyle.warning
-                              : tone === "info" ? MusterStyle.info
+                              : tone === "info" ? MusterStyle.infoText
                               : Theme.palette.textSecondary
     readonly property color bg: tone === "needs" ? MusterStyle.needsSoft
                               : tone === "settled" ? MusterStyle.settledSoft

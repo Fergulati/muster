@@ -40,7 +40,13 @@ LogosButton {
                           ? (isActive ? Theme.palette.primaryHover : Theme.palette.primary)
                           : quiet ? (isActive ? Theme.palette.backgroundSecondary : "transparent")
                           : (isActive ? Theme.palette.backgroundMuted : Theme.palette.backgroundSecondary)
-    backgroundItem.border.color: quiet && variant !== LogosButton.Variant.Primary ? "transparent"
+    // a keyboard focus ring (U-10): LogosButton draws none
+    focusPolicy: Qt.StrongFocus
+    Keys.onReturnPressed: if (enabled) clicked()
+    Keys.onSpacePressed: if (enabled) clicked()
+    backgroundItem.border.width: activeFocus ? 2 : 1
+    backgroundItem.border.color: activeFocus ? Theme.palette.focus
+                               : quiet && variant !== LogosButton.Variant.Primary ? "transparent"
                                : variant === LogosButton.Variant.Primary ? Theme.palette.primary
                                : isActive ? Theme.palette.borderStrong : Theme.palette.border
 
