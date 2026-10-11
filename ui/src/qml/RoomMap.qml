@@ -35,16 +35,16 @@ Rectangle {
     signal openCard(string intentId)
     signal closeRequested()
 
-    // The replay runs epoch by epoch, in canonical order within each epoch. Canonical order
-    // alone is not time: events without parents sort by content id, so an entry sealed in
-    // epoch 1 can sort before the admission that opened it. An entry's epoch is the key that
-    // opened it (CoordinationSession.sealedIn), so this order keeps each epoch whole.
-    // `rankOf[seq]` is an entry's place in it; k is a rank, not a canonical position.
+    // The replay runs in causal order: each node's seq is its place in log.causalOrder,
+    // the order members published in (the `after` each stamped, exo-655), concurrent
+    // entries tied by content id. Entries from clients before causal order carry no
+    // `after` and fall back to content-id order among themselves. `rankOf[seq]` is an
+    // entry's place among the entries; k is that rank.
     readonly property var replayOrder: {
         var es = [];
         var ns = graph && graph.nodes ? graph.nodes : [];
         for (var i = 0; i < ns.length; i++) if (ns[i].kind === "entry") es.push(ns[i]);
-        es.sort(function (a, b) { return a.epoch !== b.epoch ? a.epoch - b.epoch : a.seq - b.seq; });
+        es.sort(function (a, b) { return a.seq - b.seq; });
         return es;
     }
     readonly property var rankOf: {
@@ -88,17 +88,25 @@ Rectangle {
         if (words[k]) return words[k];
         return k.length > 0 ? k.charAt(0).toUpperCase() + k.slice(1) : qsTr("Proposal");
     }
+    // A proposal's state and approvals as of the replay point: the graph carries each
+    // intent's state after each of its entries (the fold over the causal prefix).
+    function stepAt(n) {
+        var a = n.attrs || {}, st = a.steps || [], cur = null;
+        for (var i = 0; i < st.length; i++) if (rank(Number(st[i].seq)) <= map.k) cur = st[i];
+        return cur ? cur : { state: String(a.state || ""), approvals: Number(a.approvals || 0) };
+    }
     function stateWords(n) {
         var a = n.attrs || {};
-        var s = String(a.state || "");
+        var now = stepAt(n);
+        var s = String(now.state || "");
         if (s === "final") return qsTr("Final");
         if (s === "submitted") return qsTr("Submitted");
         if (s === "settling") return qsTr("Settling");
         if (s === "executable") return qsTr("Agreed");
-        return qsTr("%1 of %2 agreed").arg(Number(a.approvals || 0)).arg(Number(a.threshold || 0));
+        return qsTr("%1 of %2 agreed").arg(Number(now.approvals || 0)).arg(Number(a.threshold || 0));
     }
     function stateTone(n) {
-        var s = String((n.attrs || {}).state || "");
+        var s = String(stepAt(n).state || "");
         return s === "final" || s === "executable" ? "settled" : s === "submitted" || s === "settling" ? "warning" : "waiting";
     }
     readonly property var observerWords: ({
@@ -643,7 +651,7 @@ Rectangle {
                         active: node.kind === "intent"
                         sourceComponent: Item {
                             readonly property var a: node.modelData.attrs || {}
-                            readonly property string st: String(a.state || "")
+                            readonly property string st: String(map.stepAt(node.modelData).state || "")
                             readonly property color ring: st === "final" || st === "executable" ? MusterStyle.settled
                                                         : st === "submitted" || st === "settling" ? MusterStyle.warning : MusterStyle.info
                             Rectangle {
@@ -658,7 +666,7 @@ Rectangle {
                                     readonly property int n: Math.max(1, Number(node.modelData.attrs.threshold || 1))
                                     readonly property var at: map.polar(n === 1 ? 0 : -60 + index * 120 / (n - 1), node.r + 9, 0, 0)
                                     x: at.x - 4.5; y: at.y - 4.5; width: 9; height: 9; radius: 4.5
-                                    color: index < Number(node.modelData.attrs.approvals || 0) ? MusterStyle.settled : Theme.palette.background
+                                    color: index < Number(map.stepAt(node.modelData).approvals || 0) ? MusterStyle.settled : Theme.palette.background
                                     border.color: MusterStyle.settled; border.width: 1
                                 }
                             }
@@ -673,7 +681,7 @@ Rectangle {
                             }
                             StatusPill {
                                 x: -width / 2; y: node.r + 16
-                                text: map.k < map.seqMax ? qsTr("Now: %1").arg(map.stateWords(node.modelData)) : map.stateWords(node.modelData)
+                                text: map.stateWords(node.modelData)
                                 tone: map.stateTone(node.modelData)
                             }
                         }
@@ -817,7 +825,7 @@ Rectangle {
                 : map.lens === "leaks" ? qsTr("Each outside observer, and exactly the fields it learned, placed at the entry where they left.")
                 : map.lens === "prov" ? (map.provIntent.length > 0 ? qsTr("Every input that reached the signed bytes, then the approvals over them. Select a proposal to trace another.")
                                                                    : qsTr("No proposal yet. Provenance traces one proposal's inputs."))
-                : map.lens === "log" ? qsTr("Every entry you can open, in canonical order, linked to its parents by hash.")
+                : map.lens === "log" ? qsTr("Every entry you can open, in the order members saw them; lines are the hash links to what each depends on.")
                 : qsTr("Members and what they decided sit inside the boundary. Blue carries information out; grey dashes bring outside reads in.")
         }
     }
@@ -1004,7 +1012,7 @@ Rectangle {
             d.pill = map.stateWords(n); d.tone = map.stateTone(n);
             d.lead = it && it.summary ? String(it.summary.text || "") : "";
             d.rows.push([qsTr("Runs as"), String(a.family || "")]);
-            d.rows.push([qsTr("Agreed"), qsTr("%1 of %2").arg(Number(a.approvals || 0)).arg(Number(a.threshold || 0))]);
+            d.rows.push([qsTr("Agreed"), qsTr("%1 of %2").arg(Number(map.stepAt(n).approvals || 0)).arg(Number(a.threshold || 0))]);
             if (Number(a.declines || 0) > 0) d.rows.push([qsTr("Declined"), String(a.declines)]);
             var inputs = 0;
             for (i = 0; i < allEdges.length; i++) {
@@ -1174,7 +1182,7 @@ Rectangle {
                         var n = null;
                         n = map.replayOrder[map.k] || null;
                         var w = n ? map.kindWord(String((n.attrs || {}).kind || "")) + (n.attrs && n.attrs.account ? qsTr(" by %1").arg(map.actorName(n.attrs.account)) : "") : "";
-                        return qsTr("%1 of %2 · epoch by epoch; within an epoch, in log order, not the order they happened").arg(map.k + 1).arg(map.seqMax + 1) + (w.length > 0 ? " · " + w : "")
+                        return qsTr("%1 of %2 · in the order members saw them").arg(map.k + 1).arg(map.seqMax + 1) + (w.length > 0 ? " · " + w : "")
                                + (n ? qsTr(" · epoch %1").arg(n.epoch) : "");
                     }
                 }
