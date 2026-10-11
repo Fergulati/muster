@@ -47,10 +47,13 @@ RUNNER="${MUSTER_RUNNER:-$RUNNER}"
 #   MUSTER_FLEET=local       no fleet (exo-eb6.7): the instances make their own network on
 #                            this host. The first one launched (the hub) listens on a
 #                            free 127.0.0.1 port; each later one dials it. Delivery's own
-#                            e2e shape: cluster 198, one shard, relay only. With no store
-#                            node, receipt is live only, and nothing off this host is
-#                            reached. It checks the code while the fleet is down; the
-#                            fleet runs stay the live check.
+#                            e2e shape: cluster 198, one shard, relay. The hub also serves
+#                            a store, and every other instance names it as its store peer
+#                            (entryNodes), so a frame published before an instance
+#                            subscribed (an invite's grant, exo-e6aa) reaches it by
+#                            catch-up, as on a fleet. Nothing off this host is reached. It
+#                            checks the code while the fleet is down; the fleet runs stay
+#                            the live check.
 # The fleets' configs are infra/fleets/<name>.json.
 #
 # MUSTER_MIX=preferred|required (unset: off) reaches every instance through the
@@ -66,11 +69,14 @@ ui_local_config() {
   python3 - "${1:-}" <<'EOF'
 import json, socket, sys
 s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+hub = sys.argv[1]
 cfg = {"logLevel": "INFO", "listenAddress": "127.0.0.1", "tcpPort": port, "clusterId": 198,
-       "numShardsInNetwork": 1, "relay": True, "store": False, "filter": False,
+       "numShardsInNetwork": 1, "relay": True, "store": not hub, "filter": False,
        "lightpush": False, "peerExchange": False, "discv5Discovery": False,
        "reliabilityEnabled": True}
-if sys.argv[1]: cfg["staticnodes"] = [sys.argv[1]]
+if hub:
+    cfg["staticnodes"] = [hub]
+    cfg["entryNodes"] = [hub]   # the hub's store: muster's catch-up peer (node_config.nim)
 print(json.dumps(cfg))
 EOF
 }
