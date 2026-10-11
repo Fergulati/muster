@@ -193,4 +193,33 @@ block:
   doAssert reduceRoomGraph(evs, both, founders, alice, sealedIn).epochOfLate == 1
   echo "10. an entry's epoch is the one whose key opened it, wherever it sorts OK"
 
+block:
+  # C4 (exo-6b8): positions are causal, and each proposal carries its state per step.
+  # Five roots published in this order, each naming the one before in `after`; their ids
+  # sort otherwise, so canonical order would scramble them.
+  let effectS = """{"to":"0xs","value":5}"""
+  let idS = intentIdFor(effectS)
+  var evs: seq[Event]
+  for e in @[proposerEvent(idS, alice), proposeEvent(idS, effectS), contributeEvent(idS, "0xk1", "s1"),
+             submitEvent(idS), finalEvent(idS)]:
+    var x = e
+    if evs.len > 0: x.after = @[eventId(evs[^1])]
+    evs.add x
+  let gs = reduceRoomGraph(evs.reversed(), both, founders, alice)
+  var bySeq: seq[(int, string)]
+  for n in gs.nodes:
+    if n.kind == "entry": bySeq.add (n.seq, n.attrs["kind"].getStr())
+  bySeq.sort()
+  doAssert bySeq.mapIt(it[1]) == @["proposer", "propose", "sig", "submit", "final"], $bySeq
+  # the proposal's state after each of its entries is the fold over the causal prefix
+  let steps = gs.node("i:" & idS).attrs["steps"].getElems()
+  doAssert steps.mapIt(it["state"].getStr()) == @["proposed", "executable", "submitted", "final"], $steps
+  for st in steps:
+    let k = st["seq"].getInt()
+    let prefix = causalOrder(evs)[0 .. k]
+    var want = ""
+    for v in reduceIntentViews(prefix, both): (if v.id == idS: want = v.state)
+    doAssert st["state"].getStr() == want
+  echo "11. positions are causal; a proposal's state per step is the fold over the causal prefix OK"
+
 echo "room_graph_test: all OK"

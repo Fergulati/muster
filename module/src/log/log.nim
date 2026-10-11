@@ -18,8 +18,16 @@
 ##
 ## P0 payload is a last-write-wins key/value set; the reducer framework is what
 ## the invariant is about, and richer event types slot into `applyEvent` at P1.
+##
+## Causal order (exo-655, docs/design/causal-parents.md): `parents` is LINEAGE — what an
+## entry's meaning depends on, checked by the code that guards invariants 1, 2 and 10.
+## `after` is ORDER — the heads the publisher had seen. It is outside the id and nothing
+## that reduces state reads it: canonicalOrder and every fold use `parents` alone.
+## `causalOrder` reads both, for views only. Copies of one event may carry different
+## `after`; the one whose sorted `after` has the smallest digest is kept, so the choice
+## is a function of the copies held, never of their arrival order.
 
-import std/[algorithm, tables, sets]
+import std/[algorithm, tables, sets, sequtils]
 import ../dcbor/dcbor
 import ../hashing/hash_input
 
@@ -27,9 +35,10 @@ type
   EventId* = string   ## hex of the event's content digest
 
   Event* = object
-    parents*: seq[EventId]   ## causal refs (hash-links to prior events)
+    parents*: seq[EventId]   ## lineage: hash-links to the events this one's meaning depends on
     key*: string
     value*: string
+    after*: seq[EventId]     ## order: the heads the publisher had seen; NOT in the id, never read by a fold
 
   State* = object
     entries*: Table[string, string]
@@ -47,13 +56,26 @@ proc eventId*(e: Event): EventId =
     ("value", cbText(e.value)),
   ])))
 
+proc afterDigest*(e: Event): string =
+  ## What picks the kept copy among copies of one event: the digest of its sorted `after`.
+  var a = e.after
+  sort(a)
+  var arr: seq[CborValue]
+  for x in a: arr.add cbText(x)
+  toHex(digest(hashInput("muster.event.after.v1", @[("after", cbArray(arr))])))
+
+proc keep*(a, b: Event): Event =
+  ## Of two copies of the same event, the one the log keeps (smallest afterDigest).
+  if afterDigest(b) < afterDigest(a): b else: a
+
 proc canonicalOrder*(events: seq[Event]): seq[Event] =
   ## Deduplicated topological order: an event follows all of its present
   ## parents; among ready events the smallest id goes first. A pure function of
   ## the event SET — independent of the order events were supplied in.
   var byId = initTable[EventId, Event]()
   for e in events:
-    byId[eventId(e)] = e   # dedup: same id overwrites with identical content
+    let id = eventId(e)    # dedup: same id is the same content; of its copies keep one by `after`
+    byId[id] = (if id in byId: keep(byId[id], e) else: e)
 
   var present = initHashSet[EventId]()
   for id in byId.keys: present.incl id
@@ -85,6 +107,56 @@ proc canonicalOrder*(events: seq[Event]): seq[Event] =
       indeg[c] = indeg[c] - 1
       if indeg[c] == 0: ready.add c
 
+proc causalOrder*(events: seq[Event]): seq[Event] =
+  ## The order views replay: topological over `parents` (hard edges, acyclic by
+  ## construction — a parent's id exists before its child) and `after` (soft edges),
+  ## ties by smallest id. A soft edge that would close a cycle is skipped; soft edges are
+  ## tried in a fixed order (child id, then target id), so the result is a function of the
+  ## event set. Every event is emitted. For views only: no fold reads this.
+  var byId = initTable[EventId, Event]()
+  for e in events:
+    let id = eventId(e)
+    byId[id] = (if id in byId: keep(byId[id], e) else: e)
+  var children = initTable[EventId, seq[EventId]]()
+  var indeg = initTable[EventId, int]()
+  for id in byId.keys: (children[id] = @[]; indeg[id] = 0)
+  proc addEdge(frm, to: EventId) =
+    children[frm].add to
+    indeg[to] = indeg[to] + 1
+  for id, e in byId:
+    for p in e.parents:
+      if p in byId and p != id: addEdge(p, id)
+  proc reaches(src, dst: EventId): bool =
+    ## is `dst` reachable from `src` along the edges added so far?
+    var stack = @[src]
+    var seen = initHashSet[EventId]()
+    while stack.len > 0:
+      let n = stack.pop()
+      if n == dst: return true
+      if n in seen: continue
+      seen.incl n
+      for c in children[n]: stack.add c
+    false
+  var soft: seq[(EventId, EventId)]   # (child, target): the child follows the target
+  for id, e in byId:
+    for a in e.after:
+      if a in byId and a != id: soft.add (id, a)
+  soft.sort()
+  for (child, target) in soft:
+    if child in children[target]: continue      # already ordered that way
+    if not reaches(child, target): addEdge(target, child)
+  var ready: seq[EventId]
+  for id in byId.keys:
+    if indeg[id] == 0: ready.add id
+  while ready.len > 0:
+    sort(ready)
+    let id = ready[0]
+    ready.delete(0)
+    result.add byId[id]
+    for c in children[id]:
+      indeg[c] = indeg[c] - 1
+      if indeg[c] == 0: ready.add c
+
 proc applyEvent(s: var State, e: Event) =
   ## The P0 reducer step: last-write-wins on a key. Idempotent by construction —
   ## applying the same (key, value) twice lands the same value.
@@ -109,9 +181,40 @@ type Log* = object
 
 proc ingest*(log: var Log, e: Event) =
   ## At-least-once safe: re-ingesting an event (same id) is a no-op.
+  ## A copy of a held event replaces it only when it is the one `keep` chooses, so the
+  ## log ends up holding the same copy whatever order the copies arrive in.
   let id = eventId(e)
   if id notin log.events:
     log.events[id] = e
+  elif e.after != log.events[id].after:
+    log.events[id] = keep(log.events[id], e)
+
+proc find*(log: Log, id: EventId): tuple[found: bool, event: Event] =
+  ## The copy the log holds under `id`, if any.
+  if id in log.events: (true, log.events[id]) else: (false, Event())
+
+const MaxHeads* = 8   ## at most this many ids in a new event's `after`
+
+proc heads*(log: Log): seq[EventId] =
+  ## The events no other held event names, through `parents` or `after`: what a new
+  ## event follows (docs/design/causal-parents.md §3.2). Sorted. Past MaxHeads (rare: a
+  ## room is rarely that concurrent), the MaxHeads latest in causal order.
+  var named = initHashSet[EventId]()
+  for e in log.events.values:
+    for p in e.parents: named.incl p
+    for a in e.after: named.incl a
+  for id in log.events.keys:
+    if id notin named: result.add id
+  if result.len > MaxHeads:
+    let tips = result.toHashSet()
+    var latest: seq[EventId]
+    let order = causalOrder(toSeq(log.events.values))
+    for i in countdown(order.len - 1, 0):
+      let id = eventId(order[i])
+      if id in tips: latest.add id
+      if latest.len == MaxHeads: break
+    result = latest
+  result.sort()
 
 proc allEvents*(log: Log): seq[Event] =
   for e in log.events.values: result.add e

@@ -66,7 +66,14 @@ proc encodeEvent(e: Event): seq[byte] =
   ## recomputed on ingest, so this is transport framing, not the signed form.
   var ps = newJArray()
   for p in e.parents: ps.add %p
-  toBytes($(%*{"parents": ps, "key": e.key, "value": e.value}))
+  var j = %*{"parents": ps, "key": e.key, "value": e.value}
+  if e.after.len > 0:
+    # only when present: a client from before causal order ignores the field, and the id
+    # never covers it (docs/design/causal-parents.md §3.3)
+    var af = newJArray()
+    for a in e.after: af.add %a
+    j["after"] = af
+  toBytes($j)
 
 proc decodeEvent(b: seq[byte]): Event =
   let j = parseJson(toStr(b))
@@ -74,6 +81,8 @@ proc decodeEvent(b: seq[byte]): Event =
   result.value = j["value"].getStr()
   if j.hasKey("parents") and j["parents"].kind == JArray:
     for p in j["parents"]: result.parents.add p.getStr()
+  if j.hasKey("after") and j["after"].kind == JArray:
+    for a in j["after"]: result.after.add a.getStr()
 
 proc announceBeacon*(s: CoordinationSession) =
   ## Announce the room's current join key, so someone who knows only the topic can ask
@@ -136,10 +145,18 @@ proc newCoordinationSession*(transport: Transport, crypto: ConversationCrypto,
 proc topic*(s: CoordinationSession): string = s.topic
   ## The room's content topic — what an author signature binds to (authorship.nim).
 
-proc publish*(s: CoordinationSession, e: Event) =
-  ## Record locally, then broadcast the sealed event to the room.
-  s.log.ingest(e)
+proc publish*(s: CoordinationSession, ev: Event) =
+  ## Record locally, then broadcast the sealed event to the room. A new event names the
+  ## log's heads in `after` (what this member had seen; never part of the id, never read
+  ## by a fold). An event the log already holds — a re-announce, a second submit — is
+  ## re-sealed as the stored copy, so it carries its original order, not a fresh one
+  ## (docs/design/causal-parents.md §3.2).
+  var e = ev
   let id = eventId(e)
+  let held = s.log.find(id)
+  if held.found: e = held.event
+  elif e.after.len == 0: e.after = s.log.heads()
+  s.log.ingest(e)
   let ep = (try: s.crypto.epoch() except CatchableError: -1)
   if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
   discard s.transport.publish(s.topic, @[FrameData] & s.crypto.seal(encodeEvent(e)))

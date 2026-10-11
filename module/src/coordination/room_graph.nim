@@ -84,7 +84,15 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   ## (CoordinationSession.sealedIn). An entry's epoch comes from it; only an event it does
   ## not name falls back to the admissions before it in canonical order, which is right
   ## only for a log whose events carry their parents.
-  let ordered = canonicalOrder(events)
+  # Positions are CAUSAL (log.causalOrder: parents, then the `after` each publisher
+  # stamped), so a view replays the room in the order it happened, up to concurrency
+  # (docs/design/causal-parents.md §4). The folds this joins index the CANONICAL order;
+  # `pos` maps one of their positions to this one, through the event's id.
+  let ordered = causalOrder(events)
+  let canon = canonicalOrder(events)
+  var posOf = initTable[EventId, int]()
+  for i, e in ordered: posOf[eventId(e)] = i
+  proc pos(canonSeq: int): int = posOf[eventId(canon[canonSeq])]
   result.viewer = norm(viewer)
   result.seqMax = ordered.len - 1
   var nodeAt = initTable[string, int]()
@@ -151,7 +159,10 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   # ── entries: every event the client holds, attributed where the log proves it ──
   let prov = logProvenance(events, driverFor)
   var provAt = initTable[int, LogProvItem]()
-  for it in prov: provAt[it.seq] = it
+  for it in prov:
+    var item = it
+    item.seq = pos(it.seq)
+    provAt[item.seq] = item
   var idAt = initTable[EventId, string]()
   for i, e in ordered: idAt[eventId(e)] = "e:" & eventId(e)
   for i, e in ordered:
@@ -208,6 +219,20 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   for i, e in ordered:
     let p = e.key.split('/')
     if p.len >= 3 and p[0] == "intent" and p[1] notin firstSeq: firstSeq[p[1]] = i
+  # each intent's state after each of its entries: the fold over the causal prefix, kept
+  # where (state, approvals) changes — a pure function of a set of events, so honest
+  var steps = initTable[string, JsonNode]()
+  var lastStep = initTable[string, string]()
+  for i, e in ordered:
+    let p = e.key.split('/')
+    if p.len < 3 or p[0] != "intent": continue
+    for v in reduceIntentViews(ordered[0 .. i], driverFor):
+      if v.id != p[1] or v.effectJson.len == 0: continue
+      let sig = v.state & "/" & $v.approvals
+      if lastStep.getOrDefault(v.id, "") == sig: continue
+      lastStep[v.id] = sig
+      if v.id notin steps: steps[v.id] = newJArray()
+      steps[v.id].add %*{"seq": i, "state": v.state, "approvals": v.approvals}
   for v in reduceIntentViews(events, driverFor):
     if v.effectJson.len == 0: continue
     let s = firstSeq.getOrDefault(v.id, -1)
@@ -217,8 +242,9 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
     addNode("i:" & v.id, "intent", s, (if s >= 0: epochAt[s] else: -1), %*{
       "state": v.state, "family": v.policy.split('@')[0], "threshold": v.threshold,
       "approvals": v.approvals, "rounds": v.rounds, "round": v.round, "declines": v.declines,
-      "committed": v.committed, "unattested": v.unattested, "parts": parts})
-  for it in prov:
+      "committed": v.committed, "unattested": v.unattested, "parts": parts,
+      "steps": steps.getOrDefault(v.id, newJArray())})
+  for it in provAt.values:
     if it.intentId.len == 0 or "i:" & it.intentId notin nodeAt: continue
     let dst = "i:" & it.intentId
     let entry = "e:" & eventId(ordered[it.seq])
@@ -268,8 +294,9 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   for r in reduceFlow(events, driverFor, founders):
     if r.to in {obRoomMember, obStoreNode} or r.intentId.len == 0: continue
     if "i:" & r.intentId notin nodeAt: continue
-    let k = r.intentId & "|" & $r.to & "|" & $r.seq
-    if k notin leaves: leaves[k] = ("i:" & r.intentId, "o:" & $r.to, r.seq, @[], r.declared)
+    let at = pos(r.seq)
+    let k = r.intentId & "|" & $r.to & "|" & $at
+    if k notin leaves: leaves[k] = ("i:" & r.intentId, "o:" & $r.to, at, @[], r.declared)
     if r.field notin leaves[k].fields: leaves[k].fields.add r.field
   for _, l in leaves:
     addNode(l.obs, "observer", l.seq, epochAt[l.seq], newJObject())

@@ -660,15 +660,18 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     if $it.state in ["executable", "submitted", "settling", "final"]:
       result.add ActivityEntry(seq: lastSig[id], order: 1, kind: "ready", intentId: id,
         account: "", title: "Ready — the approvals are collected", detail: "")
-  # Order for reading, not by content hash. canonicalOrder among these events is
-  # smallest-id-first (they carry no parent links), which scrambles a proposal's
-  # lifecycle — an approval could sort before its propose. Instead: group every line
-  # of one intent together (by where the intent was proposed), and within the group
-  # walk the lifecycle — proposed → approvals → ready → submitted → settled. A
-  # membership admit has no intent, so it sits at its own position. Deterministic (a
-  # pure function of the event set, invariant 4) and chronological for the common
-  # single-intent flow; interleaved multi-intent timing without an authored clock is
-  # a known limit (the log carries no wall-clock on coordination events).
+  # Order for reading, not by content hash. Group every line of one intent together (by
+  # where the intent was proposed), and within the group walk the lifecycle — proposed →
+  # approvals → ready → submitted → settled. A membership admit has no intent, so it sits
+  # at its own position. Positions here are CAUSAL (log.causalOrder: the `after` each
+  # publisher stamped, exo-655), so proposals and admits read in the order they
+  # happened; events from before causal order (no `after`) fall back to content-id order
+  # among themselves. Deterministic: a pure function of the event set (invariant 4).
+  # `seq` itself stays the canonical position every other fold uses.
+  var causalAt = initTable[EventId, int]()
+  for i, e in causalOrder(events): causalAt[eventId(e)] = i
+  proc at(canonSeq: int): int =
+    if canonSeq >= 0 and canonSeq < ordered.len: causalAt.getOrDefault(eventId(ordered[canonSeq]), canonSeq) else: canonSeq
   proc lifecycleRank(kind: string): int =
     case kind
     of "propose": 0
@@ -678,7 +681,7 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     of "settled", "part-confirmed": 4
     else: 0                       # admit / anything else: no intra-intent phase
   proc groupOrder(e: ActivityEntry): int =
-    if e.intentId.len > 0 and e.intentId in proposeSeq: proposeSeq[e.intentId] else: e.seq
+    at(if e.intentId.len > 0 and e.intentId in proposeSeq: proposeSeq[e.intentId] else: e.seq)
   result.sort(proc (a, b: ActivityEntry): int =
     let ga = groupOrder(a)
     let gb = groupOrder(b)
@@ -686,7 +689,7 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     let ra = lifecycleRank(a.kind)
     let rb = lifecycleRank(b.kind)
     if ra != rb: return cmp(ra, rb)
-    if a.seq != b.seq: return cmp(a.seq, b.seq)
+    if a.seq != b.seq: return cmp(at(a.seq), at(b.seq))
     cmp(a.order, b.order))
 
 # ── provenance: how this decision's data got in front of you (invariant 10) ────
