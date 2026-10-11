@@ -2359,3 +2359,25 @@
 {"type":"dep_add","timestamp":"2026-10-11T21:40:41.219426714Z","issue_id":"exo-dde.10","payload":{"dep_type":"parent-child","depends_on":"exo-dde"}}
 {"type":"status_update","timestamp":"2026-10-11T21:40:41.458650273Z","issue_id":"exo-dde.10","payload":{"status":"in_progress"}}
 {"type":"close","timestamp":"2026-10-11T21:50:40.244089125Z","issue_id":"exo-dde.10","payload":{}}
+{"type":"create","timestamp":"2026-10-11T22:00:11.812499789Z","issue_id":"exo-024","payload":{"description":"docs/design/causal-parents.md §3, §6 C1. Property tests: arrival order and duplication of a variant set give the same causalOrder; every event emitted; no after =\u003e causalOrder == canonicalOrder; a forward edge is skipped.","priority":"1","title":"C1 log: Event.after outside identity; the log keeps one variant per id by digest; causalOrder with cycle-safe soft edges","type":"task"}}
+{"type":"rename","timestamp":"2026-10-11T22:00:12.063517543Z","issue_id":"exo-024","payload":{"new_id":"exo-dde.11"}}
+{"type":"dep_add","timestamp":"2026-10-11T22:00:12.063517543Z","issue_id":"exo-dde.11","payload":{"dep_type":"parent-child","depends_on":"exo-dde"}}
+{"type":"create","timestamp":"2026-10-11T22:00:12.281533443Z","issue_id":"exo-525b","payload":{"description":"causal-parents.md §6 C2. A test now; the probe with the G2 spec work.","priority":"1","title":"C2 after never reaches state: reduce, the folds and every signing-path byte ignore it","type":"task"}}
+{"type":"rename","timestamp":"2026-10-11T22:00:12.550535189Z","issue_id":"exo-525b","payload":{"new_id":"exo-dde.12"}}
+{"type":"dep_add","timestamp":"2026-10-11T22:00:12.550535189Z","issue_id":"exo-dde.12","payload":{"dep_type":"parent-child","depends_on":"exo-dde"}}
+{"type":"create","timestamp":"2026-10-11T22:00:12.793036292Z","issue_id":"exo-88e","payload":{"description":"causal-parents.md §3.2-3.3, §6 C3.","priority":"1","title":"C3 session: publish stamps the log's heads as after; re-publishing re-seals the stored copy; wire encode/decode","type":"task"}}
+{"type":"rename","timestamp":"2026-10-11T22:00:13.032572076Z","issue_id":"exo-88e","payload":{"new_id":"exo-dde.13"}}
+{"type":"dep_add","timestamp":"2026-10-11T22:00:13.032572076Z","issue_id":"exo-dde.13","payload":{"dep_type":"parent-child","depends_on":"exo-dde"}}
+{"type":"create","timestamp":"2026-10-11T22:00:13.266421994Z","issue_id":"exo-6b8","payload":{"description":"causal-parents.md §4, §6 C4. Retires the map's 'Now:' pill.","priority":"2","title":"C4 the room map and activity feed replay by causalOrder; each intent's state per step","type":"task"}}
+{"type":"rename","timestamp":"2026-10-11T22:00:13.536101904Z","issue_id":"exo-6b8","payload":{"new_id":"exo-dde.14"}}
+{"type":"dep_add","timestamp":"2026-10-11T22:00:13.536101904Z","issue_id":"exo-dde.14","payload":{"dep_type":"parent-child","depends_on":"exo-dde"}}
+{"type":"create","timestamp":"2026-10-11T22:00:13.759806249Z","issue_id":"exo-09a","payload":{"description":"causal-parents.md §5 decision 2: later, as its own slice.","priority":"3","title":"C5 sign after on author-bearing kinds (author claim v2)","type":"task"}}
+{"type":"rename","timestamp":"2026-10-11T22:00:14.01018666Z","issue_id":"exo-09a","payload":{"new_id":"exo-dde.15"}}
+{"type":"dep_add","timestamp":"2026-10-11T22:00:14.01018666Z","issue_id":"exo-dde.15","payload":{"dep_type":"parent-child","depends_on":"exo-dde"}}
+{"type":"status_update","timestamp":"2026-10-11T22:00:57.895427512Z","issue_id":"exo-dde.11","payload":{"status":"in_progress"}}
+{"type":"status_update","timestamp":"2026-10-11T22:05:38.43134981Z","issue_id":"exo-dde.14","payload":{"status":"in_progress"}}
+{"type":"close","timestamp":"2026-10-11T22:31:10.300825966Z","issue_id":"exo-dde.11","payload":{}}
+{"type":"close","timestamp":"2026-10-11T22:31:10.300825966Z","issue_id":"exo-dde.12","payload":{}}
+{"type":"close","timestamp":"2026-10-11T22:31:10.300825966Z","issue_id":"exo-dde.13","payload":{}}
+{"type":"close","timestamp":"2026-10-11T22:31:10.300825966Z","issue_id":"exo-dde.14","payload":{}}
+{"type":"close","timestamp":"2026-10-11T22:31:10.300825966Z","issue_id":"exo-dde.6","payload":{}}
