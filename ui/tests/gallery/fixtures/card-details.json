@@ -1,0 +1,101 @@
+{
+  "about": "A proposal card is compact (exo-720.10): the explanations open behind Details, and close again.",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "provenanceBox",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "needsBox",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "cardDownloadAudit",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "cardDetailsToggle",
+        "text",
+        "Details"
+      ]
+    },
+    {
+      "expectProp": [
+        "roomApprovePasteToggle",
+        "visible",
+        false
+      ]
+    },
+    {
+      "shot": "compact"
+    },
+    {
+      "click": "cardDetailsToggle"
+    },
+    {
+      "expectProp": [
+        "provenanceBox",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "needsBox",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "cardDownloadAudit",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "cardDetailsToggle",
+        "text",
+        "Hide details"
+      ]
+    },
+    {
+      "expectProp": [
+        "roomApprovePasteToggle",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "details"
+    },
+    {
+      "click": "cardDetailsToggle"
+    },
+    {
+      "expectProp": [
+        "provenanceBox",
+        "visible",
+        false
+      ]
+    }
+  ]
+}

@@ -6,6 +6,8 @@ import Logos.Controls
 
 // A proposal card's body (exo-720.3, moved verbatim out of MusterCard.qml): what it
 // does, its status rail, approvals, the verify box, provenance and every kind's parts.
+// Compact by default (exo-720.10): the effect, its parts, the approvals and anything to
+// heed stay on the face; the explanations wait behind the card's Details.
 // `cardRoot` is the MusterCard, as before the move.
 // ── intent-propose (the heart) ─────────────────────────────────────
 // The room deciding something before anyone acts on it. The effect
@@ -305,7 +307,8 @@ ColumnLayout {
         LogosText {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            visible: cardRoot.split !== null
+            // a request's payTo stays on the face: it is what the payer checks
+            visible: cardRoot.split !== null && (cardRoot.isRequest || cardRoot.detailsOpen)
             text: cardRoot.isRequest
                   ? qsTr("Paid to %1%2.").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
                         .arg(!cardRoot.isXmr ? ""
@@ -353,7 +356,7 @@ ColumnLayout {
             objectName: "cardSplitToken"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            visible: cardRoot.token.length > 0
+            visible: cardRoot.detailsOpen && cardRoot.token.length > 0
             text: qsTr("Paid in %1 — the token at %2 (a token names itself; the address is what counts).")
                       .arg(cardRoot.unit).arg(cardRoot.token.slice(0, 10) + "…" + cardRoot.token.slice(-6))
             color: Theme.palette.textTertiary
@@ -366,7 +369,7 @@ ColumnLayout {
             objectName: "cardSplitOnBehalf"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            visible: cardRoot.onBehalfBy.length > 0
+            visible: cardRoot.onBehalfBy.length > 0 && (!cardRoot.creditorAgreed || cardRoot.detailsOpen)
             text: cardRoot.creditorAgreed && cardRoot.iAmCreditor
                   ? qsTr("Proposed by %1 on your behalf. ✓ You agreed that %2 is yours.")
                         .arg(cardRoot.onBehalfBy).arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
@@ -397,7 +400,7 @@ ColumnLayout {
             objectName: "cardMyShare"
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            visible: cardRoot.iAmDebtor && !cardRoot.isXmr
+            visible: cardRoot.detailsOpen && cardRoot.iAmDebtor && !cardRoot.isXmr
             text: cardRoot.myPart
                   ? qsTr("Your share: %1 %2 → %3, from your own wallet%4. Muster builds the payment from this split — nothing to type, and nothing else can be sent.")
                         .arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit).arg(cardRoot.creditorName)
@@ -640,7 +643,7 @@ ColumnLayout {
     // this client allowlists the target; the card says so rather than hiding it.
     LogosText {
         Layout.fillWidth: true
-        visible: String((cardRoot.card && cardRoot.card.safeData) || "").length > 2
+        visible: cardRoot.detailsOpen && String((cardRoot.card && cardRoot.card.safeData) || "").length > 2
         text: {
             var d = String((cardRoot.card && cardRoot.card.safeData) || "");
             var n = Math.max(0, Math.floor((d.length - 2) / 2));
@@ -669,7 +672,7 @@ ColumnLayout {
     Item {
         Layout.fillWidth: true
         implicitHeight: effectTrace.implicitHeight
-        visible: !!(cardRoot.card && cardRoot.card.provenance)
+        visible: cardRoot.detailsOpen && !!(cardRoot.card && cardRoot.card.provenance)
                  && cardRoot.card.provenance.length > 0
         LogosText {
             id: effectTrace
@@ -687,7 +690,7 @@ ColumnLayout {
     // which rail the room is being asked to agree to
     LogosText {
         Layout.fillWidth: true
-        visible: !!(cardRoot.card && cardRoot.card.rail)
+        visible: cardRoot.detailsOpen && !!(cardRoot.card && cardRoot.card.rail)
         wrapMode: Text.WordWrap
         text: String((cardRoot.card && cardRoot.card.rail) || "")
         color: Theme.palette.textSecondary
@@ -699,6 +702,7 @@ ColumnLayout {
     // The whole path is drawn from the first card; a step at or before
     // the current state is lit, everything after stays drawn but unlit.
     RowLayout {
+        visible: cardRoot.detailsOpen    // the header's pill says where it stands; this, the whole path
         Layout.fillWidth: true
         Layout.topMargin: Theme.spacing.tiny
         spacing: Theme.spacing.tiny
@@ -851,7 +855,7 @@ ColumnLayout {
     Item {
         Layout.fillWidth: true
         implicitHeight: approvalsTrace.implicitHeight
-        visible: cardRoot.approvals > 0 && cardRoot.card
+        visible: cardRoot.detailsOpen && cardRoot.approvals > 0 && cardRoot.card
                  && cardRoot.card.provenance && cardRoot.card.provenance.length > 0
         LogosText {
             id: approvalsTrace
@@ -866,6 +870,33 @@ ColumnLayout {
         }
     }
 
+    // Compact (exo-720.10, U-5): what the verify and provenance boxes below prove, in one
+    // line — the re-derived match (invariant 1) and the inputs traced (invariant 10). A tap
+    // opens Details, where both boxes are.
+    LogosText {
+        objectName: "cardProofLine"
+        readonly property int traced: (cardRoot.card && Array.isArray(cardRoot.card.provenance))
+                                      ? cardRoot.card.provenance.length : 0
+        visible: !cardRoot.detailsOpen && text.length > 0
+        Layout.fillWidth: true
+        Layout.topMargin: 2
+        wrapMode: Text.WordWrap
+        text: {
+            var parts = [];
+            if (String((cardRoot.card && cardRoot.card.txhash) || "").length > 0)
+                parts.push(qsTr("✓ Re-derived on this device"));
+            if (traced > 0)
+                parts.push(traced === 1 ? qsTr("1 input, traced to where it came from")
+                                       : qsTr("%1 inputs, each traced to where it came from").arg(traced));
+            return parts.join("  ·  ");
+        }
+        color: String((cardRoot.card && cardRoot.card.txhash) || "").length > 0 ? MusterStyle.settled
+                                                                                 : Theme.palette.textTertiary
+        font.pixelSize: MusterStyle.caption
+        TapHandler { onTapped: cardRoot.detailsOpen = true }
+        HoverHandler { cursorShape: Qt.PointingHandCursor }
+    }
+
     // Where the rule lives — the FAMILY's own answer (exo-a50.1.6), never a fixed
     // caveat: a Safe's threshold IS enforced by its contract, a room threshold is
     // final in the room. Empty rows (an old module) → nothing claimed at all.
@@ -873,7 +904,7 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.topMargin: 2
         wrapMode: Text.WordWrap
-        visible: text.length > 0
+        visible: cardRoot.detailsOpen && text.length > 0
         text: cardRoot.rowText("where")
         color: Theme.palette.textTertiary
         font.pixelSize: MusterStyle.caption
@@ -886,7 +917,7 @@ ColumnLayout {
     ColumnLayout {
         Layout.fillWidth: true
         spacing: 2
-        visible: cardRoot.rows.length > 0
+        visible: cardRoot.detailsOpen && cardRoot.rows.length > 0
         LogosText {
             objectName: "cardRowsToggle"
             text: (cardRoot.rowsOpen ? "▾ " : "▸ ") + qsTr("How this account works")
@@ -936,7 +967,7 @@ ColumnLayout {
         objectName: "verifyBox"
         Layout.fillWidth: true
         Layout.topMargin: Theme.spacing.tiny
-        visible: !!(cardRoot.card && cardRoot.card.txhash)
+        visible: cardRoot.detailsOpen && !!(cardRoot.card && cardRoot.card.txhash)
         implicitHeight: verifyCol.implicitHeight + 2 * Theme.spacing.small
         radius: Theme.spacing.radiusSmall
         color: Theme.palette.surfaceRecessed
@@ -1024,7 +1055,7 @@ ColumnLayout {
         objectName: "provenanceBox"
         Layout.fillWidth: true
         Layout.topMargin: Theme.spacing.tiny
-        visible: !!(cardRoot.card && cardRoot.card.provenance)
+        visible: cardRoot.detailsOpen && !!(cardRoot.card && cardRoot.card.provenance)
                  && cardRoot.card.provenance.length > 0
         implicitHeight: provCol.implicitHeight + 2 * Theme.spacing.small
         radius: Theme.spacing.radiusSmall

@@ -254,7 +254,11 @@ Details, and the traps behind them: `docs/labbook/screenshots-of-the-qml-that-ho
 ## 9. U5–U8 as built (2026-10-11), and where today's right panel went
 
 - **U5.** "+" opens `RoomActionPicker`: Payment, Split a bill, Request a payment, Statement, Call a module. Each tile carries the old kind button's objectName. The chosen form opens in a titled panel above the message row, scrolling within about half the room. What came of a proposal, a payment or an approval is an `InlineNotice` with its remedies. It can be dismissed, and it comes back when a new outcome changes it (exo-408 #7).
-- **U6.** A card has a header (the kind's icon, the heading, a `StatusPill`) and one wrapping row of actions. The action that moves the card forward is Primary; Deny, Who sees this? and Download audit trail are quiet. Labels are in the body face, and monospace is for data only.
+- **U6.** A card has a header (the kind's icon, the heading, a `StatusPill`) and one wrapping row of actions. The action that moves the card forward is Primary; Deny, Who sees this? and Details are quiet. Labels are in the body face, and monospace is for data only.
+  - **Compact by default.** The card shows what it does, the parts of a split, the approval slots and who filled them, and one proof line: "✓ Re-derived on this device · N inputs, each traced to where it came from" (U-5). Tapping the proof line opens **Details**. Details shows the status rail, the Safe call data, the rail, where the rule lives, How this account works, What this needs, the verify box, the provenance box, the trace links, and Download audit trail.
+  - **Warnings stay on the face** (U-8): a DELEGATECALL, approvals pasted in from outside, a fiat quote to check, a payTo this client does not hold, a creditor who has not agreed yet, a step the chain has not included. What this needs also stays on the face once readiness names something missing or cannot be read.
+  - **Opening a box opens Details.** Opening the verify box, the provenance or the account rows sets Details open, so the harness's `verifyOpen` still reveals the verify box.
+  - The plan's ⋯ menu was not needed. With Download behind Details, the quiet actions fit in one row.
 - **U7.** Every page opens with a `PageHeader`, aligned with the sidebar: Needs you (grouped by what it asks of you), Wallet (the Balances and Send on LEZ tabs), Contacts, Learn, Settings, Start something. Decision §6.3 needed no new switch: the local test Safe already shows only where the local dev chain answers.
 - **U8.** Ctrl+K opens a room switcher (type to filter, ↑ ↓, Enter), and so does the sidebar's "Jump to…". Esc closes the drawer, else the proposal panel. ActionButton has a focus ring. Pill text clears AA (needs 5.7:1, info 6.1:1, where they were 4.4 and 3.8). These were verified in the real runner after three focus fixes: Main is the default key receiver, LogosTextField's inner input takes focus, and the switcher takes focus when it opens.
 - **ui-lint.sh** now also catches a property bound twice in one object, which qmllint misses. That error fails the whole document at runtime, and it blanked every view once.
@@ -274,7 +278,6 @@ Details, and the traps behind them: `docs/labbook/screenshots-of-the-qml-that-ho
 
 **Still deferred:**
 - membership seams in the thread (U-6);
-- Privacy filtered to one proposal (FlowView has no filter yet: "Who sees this?" opens the whole room's view);
-- a compact card body with its explanations behind one Details;
-- checking all of this in Basecamp 0.3.2 and in the Nim host;
-- `exo-c4f` ("Propose is off until  runs here.").
+- checking all of this in Basecamp 0.3.2 and in the Nim host.
+
+Since done: Privacy filtered to one proposal (`FlowView.intentFilter`, from a card's "Who sees this?"); the compact card (U6 above); `exo-c4f` (the form names what Propose waits on).

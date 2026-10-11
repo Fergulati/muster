@@ -123,6 +123,7 @@ Rectangle {
 
                 // ── a proposal, inline (live state from the verified fold) ──
                 MusterCard {
+                    id: liveCard
                     visible: msg.isIntentRef && msg.liveIntent !== null
                     Layout.fillWidth: true
                     card: msg.liveIntent ? room.intentToCard(msg.liveIntent) : ({})
@@ -213,13 +214,15 @@ Rectangle {
 
                 // Advanced: paste a signature produced elsewhere (a Safe owner on
                 // another device, or a member signing off-app). Hidden behind a
-                // toggle — one-click in-app Approve above is the primary path.
+                // toggle — one-click in-app Approve above is the primary path — and
+                // behind the card's Details (exo-720.10).
                 ActionButton {
                     objectName: "roomApprovePasteToggle"
                     // a split is agreed with the debtor's room key — there is no
                     // outside signature to paste (exo-a90)
                     visible: msg.isIntentRef && msg.liveIntent !== null && !msg.approving
                              && !msg.liveIntent.split && !msg.liveIntent.settleUp
+                             && liveCard.detailsOpen
                     Layout.leftMargin: Theme.spacing.medium
                     text: qsTr("Paste a signature instead")
                     variant: LogosButton.Variant.Secondary

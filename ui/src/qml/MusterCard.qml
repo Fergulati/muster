@@ -28,6 +28,15 @@ Rectangle {
     // The parsed card object: { kind, ... }. Never assume more than `kind`.
     property var card
 
+    // Compact by default (exo-720.10, docs/design/ui-modernization.md U6): a proposal shows
+    // what it does, where it stands, its approvals and anything to heed. Details shows the
+    // explanations: the status rail, how the account works, what this needs, the verify box
+    // and the lineage. The reader's own toggle; opening any of those opens Details too.
+    property bool detailsOpen: false
+    onVerifyOpenChanged: if (verifyOpen) detailsOpen = true
+    onProvOpenChanged: if (provOpen) detailsOpen = true
+    onRowsOpenChanged: if (rowsOpen) detailsOpen = true
+
     // Whether the intent-propose verify box is expanded ("dive in"). Local render
     // state — the card holds no other state, but this is the reader's own toggle.
     property bool verifyOpen: false
@@ -323,6 +332,17 @@ Rectangle {
         if (missing > 0) parts.push(qsTr("%1 missing").arg(missing));
         if (Number(r.unknown || 0) > 0) parts.push(qsTr("%1 unknown").arg(r.unknown));
         return parts.join(" · ");
+    }
+    // readiness was read and names something missing, or could not be read: the card keeps
+    // "What this needs" on its face with Details closed (U-8)
+    readonly property bool needsBlocked: {
+        var r = cardRoot.readiness;
+        if (!r) return false;
+        if (r.error) return true;
+        if (!r.declared || r.ready) return false;
+        var items = r.items || [];
+        for (var i = 0; i < items.length; ++i) if (items[i].status === "missing") return true;
+        return false;
     }
     // A split (exo-a90): pay MY share (the module derives it from the agreed split), or — as
     // the creditor — mark one person's share received outside muster.
@@ -623,7 +643,7 @@ Rectangle {
 
         // ── the header (exo-720.10): what kind of card, what it is, where it stands ──
         RowLayout {
-            objectName: "cardHeader"
+            objectName: "cardTitleRow"
             Layout.fillWidth: true
             Layout.bottomMargin: Theme.spacing.tiny
             spacing: Theme.spacing.small
@@ -847,8 +867,7 @@ Rectangle {
                 onClicked: cardRoot.deny()
             }
 
-            // Download audit trail (exo-403): one self-verifying file of everything this
-            // intent's approvals cover, plus a readable report generated from it.
+            // "Who sees this?" (exo-720.10): this proposal's flow, in the room's Privacy tab
             ActionButton {
                 objectName: "cardWhoSees"
                 quiet: true
@@ -856,12 +875,22 @@ Rectangle {
                 text: qsTr("Who sees this?")
                 onClicked: cardRoot.whoSees()
             }
+            // Download audit trail (exo-403): one self-verifying file of everything this
+            // intent's approvals cover, plus a readable report generated from it. A Details action.
             ActionButton {
                 quiet: true
                 objectName: "cardDownloadAudit"
-                visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+                visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown && cardRoot.detailsOpen
                 text: qsTr("Download audit trail")
                 onClicked: cardRoot.downloadAudit()
+            }
+            ActionButton {
+                quiet: true
+                objectName: "cardDetailsToggle"
+                visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+                text: cardRoot.detailsOpen ? qsTr("Hide details") : qsTr("Details")
+                Accessible.description: qsTr("How this works, what it needs, what you would sign, and where every input came from")
+                onClicked: cardRoot.detailsOpen = !cardRoot.detailsOpen
             }
         }
 

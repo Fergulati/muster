@@ -11,7 +11,10 @@ Rectangle {
     required property var cardRoot
 
     objectName: "needsBox"
+    // behind Details, except when it names something missing: a blocked card keeps its
+    // cause and remedy on its face (U-8)
     visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+             && (cardRoot.detailsOpen || cardRoot.needsBlocked)
     Layout.fillWidth: true
     Layout.topMargin: Theme.spacing.tiny
     implicitHeight: needsCol.implicitHeight + 2 * Theme.spacing.small
