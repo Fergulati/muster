@@ -99,9 +99,14 @@ ColumnLayout {
         objectName: "composeNeedsGate"
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: room.composeBlocked
+        // Propose also waits while the module takes a newly picked policy (pickPending):
+        // there is no missing module to name then (exo-c4f: "until  runs here.")
+        text: room.composeBlockers.length > 0
               ? qsTr("Propose is off until %1 runs here.")
                     .arg(room.composeBlockers.map(function (n) { return String(n.name || ""); }).join(", "))
+              : room.pickPending
+              ? qsTr("Propose waits while this proposal switches to %1.")
+                    .arg(((room.kindInfo(room.pickedKind) || {}).label) || room.pickedKind)
               : qsTr("You can still propose.")
         color: room.composeBlocked ? Theme.palette.warning : Theme.palette.textTertiary
         font.pixelSize: MusterStyle.caption

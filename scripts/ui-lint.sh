@@ -73,6 +73,24 @@ for path in sorted(glob.glob("ui/src/qml/*.qml")):
             seen[b.group(2)] = n
         if code.rstrip().endswith("{") and not m:
             stack.append((ind, "code", {}))
+# Every objectName the UI harness (ui/tests/muster-ui-test.mjs) looks up must still exist:
+# a control renamed or removed in a redesign leaves the harness clicking at nothing. A name
+# built at runtime ("roomPolicy" + kind) counts by its literal prefix.
+defined, prefixes = set(), set()
+for path in glob.glob("ui/src/qml/*.qml"):
+    text = open(path).read()
+    for expr in re.findall(r"objectName:\s*([^\n]+)", text):
+        lits = re.findall(r'"([A-Za-z_]+)"', expr)
+        if "+" in expr:
+            prefixes.update(l for l in lits)
+        else:
+            defined.update(lits)
+harness = open("ui/tests/muster-ui-test.mjs").read()
+wanted = set(re.findall(r'(?:clickButton|navTo|setField|propertyOf)\(app,\s*"([A-Za-z_]+)"', harness))
+wanted |= set(re.findall(r'objectName",\s*value:\s*"([A-Za-z_]+)"', harness))
+for name in sorted(wanted):
+    if name not in defined and not any(name.startswith(p) for p in prefixes):
+        found[f"muster-ui-test.mjs · harness-name · {name} is no objectName in ui/src/qml"] += 1
 base = json.load(open(baseline_path)) if os.path.exists(baseline_path) else {}
 if mode == "--update":
     json.dump(dict(sorted(found.items())), open(baseline_path, "w"), indent=1)

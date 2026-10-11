@@ -16,7 +16,7 @@ import QtQuick
 //                {"shot": "<suffix>"},
 //                {"expect": {"slot": "<SLOT>", "args": [...]}}   // the UI made this module call
 //                                       //   (an arg "~text" matches any argument containing it)
-//                {"expectProp": ["<objectName>", "<prop>", <value>]}
+//                {"expectProp": ["<objectName>", "<prop>", <value>]}   // "~s" contains s, "!s" lacks it
 //                {"emit": ["<objectName>", "<signal>"]}         // e.g. a MenuItem's triggered
 //                {"dumpCalls": true} ] }                        // print every call (GALLERY-CALLS)
 // A failed expectation is a GALLERY-ERROR: the fixture fails. Arguments after the size:
@@ -139,8 +139,11 @@ Item {
         if (step.expectProp !== undefined) {
             var o = find(app.item, step.expectProp[0]);
             if (!o) { fail("no object named " + step.expectProp[0]); return false; }
-            var v = o[step.expectProp[1]];
-            if (JSON.stringify(v) !== JSON.stringify(step.expectProp[2])) { fail(step.expectProp.join(".") + " is " + JSON.stringify(v)); return false; }
+            var v = o[step.expectProp[1]], want2 = step.expectProp[2];
+            var ok = (typeof want2 === "string" && want2.charAt(0) === "~") ? String(v).indexOf(want2.slice(1)) >= 0
+                   : (typeof want2 === "string" && want2.charAt(0) === "!") ? String(v).indexOf(want2.slice(1)) < 0
+                   : JSON.stringify(v) === JSON.stringify(want2);
+            if (!ok) { fail(step.expectProp.join(".") + " is " + JSON.stringify(v)); return false; }
             console.log("GALLERY-PASS " + JSON.stringify(step.expectProp));
             return true;
         }

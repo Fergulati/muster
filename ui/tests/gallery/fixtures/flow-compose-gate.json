@@ -1,0 +1,38 @@
+{
+  "about": "exo-c4f: while the composer waits on a newly picked policy, its gate says so, never 'until  runs here.'",
+  "snapshot": "data/xmr-request-refused.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomProposeButton"
+    },
+    {
+      "click": "roomKindSplit"
+    },
+    {
+      "click": "roomPolicyEvm-split"
+    },
+    {
+      "expectProp": [
+        "composeNeedsGate",
+        "text",
+        "!until  runs here"
+      ]
+    },
+    {
+      "expectProp": [
+        "composeNeedsGate",
+        "text",
+        "~switches to"
+      ]
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}
