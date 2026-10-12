@@ -77,7 +77,7 @@ method securityLevel*(cc: EpochCrypto): SecurityLevel =
   securityLevel(
     axisLevel(rungNull, "speaker not authenticated by the crypto seam"),
     axisLevel(rungNull, "no attestation from the crypto seam"),
-    axisLevel(rungReal, "ECIES epoch (sealed box over X25519), forward-secret across epochs (F-16)"))
+    axisLevel(rungReal, "ECIES epoch (sealed box over X25519), forward-secret across epochs"))
 
 proc newEpochCrypto*(ks: Keystore, room: string, others: seq[Member] = @[]): EpochCrypto =
   ## Found a conversation on `room` (its content topic): epoch 0, members = me + others.

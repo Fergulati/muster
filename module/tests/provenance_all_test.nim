@@ -37,7 +37,7 @@ block:
   doAssert "not a verified signature" in items.byKind("message").guarantee
   doAssert items.byKind("sig").cls == icContribution and items.byKind("sig").account in ["A", "B"]
   doAssert items.byKind("submit").cls == icExternalRead and items.byKind("final").cls == icExternalRead
-  doAssert items.byKind("admit").account == "dave-hex" and "F-16" in items.byKind("admit").guarantee
+  doAssert items.byKind("admit").account == "dave-hex" and "nothing before" in items.byKind("admit").guarantee   # the joiner reads from here on (F-16), in words
   for it in items: doAssert it.accountable
   echo "1. message/propose/sig/decline/admit/submit/final all present, classed, deduped OK"
 

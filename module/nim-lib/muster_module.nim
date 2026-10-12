@@ -4258,7 +4258,7 @@ proc musterSecurityLevels(): string =
   let auth = driverForKind(gCoordKind).describe().securityLevel()
   let prov = securityLevel(
     axisLevel(rungNull, "-"),
-    axisLevel(rungReal, "signed hash-linked log (reduce(log), invariant 4)"),
+    axisLevel(rungReal, "signed hash-linked log"),
     axisLevel(rungNull, "-"))
   let conf = gSession.securityLevel()
   $combine(auth, prov, conf).toJson()

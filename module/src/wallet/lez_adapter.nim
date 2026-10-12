@@ -72,7 +72,7 @@ method securityLevel*(a: LezAdapter): SecurityLevel =
   ## and its per-rail disclosure, is the manifest's job — this is the seam's capability.
   securityLevel(
     axisLevel(rungNull, "chain does not authenticate the room member"),
-    axisLevel(rungNull, "reads from untrusted RPC (invariant 8)"),
+    axisLevel(rungNull, "reads from untrusted RPC"),
     axisLevel(rungReal, "shielded rail — private/shield/deshield hide amount and parties"))
 
 method accounts*(a: LezAdapter, ks: Keystore): seq[Account] =

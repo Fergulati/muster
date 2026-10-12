@@ -1,0 +1,37 @@
+{
+  "about": "Room details \u203a People in a room of two: how the room is protected, in words (no 'real'/'null', no spec ids), and the roster with no role tag (2026-10-12 review).",
+  "snapshot": "data/split-alice-collecting.json",
+  "sizes": [
+    "1440x900",
+    "1024x700"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "people"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "roomProtections",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

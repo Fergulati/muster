@@ -12,7 +12,7 @@ import Logos.Controls
 // The data is ClaimsRegistry.qml, generated from contracts/claims/registry.json
 // and drift-checked in CI (ui/tools/gen-claims-qml.py). This view adds no claim
 // of its own — it only lays out what the registry already resolved to a
-// requirement and a test. A protects claim shows its requirement id and test; a
+// requirement and a test. A protects claim shows the test that holds it (never a spec id); a
 // gap shows its fix and honest status; a comparison names the system and the
 // observer. Nothing here is prose a delegate could make read fine and be wrong.
 //
@@ -67,8 +67,8 @@ Item {
 
     // The evidence line, per kind — the checkable half of the claim.
     function evidenceOf(c) {
-        if (c.kind === "protects")
-            return c.requirement + "  ·  " + c.test;
+        if (c.kind === "protects")      // the test that holds it; no spec ids on screen
+            return qsTr("checked by %1").arg(String(c.test).split("/").pop());
         if (c.kind === "others-leak")
             return c.system + "  —  " + c.observer;
         var s = c.status;

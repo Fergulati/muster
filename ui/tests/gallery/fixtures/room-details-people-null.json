@@ -1,0 +1,53 @@
+{
+  "about": "A room missing a protection says what is missing, in amber (the null ladder).",
+  "snapshot": "data/split-alice-collecting.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "securityLevelsJson": {
+      "axes": [
+        {
+          "axis": "authentication",
+          "rung": "real",
+          "real": true,
+          "mechanism": "bound identity (the driver verifies who contributed)"
+        },
+        {
+          "axis": "provenance",
+          "rung": "real",
+          "real": true,
+          "mechanism": "signed hash-linked log (reduce(log), invariant 4)"
+        },
+        {
+          "axis": "confidentiality",
+          "rung": "null",
+          "real": false,
+          "mechanism": "ECIES epoch (sealed box over X25519), forward-secret across epochs (F-16)"
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "people"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

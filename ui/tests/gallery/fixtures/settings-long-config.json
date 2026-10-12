@@ -1,0 +1,51 @@
+{
+  "about": "Settings with a fleet's delivery config, one long line of JSON: every text stays inside the page (seen 2026-10-11, the Infrastructure section ran off the right edge).",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900",
+    "1024x700"
+  ],
+  "props": {
+    "settingsJson": {
+      "rpc": "http://127.0.0.1:8571",
+      "rpcMasked": "http://127.0.0.1:8571",
+      "relayer": "self",
+      "evmChains": "auto",
+      "evmPlatform": false,
+      "btcRpc": "",
+      "btcRpcMasked": "",
+      "lez": {
+        "rpc": "https://testnet.lez.logos.co",
+        "rpcMasked": "https://testnet.lez.logos.co",
+        "chain": "lez:testnet",
+        "multisigProgram": "2ced3d301a4d1cd5db6cad9c428b9f3463155073f8bacf73179c6ea6536de4c7"
+      },
+      "delivery": "{\"mode\": \"Core\", \"preset\": \"logos.dev\", \"entryNodes\": [\"/dns4/delivery-01.ac-cn-hongkong-c.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAm8YokiNun9BkeA1ZRmhLbtNUvcwRr64F69tYj9fkGyuEP\", \"/dns4/delivery-01.do-ams3.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAmTUbnxLGT9JvV6mu9oPyDjqHK4Phs1VDJNUgESgNSkuby\", \"/dns4/delivery-01.gc-us-central1-a.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAm4S1JYkuzDKLKQvwgAhZKs9otxXqt8SCGtB4hoJP1S397\", \"/dns4/delivery-02.ac-cn-hongkong-c.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAkvwhGHKNry6LACrB8TmEFoCJKEX29XR5dDUzk3UT3UNSE\", \"/dns4/delivery-02.do-ams3.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAmMK7PYygBtKUQ8EHp7EfaD3bCEsJrkFooK8RQ2PVpJprH\", \"/dns4/delivery-02.gc-us-central1-a.logos.dev.status.im/tcp/30303/p2p/16Uiu2HAm8Y9kgBNtjxvCnf1X6gnZJW5EGE4UwwCL3CCm55TwqBiH\"]}",
+      "mix": "off",
+      "mixAsked": "None",
+      "keystoreBackend": "auto",
+      "environment": "eip155:31337",
+      "identity": {
+        "address": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+        "ed25519": "cd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d",
+        "x25519": "7563dcc927c1a986ecfa833b4e026a1fdacc174092a7d56f0644463af0e2e208",
+        "btcPubKey": "038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75"
+      }
+    }
+  },
+  "steps": [
+    {
+      "view": "settings"
+    },
+    {
+      "expectMax": [
+        "settingsRlnDetail",
+        "width",
+        720
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

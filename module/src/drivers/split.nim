@@ -389,7 +389,7 @@ proc settleParties*(su: SettleUp): seq[string] =
   result.sort()
 
 const MoneroNotNetted* = "a Monero split is never netted: its shares are told apart by amount at the " &
-                         "creditor's subaddress, and a net payment would need an address the payee vouches for (ADR-018)"
+                         "creditor's subaddress, and a net payment would need an address the payee vouches for"
 
 proc familyOfChain*(chain: string): string =
   ## The split family whose shares a chain carries: Ethereum and Bitcoin publicly, the LEZ

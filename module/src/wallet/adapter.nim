@@ -37,7 +37,7 @@ method securityLevel*(a: ChainAdapter): SecurityLevel {.base.} =
   ## null with an honest mechanism; a shielded adapter overrides confidentiality to real.
   securityLevel(
     axisLevel(rungNull, "chain does not authenticate the room member"),
-    axisLevel(rungNull, "reads from untrusted RPC (invariant 8)"),
+    axisLevel(rungNull, "reads from untrusted RPC"),
     axisLevel(rungNull, "transparent — amounts and parties public"))
 
 method accounts*(a: ChainAdapter, ks: Keystore): seq[Account] {.base.} =

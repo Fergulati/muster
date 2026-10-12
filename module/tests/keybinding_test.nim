@@ -100,7 +100,8 @@ block:
       found = true
       doAssert it.cls == icPeerMessage, "a binding is peer-shared room data"
       doAssert it.account == "0xOWNER1", "named driver names the key"
-      doAssert it.guarantee.contains("admitted") and it.guarantee.contains("F-14"),
+      # F-14, in words
+      doAssert it.guarantee.contains("admitted") and it.guarantee.contains("bound"),
         "guarantee is honest: proves an admitted member, not merely a valid owner: " & it.guarantee
   doAssert found, "the binding appears in provenance"
   echo "B2. provenance: a binding is peer-message, names the key, guarantee honest OK"

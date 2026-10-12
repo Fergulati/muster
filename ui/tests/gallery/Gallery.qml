@@ -17,6 +17,7 @@ import QtQuick
 //                {"expect": {"slot": "<SLOT>", "args": [...]}}   // the UI made this module call
 //                                       //   (an arg "~text" matches any argument containing it)
 //                {"expectProp": ["<objectName>", "<prop>", <value>]}   // "~s" contains s, "!s" lacks it
+//                {"expectMax": ["<objectName>", "<prop>", <number>]}   // a size that must not exceed
 //                {"emit": ["<objectName>", "<signal>"]}         // e.g. a MenuItem's triggered
 //                {"dumpCalls": true} ] }                        // print every call (GALLERY-CALLS)
 // A failed expectation is a GALLERY-ERROR: the fixture fails. Arguments after the size:
@@ -145,6 +146,14 @@ Item {
                    : JSON.stringify(v) === JSON.stringify(want2);
             if (!ok) { fail(step.expectProp.join(".") + " is " + JSON.stringify(v)); return false; }
             console.log("GALLERY-PASS " + JSON.stringify(step.expectProp));
+            return true;
+        }
+        if (step.expectMax !== undefined) {
+            var om = find(app.item, step.expectMax[0]);
+            if (!om) { fail("no object named " + step.expectMax[0]); return false; }
+            var vm = Number(om[step.expectMax[1]]);
+            if (!(vm <= step.expectMax[2])) { fail(step.expectMax.join(".") + " is " + vm); return false; }
+            console.log("GALLERY-PASS " + JSON.stringify(step.expectMax));
             return true;
         }
         if (step.dumpCalls !== undefined) {
