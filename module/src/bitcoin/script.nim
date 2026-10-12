@@ -8,6 +8,7 @@ import nimcrypto/ripemd
 import ../hashing/sha256
 import ./tx
 import ./bech32
+import ./network
 
 const
   OP_0* = 0x00'u8
@@ -97,3 +98,8 @@ proc p2pkhScriptCode*(pub33: openArray[byte]): seq[byte] =
 proc p2wpkhAddress*(hrp: string, pub33: openArray[byte]): string =
   if pub33.len != 33: raise newException(BtcError, "a P2WPKH key is a 33-byte compressed key")
   encodeSegwitAddress(hrp, 0, hash160(pub33))
+
+proc payerAddresses*(pub33: openArray[byte]): seq[tuple[network, chain, address: string]] =
+  ## wpkh(<key>) on every network: where a member pays a Bitcoin split from and is paid
+  ## at (exo-d17), so the address their own node must hold coins at (exo-408 item 12).
+  for n in Networks: result.add (n.name, n.caip2, p2wpkhAddress(n.hrp, pub33))
