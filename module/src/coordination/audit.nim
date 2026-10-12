@@ -31,6 +31,7 @@ import ../crypto/curve25519
 import ../drivers/driver
 import ../drivers/safe
 import ../drivers/threshold
+import ../drivers/split
 import ../drivers/frost
 import ../drivers/invoke
 import ../drivers/eip191
@@ -58,9 +59,11 @@ type
     grade*: string           ## committed | unattested | rejected
 
   SettlementReport* = object
-    kind*: string            ## submit | final
-    chainRef*: string        ## the tx hash, or "" when the event predates chain refs
+    kind*: string            ## submit | final | part-settled | part-confirmed (a split, exo-dcc.7)
+    chainRef*: string        ## the tx hash, or "" when the event predates chain refs (or a part received outside muster)
     grade*: string           ## always "external-read"
+    part*: string            ## a part report's part ("" otherwise)
+    author*: string          ## a part report's author: the member the driver names for that step
 
   AuditVerdict* = object
     ok*: bool
@@ -144,6 +147,17 @@ proc fileDriver(policy: string, ctx: SigningContext): Driver =
   of "threshold", "unanimous": newThresholdDriver(@[], 1)
   of "frost": newFrostDriver(@[], 1)
   of "invoke": newInvokeDriver(@[], 1)
+  of "evm-split", "lez-split", "btc-split", "monero-split":
+    # a split's materialization is its effect on its chain, the policy's qualifier
+    # (exo-dcc.7): no roster, which gates proposing and signing, never the bytes
+    let at = policy.find('@')
+    if at < 0 or at == policy.len - 1: refuse("a split's policy names no chain")
+    let family = case kindOf(policy)
+      of "evm-split": EvmSplitFamily
+      of "lez-split": LezSplitFamily
+      of "btc-split": BtcSplitFamily
+      else: MoneroSplitFamily
+    newSplitDriver(family, policy[at + 1 .. ^1])
   else: refuse("unknown policy '" & policy & "'")
 
 proc signedBy(who: string, mat: seq[byte], sigHex: string): bool =
@@ -258,6 +272,14 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
         if e.key == "intent/" & intentId & "/" & kind:
           settle.add e
           break
+    # a family settled in parts (a split, exo-dcc.7): every part report the fold counted,
+    # in canonical order — each party's "I paid" and the counterparty's "I received", both
+    # what a member said it saw, never proof the file holds
+    let counted = countedPartIndexes(events, driverFor).getOrDefault(intentId)
+    var at: seq[int]
+    for _, i in counted: at.add i
+    at.sort()
+    for i in at: settle.add ordered[i]
 
     # declines (exo-720): a decline is final, so the stage can be "declined". The intent's
     # declines ride along as leaves, like settlement, so the verifier can check that claim
@@ -509,13 +531,40 @@ proc verifyAudit*(bytes: seq[byte]): AuditVerdict =
 
     # settlement: external reads, never proof
     var submitted, final = false
+    let effect = effectFromJson(effectJson)
+    let parts = fdrv.settlementParts(effect)
+    var confirmedParts = initHashSet[string]()
     for e in settle:
-      let kind = e.key.split('/')[^1]
+      let q = e.key.split('/')
+      if parts.len > 0 and q.len == 5 and q[0] == "intent" and q[1] == intentId and q[2] == "part":
+        # a part report (exo-dcc.7): of a part the effect names, at a step there is, by the
+        # member the driver names for it — read from the effect, so it needs nothing outside
+        # the file. Whether the payment happened stays an external read.
+        let (part, step) = (q[3], q[4])
+        if part notin parts or step notin PartSteps: refuse("a part report names no part or step of this intent: " & e.key)
+        var author, tx: string
+        try:
+          let j = parseJson(e.value)
+          author = j{"author"}.getStr()
+          tx = j{"tx"}.getStr()
+        except CatchableError: refuse("a part report is malformed: " & e.key)
+        let want = fdrv.partAuthor(effect, part, step)
+        if want.len == 0 or author.toLowerAscii() != want.toLowerAscii():
+          refuse("the " & step & " report on part " & part & " names author " & author &
+                 ", not the one its driver names")
+        if step == "confirmed": confirmedParts.incl part
+        submitted = true
+        result.settlement.add SettlementReport(kind: "part-" & step, grade: "external-read",
+          chainRef: tx, part: part, author: author)
+        continue
+      let kind = q[^1]
       if e.key != "intent/" & intentId & "/" & kind or kind notin ["submit", "final"]:
         refuse("a settlement entry is not this intent's submit or final")
       if kind == "submit": submitted = true else: final = true
       result.settlement.add SettlementReport(kind: kind, grade: "external-read",
         chainRef: (if e.value == "1": "" else: e.value))
+    # a parts intent is final when every part is confirmed, never by a bare final (exo-a90.2)
+    if parts.len > 0: final = parts.allIt(it in confirmedParts)
 
     # the claims the log can't prove: consistent with what it can, and signed
     let cl = f.field("claims")
@@ -635,7 +684,22 @@ proc renderAuditReport*(bytes: seq[byte]): string =
   let st = f.get("settlement").items
   for e in st:
     let v = e.get("value").str
-    o.add "- " & e.get("key").str.split('/')[^1] & ": " &
+    let q = e.get("key").str.split('/')
+    if q.len == 5 and q[2] == "part":
+      # a split's part (exo-dcc.7): who said what about it, in their own report
+      var author, tx: string
+      try:
+        let j = parseJson(v)
+        author = j{"author"}.getStr()
+        tx = j{"tx"}.getStr()
+      except CatchableError: discard
+      let who = "`" & author[0 ..< min(16, author.len)] & "…`"
+      o.add "- part `" & q[3][0 ..< min(16, q[3].len)] & "…`: " &
+        (if q[4] == "settled": who & " reported paying it" else: who & " reported receiving it") &
+        (if tx.len > 0: ", `" & tx & "`" else: ", outside muster") &
+        " — an external read: that member's own report, not proof. Look it up on the chain yourself."
+      continue
+    o.add "- " & q[^1] & ": " &
       (if v == "1": "chain reference unknown" else: "`" & v & "`") &
       " — an external read: what the room observed, not proof. Look it up on the chain yourself."
   if st.len == 0: o.add "- not settled"

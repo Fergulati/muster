@@ -3046,7 +3046,10 @@ proc musterCoordinateVerifyAudit(fileHex: string): string =
   var apps = newJArray()
   for a in v.approvals: apps.add %*{"who": a.who, "round": a.round, "grade": a.grade}
   var st = newJArray()
-  for x in v.settlement: st.add %*{"kind": x.kind, "chainRef": x.chainRef, "grade": x.grade}
+  for x in v.settlement:
+    var r = %*{"kind": x.kind, "chainRef": x.chainRef, "grade": x.grade}
+    if x.part.len > 0: (r["part"] = %x.part; r["author"] = %x.author)   # a split's part report (exo-dcc.7)
+    st.add r
   $(%*{"ok": v.ok, "reason": v.reason, "intentId": v.intentId, "stage": v.stage,
        "issuer": v.issuer, "digest": v.digest, "firstEpoch": v.firstEpoch,
        "approvals": apps, "settlement": st})
