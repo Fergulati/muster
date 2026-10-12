@@ -10,8 +10,10 @@
 ##    view replays reduce(log[0..k]) by filtering on seq ≤ k and never computes state.
 ##  * Nodes are keyed by content id (an entry), intent id, CAIP-10 or member identity —
 ##    never by seq, which shifts when an earlier-sorting event arrives (exo-ef1).
-##  * Structure, never content: kinds, actors, states, fields and observers. No message
-##    body, effect, material or chain reference travels here.
+##  * The content, all of it: the map is local, read by this member's own client, so each
+##    entry carries its value, parsed — message text, the effect, context, read values,
+##    signatures, chain references, payment reports, shared material, account details —
+##    beside its structure. It carries nothing the member's client did not decrypt.
 ##  * An actor is named only where the log proves it: an author-signed kind's author
 ##    (authorship.nim), a driver-counted approval's signer, a binding's verified link.
 ##    An entry the fold refused (an uncounted approval, a substitute proposal) stays in
@@ -178,6 +180,41 @@ proc edgeCredibility(e: GraphEdge, obsLabel: proc (id: string): string): tuple[c
   of "parent": ("imperative", "", "a hash link: the child's id commits to it")
   else: ("imperative", "", "a signed entry by the member it names")
 
+proc parseOrEmpty(s: string): JsonNode =
+  ## a value parsed as JSON, or a JSON string of it when it is not JSON
+  try: parseJson(s) except CatchableError: %s
+
+proc contentOf(e: Event, p: seq[string]): JsonNode =
+  ## An entry's content: its value parsed (a JSON object as is, anything else under
+  ## "value"), with what its key says spelled out — the read's field, the part and step,
+  ## the requirement a material fills, the admitted member and epoch.
+  result = newJObject()
+  try:
+    let j = parseJson(e.value)
+    if j.kind == JObject:
+      for k, v in j: result[k] = v
+    else: result["value"] = j
+  except CatchableError:
+    result["value"] = %e.value
+  if p.len >= 3 and p[0] == "intent":
+    case p[2]
+    of "read": (if p.len >= 4: result["field"] = %p[3])
+    of "submit", "final": result["chainRef"] = %e.value
+    of "sig": (if p.len >= 5: (result["signer"] = %p[3]; result["round"] = %p[4]); result["signature"] = %e.value)
+    of "attest": (if p.len >= 5: (result["signer"] = %p[3]; result["round"] = %p[4]); result["signature"] = %e.value)
+    of "binding": (if p.len >= 4: result["key"] = %p[3]); result["link"] = %e.value
+    of "part":
+      if p.len >= 5: (result["part"] = %p[3 .. ^2].join("/"); result["step"] = %p[^1])
+    of "material": (if p.len >= 5: (result["requirement"] = %p[3]; result["sharer"] = %p[4]))
+    of "decline": (if p.len >= 4: result["who"] = %p[3])
+    of "proposer": (if p.len >= 4: result["proposer"] = %p[3])
+    of "policy": result["policy"] = %e.value
+    else: discard
+  elif p.len >= 4 and p[0] == "membership" and p[2] == "admit":
+    result["joiner"] = %p[3]; result["epoch"] = %p[1]
+  elif p.len >= 3 and p[0] == "frost":
+    result["ceremony"] = %p[1]; result["step"] = %p[2]
+
 proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[string],
                       viewer: string, sealedIn = initTable[string, int]()): RoomGraph =
   ## `sealedIn` is the session's record of which epoch's key opened each event
@@ -296,6 +333,7 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       elif p.len >= 4 and p[0] == "intent" and p[2] == "proposer":
         basis = "author-signed"; author = p[3]; attrs["counted"] = %true
     attrs["basis"] = %basis
+    attrs["content"] = contentOf(e, p)
     var source = ""
     if attrs["kind"].getStr() == "read":
       try: source = parseJson(e.value){"source"}.getStr()
@@ -345,6 +383,7 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       lastStep[v.id] = sig
       if v.id notin steps: steps[v.id] = newJArray()
       steps[v.id].add %*{"seq": i, "state": v.state, "approvals": v.approvals}
+  var effectOf = initTable[string, JsonNode]()
   for v in reduceIntentViews(events, driverFor):
     if v.effectJson.len == 0: continue
     let s = firstSeq.getOrDefault(v.id, -1)
@@ -355,7 +394,12 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       "state": v.state, "family": v.policy.split('@')[0], "threshold": v.threshold,
       "approvals": v.approvals, "rounds": v.rounds, "round": v.round, "declines": v.declines,
       "committed": v.committed, "unattested": v.unattested, "parts": parts,
-      "steps": steps.getOrDefault(v.id, newJArray())})
+      "steps": steps.getOrDefault(v.id, newJArray()),
+      # its content: the effect as proposed, in words and in full, and what is signed
+      "effect": (try: parseJson(v.effectJson) except CatchableError: %v.effectJson),
+      "summary": summarizeEffect(v.effectJson), "policy": v.policy, "txhash": v.txhash,
+      "schemaId": v.schemaId, "proposers": v.proposers, "decliners": v.decliners})
+    effectOf[v.id] = (try: parseJson(v.effectJson) except CatchableError: newJObject())
   for it in provAt.values:
     if it.intentId.len == 0 or "i:" & it.intentId notin nodeAt: continue
     let dst = "i:" & it.intentId
@@ -389,7 +433,9 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       let p = e.key.split('/')
       if p.len != 4 or p[0] != "account" or p[2] != "disclose" or p[1] != a.id: continue
       addNode("a:" & a.id, "account", i, epochAt[i], %*{"family": a.family, "chain": a.chain,
-        "threshold": a.threshold, "signers": a.signers.len, "conflict": a.conflict})
+        "threshold": a.threshold, "signers": a.signers.len, "conflict": a.conflict,
+        "address": a.address, "label": a.label, "signerList": a.signers, "config": a.config,
+        "disclosedBy": a.disclosedBy})
       let m = actor(p[3], i, true)
       if m.len > 0: addEdge(m, "a:" & a.id, "disclosed", i)
   for i, e in ordered:
@@ -440,8 +486,24 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
     "mechanism": "every entry is an envelope the store node keeps: it sees when each arrived and its topic, never what it says"}
   for e in result.edges:
     if e.kind != "leaves": continue
+    # what left, with the values the effect gives those fields and the chain reference of
+    # the entry that sent it — the transaction anyone outside can look up
+    let intentId = e.src[2 .. ^1]
+    let eff = effectOf.getOrDefault(intentId, newJObject())
+    var values = newJObject()
+    for f in e.attrs["fields"]:
+      let k = f.getStr()
+      if eff.kind == JObject and eff.hasKey(k): values[k] = eff[k]
+      elif k == "payee" and eff.kind == JObject and eff.hasKey("payTo"): values[k] = eff["payTo"]
+      elif k == "to" and eff.kind == JObject and eff.hasKey("payTo"): values[k] = eff["payTo"]
+    let sent = parseOrEmpty(ordered[e.seq].value)
+    let chainRef =
+      if sent.kind == JObject and sent.hasKey("tx"): sent["tx"].getStr()
+      elif sent.kind != JObject: ordered[e.seq].value
+      else: ""
     result.crossings.add %*{"seq": e.seq, "dir": "out", "kind": "leaves", "observer": e.dst,
-      "fields": e.attrs["fields"], "intent": e.src[2 .. ^1], "entry": "e:" & eventId(ordered[e.seq]),
+      "fields": e.attrs["fields"], "values": values, "chainRef": chainRef,
+      "intent": intentId, "entry": "e:" & eventId(ordered[e.seq]),
       "declared": e.attrs{"declared"}.getBool(true),
       "credibility": "exposed", "party": obsLabel(e.dst), "mechanism": e.attrs["mechanism"]}
   for n in result.nodes:

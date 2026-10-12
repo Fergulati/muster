@@ -6,7 +6,7 @@
 ##   4. reorder + duplication give the identical graph (invariant 4)
 ##   5. two members' graphs of one log differ only in viewer and readFrom (invariant 9)
 ##   6. a later joiner's graph holds nothing from before its admission (invariant 7)
-##   7. structure, never content: no message body, effect value or chain reference
+##   7. the content, all of it: message text, the effect, chain references, payment reports
 ##   8. a report the fold refused stays in the graph, unattributed
 ## Stub + parts drivers; the binding is a real secp256k1 statement (libsodium + secp).
 
@@ -144,13 +144,27 @@ block:
   doAssert not gc.hasNode("i:" & idA), "an intent proposed before she joined is not on her map"
   doAssert not gc.hasNode("k:" & aliceKey), "nor the key that approved it"
   doAssert gc.hasNode("i:" & idB)
-  echo "6. a later joiner's graph holds nothing from before its admission (inv 7) OK"
+  # nor any content from before it: the epoch-0 message and intent A's effect are absent
+  let sc = $gc.toJson()
+  for early in ["a secret note", "deadbeefcafe", "424242"]:
+    doAssert early notin sc, "content from before her admission: " & early
+  echo "6. a later joiner's graph holds nothing from before its admission, content included (inv 7) OK"
 
 block:
+  # the map is local and carries the room's content: every entry's value, parsed
   let s = $g.toJson()
-  for secret in ["a secret note", "deadbeefcafe", "424242", "feedface", "b0bpaid", "forged"]:
-    doAssert secret notin s, "content on the wire: " & secret
-  echo "7. structure, never content OK"
+  for c in ["a secret note", "deadbeefcafe", "424242", "feedface", "b0bpaid", "forged"]:
+    doAssert c in s, "content missing from the map: " & c
+  let msgNode = g.entryOf(canonicalOrder(story).filterIt(it.key.startsWith("message/"))[0].key, story)
+  doAssert msgNode.attrs["content"]["body"].getStr() == "a secret note"
+  let prop = g.node("i:" & idA)
+  doAssert prop.attrs["effect"]["to"].getStr() == "0xdeadbeefcafe" and prop.attrs["effect"]["value"].getInt() == 424242
+  doAssert prop.attrs["summary"].getStr().len > 0
+  doAssert g.entryOf("intent/" & idA & "/submit", story).attrs["content"]["chainRef"].getStr() == "0xfeedface"
+  # what left carries the chain reference that sent it, and the effect's values it names
+  let outA = g.toJson()["crossings"].getElems().filterIt(it["dir"].getStr() == "out" and it{"intent"}.getStr() == idA)
+  doAssert outA.len > 0 and outA.allIt(it["chainRef"].getStr() == "0xfeedface"), $outA
+  echo "7. the content, all of it: message text, the effect, chain references, payment reports OK"
 
 block:
   # mallory is not a party: her approval and bob's part "settled" by her stay, unattributed
