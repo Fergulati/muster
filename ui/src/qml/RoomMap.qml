@@ -841,7 +841,8 @@ Rectangle {
                             LogosText {
                                 readonly property bool below: map.lens === "prov" || node.modelData.seq % 2 === 0
                                 x: -width / 2; y: below ? node.r + 3 : -node.r - height - 3
-                                text: map.kindWord(String(parent.a.kind || ""))
+                                text: (String(parent.a.kind) === "message" && parent.a.content && parent.a.content.body !== undefined
+                                       ? "“" + map.snippet(map.messageText(parent.a.content.body), 18) + "”" : map.kindWord(String(parent.a.kind || "")))
                                       + (map.lens === "prov" && parent.a.account ? " · " + map.actorName(parent.a.account) : "")
                                 color: Theme.palette.textSecondary; font.pixelSize: map.lens === "prov" ? MusterStyle.caption : 9
                             }
@@ -1018,6 +1019,36 @@ Rectangle {
                 : qsTr("Members and what they decided sit inside the boundary. Blue carries information out; grey dashes bring outside reads in.")
         }
     }
+    // An entry's or effect's content as inspector rows: short values as rows, long ones
+    // (signatures, hashes, links) selectable in full
+    function valueText(v) {
+        if (v === null || v === undefined) return "";
+        if (typeof v === "object") return JSON.stringify(v);
+        return String(v);
+    }
+    function addContent(d, obj, skip) {
+        if (!obj || typeof obj !== "object") return;
+        for (var k in obj) {
+            if (skip && skip.indexOf(k) >= 0) continue;
+            var t = valueText(obj[k]);
+            if (t.length === 0) continue;
+            if (t.length > 64) d.copyable.push([k, t]);
+            else d.rows.push([k, t, /^0x[0-9a-fA-F]+$|^[0-9a-f]{16,}$/.test(t) ? "mono" : ""]);
+        }
+    }
+    // a message's words: a card (a JSON body) reads as its text, or as the card it is
+    function messageText(body) {
+        var b = String(body || "");
+        if (b.charAt(0) === "{") {
+            try {
+                var c = JSON.parse(b);
+                if (c.text) return String(c.text);
+                if (c.kind) return qsTr("a %1 card").arg(String(c.kind));
+            } catch (e) {}
+        }
+        return b;
+    }
+    function snippet(t, n) { t = String(t || ""); return t.length > n ? t.slice(0, n - 1) + "…" : t; }
     function linkText(e) {
         var who = actorName(e.src), what = String(e.dst).indexOf("i:") === 0 ? intentWord(String(e.dst).slice(2)) : actorName(e.dst);
         switch (e.kind) {
@@ -1064,8 +1095,13 @@ Rectangle {
         var intent = String(x.intent || "").length > 0 ? intentWord(String(x.intent)) : "";
         if (dir === "out" && kd === "envelopes")
             return qsTr("%1 of every entry → %2 (%n envelopes so far)", "", heldCount).arg(fields).arg(obsWord(String(x.observer), 0));
-        if (dir === "out")
-            return qsTr("%1 → %2, when %3 settled").arg(fields).arg(obsWord(String(x.observer), 0)).arg(intent);
+        if (dir === "out") {
+            var vals = [], vs = x.values || {};
+            for (var vk in vs) vals.push(vk + " " + snippet(valueText(vs[vk]), 26));
+            if (String(x.chainRef || "").length > 0 && String(x.chainRef) !== "1") vals.push(qsTr("tx %1").arg(shortId(String(x.chainRef))));
+            return qsTr("%1 → %2, when %3 settled").arg(fields).arg(obsWord(String(x.observer), 0)).arg(intent)
+                   + (vals.length > 0 ? " · " + vals.join(", ") : "");
+        }
         if (dir === "join")
             return qsTr("%1 joined at epoch %2").arg(memberName(String(x.member || ""))).arg(x.epoch);
         if (kd === "read") return qsTr("%1 → %2: an outside read").arg(String(x.source || qsTr("a source"))).arg(intent);
@@ -1435,8 +1471,10 @@ Rectangle {
             d.kicker = qsTr("PROPOSAL");
             d.title = map.intentWord(id);
             d.pill = map.stateWords(n); d.tone = map.stateTone(n);
-            d.lead = it && it.summary ? String(it.summary.text || "") : "";
-            d.rows.push([qsTr("Runs as"), String(a.family || "")]);
+            d.lead = it && it.summary ? String(it.summary.text || "") : String(a.summary || "");
+            d.rows.push([qsTr("Runs as"), String(a.policy || a.family || "")]);
+            addContent(d, a.effect, []);
+            if (a.txhash) d.copyable.push([qsTr("What is signed (the materialization)"), String(a.txhash)]);
             d.rows.push([qsTr("Agreed"), qsTr("%1 of %2").arg(Number(map.stepAt(n).approvals || 0)).arg(Number(a.threshold || 0))]);
             if (Number(a.declines || 0) > 0) d.rows.push([qsTr("Declined"), String(a.declines)]);
             var inputs = 0;
@@ -1504,13 +1542,21 @@ Rectangle {
             }
             d.guarantee = String(a.guarantee || "");
             d.facets = a.facets || [];
+            var ct = a.content || {};
+            if (String(a.kind) === "message" && ct.body !== undefined) d.lead = (d.lead.length > 0 ? d.lead + " " : "") + map.messageText(ct.body);
+            addContent(d, ct, ["body", "authorSig"]);
+            if (ct.authorSig) d.copyable.push([qsTr("author signature"), valueText(ct.authorSig)]);
             return d;
         }
         if (n.kind === "account") {
             d.kicker = qsTr("ACCOUNT IN THE ROOM");
             d.title = String(a.family || qsTr("Account"));
             d.rows.push([qsTr("Chain"), String(a.chain || ""), "mono"]);
-            d.rows.push([qsTr("Account"), map.shortId(n.id.slice(2)), "mono"]);
+            if (a.label) d.lead = String(a.label);
+            if (a.address) d.copyable.push([qsTr("Address"), String(a.address)]);
+            var sl = a.signerList || [];
+            for (var si = 0; si < sl.length; si++) d.copyable.push([qsTr("Signer %1").arg(si + 1), String(sl[si])]);
+            if (a.config) d.copyable.push([qsTr("Configuration"), String(a.config)]);
             if (Number(a.threshold || 0) > 0) d.rows.push([qsTr("Rule"), qsTr("%1 of %2").arg(a.threshold).arg(a.signers)]);
             if (a.conflict) d.rows.push([qsTr("Note"), qsTr("Members disclosed different configurations for it")]);
             d.guarantee = qsTr("Disclosed by a member, signed by them; each client checks it against the chain before acting from it.");
