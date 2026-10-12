@@ -54,10 +54,16 @@ for m in tagged:
   inc discloseCount
 
 var leaked = 0
+# conservation (the spec's relation_class, exo-3f2): each handle contributes +1 for being in
+# the catalogue and −1 for staying inside it, so the oracle's sum is the handles that crossed
+var flows: seq[int]
 for h in handles:
+  flows.add 1
   if outward.contains(h): inc leaked
+  else: flows.add -1
 
 let measurement = %*{
+  "flows": flows,
   "catalogueHandles": handles.len,
   "disclosed": discloseCount,
   "outwardBytes": outward.len,
@@ -66,4 +72,5 @@ echo measurement
 
 doAssert cat.len == 11, "keystore(1) + mock chain(2) + static(8) = 11 holdings"
 doAssert leaked == 0, "a catalogue handle crossed the disclosure boundary: " & $measurement
-echo "probe_catalogue_no_leak: OK (0 of ", handles.len, " handles crossed the boundary)"
+# stdout is the oracle's: one JSON document (exo-3f2); the human line goes to stderr
+stderr.writeLine "probe_catalogue_no_leak: OK (0 of ", handles.len, " handles crossed the boundary)"

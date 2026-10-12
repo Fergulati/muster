@@ -37,7 +37,11 @@ PE=module/.probe-env
 if [ -d "$PE/nimpkgs" ]; then P=$(readlink -f "$PE/nimpkgs")
 else P=$(module/tools/nim-closure.sh) || { say "could not materialize the Nim closure"; obs+=(0); emit; exit 1; }
 fi
-if [ -f "$PE/sodium/libsodium.so" ]; then SODIUM=$(readlink -f "$PE/sodium")/..
+if [ -f "$PE/sodium/libsodium.so" ]; then
+  SODIUM=$(readlink -f "$PE/sodium")/..
+  # that libsodium is nixpkgs', so build with the probe env's nixpkgs gcc too: with the
+  # host's, the verifier fails to load once a grade-specs run has left .probe-env behind
+  [ -d "$PE/cc" ] && export PATH="$(readlink -f "$PE/cc"):$PATH"
 else
   # nixpkgs' libsodium is linked against nixpkgs' glibc, so the verifier is built with
   # nixpkgs' gcc and finds the library by rpath, as run-suite.sh does (exo-844): with the

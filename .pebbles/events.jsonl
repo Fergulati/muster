@@ -2404,14 +2404,16 @@
 {"type":"comment","timestamp":"2026-10-11T23:21:12.698684259Z","issue_id":"exo-53d","payload":{"body":"Diagnosed: canonicalOrder (~33 ms at 1,850 entries) re-sorted its ready list every step (n² log n with many roots); approvalGrades calls it ~3×/intent via intentInputs and lineageIds. Fixed with a min-heap, identical order (causal_order_test §8 vs the old algorithm on 200 random logs). logProvenance + reduceIntentViews + reduceFlow: ~10.4 s → ~1.4 s; room_graph_scale_test holds them under 4 s. Sharing one canonical order per call across helpers would cut more, if a larger room needs it."}}
 {"type":"close","timestamp":"2026-10-11T23:21:12.927095012Z","issue_id":"exo-53d","payload":{}}
 {"type":"create","timestamp":"2026-10-11T23:43:14.992180682Z","issue_id":"exo-f2d","payload":{"description":"Facets from the code's own guarantees (action-manifest.md §2, the claims registry's vocabulary); a Trust lens draws and lists them, grouped by whom the room relies on.","priority":"2","title":"V1 the room map grades every entry and connection: imperative, motivational or exposed, the party and the mechanism","type":"feature"}}
-{"type":"rename","timestamp":"2026-10-11T23:43:15.420025468Z","issue_id":"exo-f2d","payload":{"new_id":"exo-dde.16"}}
 {"type":"dep_add","timestamp":"2026-10-11T23:43:15.420025468Z","issue_id":"exo-dde.16","payload":{"dep_type":"parent-child","depends_on":"exo-dde"}}
+{"type":"rename","timestamp":"2026-10-11T23:43:15.420025468Z","issue_id":"exo-f2d","payload":{"new_id":"exo-dde.16"}}
 {"type":"create","timestamp":"2026-10-11T23:43:15.641812065Z","issue_id":"exo-737","payload":{"description":"A ledger from the graph: leaves (fields → observer at the entry that caused it), outside reads, admissions, material and accounts members brought in; a Crossings lens lists it in causal order.","priority":"2","title":"V2 the room map's crossings: what left the room, to whom and when; what came in, how and when","type":"feature"}}
 {"type":"rename","timestamp":"2026-10-11T23:43:15.880481547Z","issue_id":"exo-737","payload":{"new_id":"exo-dde.17"}}
 {"type":"dep_add","timestamp":"2026-10-11T23:43:15.880481547Z","issue_id":"exo-dde.17","payload":{"dep_type":"parent-child","depends_on":"exo-dde"}}
 {"type":"create","timestamp":"2026-10-11T23:43:16.088137554Z","issue_id":"exo-26a","payload":{"description":"Digest of the held entry ids from an epoch on; shown with how to compare it; dropped = raw log minus the authenticated view.","priority":"2","title":"V3 validate the room: a fingerprint per epoch two members can compare, and the count of entries dropped for a failed author signature","type":"feature"}}
 {"type":"rename","timestamp":"2026-10-11T23:43:16.368315019Z","issue_id":"exo-26a","payload":{"new_id":"exo-dde.18"}}
 {"type":"dep_add","timestamp":"2026-10-11T23:43:16.368315019Z","issue_id":"exo-dde.18","payload":{"dep_type":"parent-child","depends_on":"exo-dde"}}
+{"type":"close","timestamp":"2026-10-11T23:49:27.732246153Z","issue_id":"exo-e6aa","payload":{}}
+{"type":"close","timestamp":"2026-10-11T23:55:51.794115194Z","issue_id":"exo-3f2","payload":{}}
 {"type":"close","timestamp":"2026-10-12T00:04:08.628337358Z","issue_id":"exo-dde.16","payload":{}}
 {"type":"close","timestamp":"2026-10-12T00:04:08.628337358Z","issue_id":"exo-dde.17","payload":{}}
 {"type":"close","timestamp":"2026-10-12T00:04:08.628337358Z","issue_id":"exo-dde.18","payload":{}}

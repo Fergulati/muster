@@ -18,12 +18,27 @@ ROOM="muster.room.invite$(date +%s)"
 TOPIC="/muster/1/$ROOM/proto"
 D=$(mktemp -d)
 echo "room: $TOPIC"
-ui_launch "$D/B" "$D/B.log" \
-  MUSTER_LP_DEBUG=1 MUSTER_DEV_SECP_KEY=$KEY1 MUSTER_DELIVERY_CONFIG="$CFG" LOGOS_INSTANCE_ID=inviteB \
-  MUSTER_AUTOACCEPT_INVITE="$ROOM"
-CFG_A=$(ui_peer_config "$D/B.log") || exit 1
-ui_launch "$D/A" "$D/A.log" \
-  MUSTER_LP_DEBUG=1 MUSTER_DEV_SECP_KEY=$KEY0 MUSTER_DELIVERY_CONFIG="$CFG_A" MUSTER_AUTOJOIN_TOPIC="$ROOM" MUSTER_AUTOINVITE=Bob LOGOS_INSTANCE_ID=inviteA
+launchB() {
+  ui_launch "$D/B" "$D/B.log" \
+    MUSTER_LP_DEBUG=1 MUSTER_DEV_SECP_KEY=$KEY1 MUSTER_DELIVERY_CONFIG="$1" LOGOS_INSTANCE_ID=inviteB \
+    MUSTER_AUTOACCEPT_INVITE="$ROOM"
+}
+launchA() {
+  ui_launch "$D/A" "$D/A.log" \
+    MUSTER_LP_DEBUG=1 MUSTER_DEV_SECP_KEY=$KEY0 MUSTER_DELIVERY_CONFIG="$1" MUSTER_AUTOJOIN_TOPIC="$ROOM" MUSTER_AUTOINVITE=Bob LOGOS_INSTANCE_ID=inviteA
+}
+if [ "$MUSTER_FLEET" = local ]; then
+  # Locally only the first instance (the hub) serves a store, and it has no store peer of
+  # its own. Bob is the one who must catch up — the invite admits him before he reads the
+  # room, so his key grant is in the store, not live (exo-e6aa) — so Alice is the hub and
+  # Bob reads her store, as he would a fleet's.
+  launchA "$CFG"
+  launchB "$(ui_peer_config "$D/A.log")" || exit 1
+else
+  launchB "$CFG"
+  CFG_A=$(ui_peer_config "$D/B.log") || exit 1
+  launchA "$CFG_A"
+fi
 echo "two instances launched; watching Bob's inbox for the invite (up to 90s)..."
 ok=0
 for i in $(seq 1 90); do
