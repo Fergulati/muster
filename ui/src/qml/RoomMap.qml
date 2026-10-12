@@ -216,11 +216,15 @@ Rectangle {
         return "";
     }
     function shownAt(n) { return rank(n.seq) <= map.k; }
-    // G7: past logWindow entries the Log lens shows the window around the replay point,
-    // so a long room never draws thousands of delegates at once
-    readonly property int logWindow: 240
+    // G7: past logWindow entries the Log lens shows the window around the replay point:
+    // as many as stay readable across the stage (about 11 px apart), so a long room never
+    // draws thousands of delegates at once and every entry can still be pointed at
+    readonly property int logWindow: 80
     readonly property int logLo: replayOrder.length > logWindow ? Math.max(0, Math.min(k - logWindow / 2, replayOrder.length - logWindow)) : 0
     readonly property int logHi: replayOrder.length > logWindow ? logLo + logWindow - 1 : Math.max(0, replayOrder.length - 1)
+    // px between neighbouring entries in the Log lens; below ~46 their labels would
+    // overlap, so they show only on hover or selection
+    readonly property real logPitch: 890 / Math.max(1, logHi - logLo)
     // the log positions where something left the room, for the entry rings and ticks
     readonly property var leftAt: {
         var m = {};
@@ -577,6 +581,15 @@ Rectangle {
                     }
                 }
             }
+            // which part of a long log the Log lens shows
+            LogosText {
+                objectName: "roomMapLogWindow"
+                visible: map.lens === "log" && map.replayOrder.length > map.logWindow
+                x: 48; y: 46
+                text: qsTr("Entries %1–%2 of %3, around the replay point · drag the timeline to move")
+                      .arg(map.logLo + 1).arg(map.logHi + 1).arg(map.replayOrder.length)
+                color: Theme.palette.textSecondary; font.pixelSize: MusterStyle.badge
+            }
             // epoch bands behind the Log lens
             Repeater {
                 model: map.lens === "log" ? map.epochBands : []
@@ -840,6 +853,8 @@ Rectangle {
                             }
                             LogosText {
                                 readonly property bool below: map.lens === "prov" || node.modelData.seq % 2 === 0
+                                visible: map.lens !== "log" || map.logPitch >= 46
+                                         || map.hovered === node.modelData.id || map.selected === node.modelData.id
                                 x: -width / 2; y: below ? node.r + 3 : -node.r - height - 3
                                 text: (String(parent.a.kind) === "message" && parent.a.content && parent.a.content.body !== undefined
                                        ? "“" + map.snippet(map.messageText(parent.a.content.body), 18) + "”" : map.kindWord(String(parent.a.kind || "")))
@@ -1123,7 +1138,7 @@ Rectangle {
         case "ceremony": return 12;
         case "sealed": return 34;
         case "bytes": return 58;
-        case "entry": return map.lens === "prov" ? 12 : 7;
+        case "entry": return map.lens === "prov" ? 12 : map.lens === "log" ? Math.max(3, Math.min(7, map.logPitch * 0.38)) : 7;
         }
         return 10;
     }
@@ -1633,12 +1648,21 @@ Rectangle {
                     Layout.fillWidth: true
                     implicitHeight: 30
                     readonly property real step: map.seqMax > 0 ? width / map.seqMax : 0
+                    Rectangle {      // the Log lens's window over a long log
+                        readonly property real off: map.readFrom > 0 ? 14 : 0
+                        visible: map.lens === "log" && map.replayOrder.length > map.logWindow
+                        x: off + map.logLo * (track.width - off) / Math.max(1, map.seqMax) - 3
+                        width: (map.logHi - map.logLo) * (track.width - off) / Math.max(1, map.seqMax) + 6
+                        y: 0; height: 30; radius: 3
+                        color: MusterStyle.infoSoft; border.color: MusterStyle.info; border.width: 1
+                    }
                     Rectangle {      // before you joined
                         visible: map.readFrom > 0
                         x: 0; y: 4; width: 10; height: 22; radius: 2
                         color: Theme.palette.surfaceRecessed; border.color: Theme.palette.border
                     }
                     Repeater {
+                        objectName: "roomMapTicks"
                         model: map.ticks
                         delegate: Rectangle {
                             required property var modelData

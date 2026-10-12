@@ -1,0 +1,43 @@
+{
+ "about": "The room map of a 420-entry room (scripts/map-scale-self-test.sh, recorded; flowJson and messagesJson dropped, as the map reads neither): past 400 entries the timeline draws one tick per bucket of entries.",
+ "snapshot": "data/mapscale-420.json",
+ "sizes": [
+  "1440x900"
+ ],
+ "steps": [
+  {
+   "view": "room"
+  },
+  {
+   "emit": [
+    "roomMapButton",
+    "triggered"
+   ]
+  },
+  {
+   "expect": {
+    "slot": "loadGraph"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "expectProp": [
+    "roomMap",
+    "heldCount",
+    420
+   ]
+  },
+  {
+   "expectProp": [
+    "roomMapTicks",
+    "count",
+    210
+   ]
+  },
+  {
+   "shot": ""
+  }
+ ]
+}

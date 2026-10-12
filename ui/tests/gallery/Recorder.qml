@@ -16,6 +16,7 @@ Item {
     readonly property string tag: Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36)
     property int seq: 0
     property string last: ""
+    property var pending: []
 
     FakeBackend { id: contract }   // only for its contractProps list
 
@@ -38,6 +39,15 @@ Item {
         last = body;
         seq += 1;
         var xhr = new XMLHttpRequest();
+        // held until the write completes: a request only a local names can be collected
+        // mid-write, which left a large snapshot (a long room's map) as an empty file
+        recorder.pending.push(xhr);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                var i = recorder.pending.indexOf(xhr);
+                if (i >= 0) recorder.pending.splice(i, 1);
+            }
+        };
         xhr.open("PUT", Qt.resolvedUrl("snapshots/" + tag + "-" + ("000" + seq).slice(-4) + ".json"));
         xhr.send(JSON.stringify({ tag: tag, seq: seq, at: Date.now(), props: props, ui: ui }, null, 1));
     }

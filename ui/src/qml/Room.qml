@@ -1503,9 +1503,11 @@ Item {
         visible: room.joined && room.mapOpen
         anchors.fill: parent
         z: 6
-        graph: room.graph
-        intents: room.intents
-        members: room.members
+        // fed only while open: a closed map computes nothing (its folds and layout are
+        // per graph, and the graph refreshes every few seconds while the room is open)
+        graph: room.mapOpen ? room.graph : ({})
+        intents: room.mapOpen ? room.intents : []
+        members: room.mapOpen ? room.members : []
         onCloseRequested: room.mapOpen = false
         onSeen: function (count) {
             var m = {};
