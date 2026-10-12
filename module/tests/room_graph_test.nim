@@ -8,6 +8,7 @@
 ##   6. a later joiner's graph holds nothing from before its admission (invariant 7)
 ##   7. the content, all of it: message text, the effect, chain references, payment reports
 ##   8. a report the fold refused stays in the graph, unattributed
+##   (9–14 below) … 15. shared facets and guarantees are sent once and expand back exactly
 ## Stub + parts drivers; the binding is a real secp256k1 statement (libsodium + secp).
 
 import std/[json, strutils, sequtils, sets, algorithm, tables]
@@ -310,5 +311,27 @@ block:
   tampered.add Event(key: "message/extra", value: "{}")
   doAssert fp(reduceRoomGraph(tampered, both, founders, alice), 1) != fp(g, 1), "one more entry, another fingerprint"
   echo "14. a fingerprint per epoch, equal for members holding the same entries OK"
+
+block:
+  # exo-dde.19: the facets and guarantees every entry of a kind shares are sent once.
+  # Expanded back (as Room.qml does), every node and edge is exactly its attrs; the
+  # interned form is smaller, and the same graph gives the same bytes.
+  let j = g.toJson()
+  doAssert j.hasKey("facetSets") and j.hasKey("texts"), "the map names its shared facet sets and texts"
+  var expanded = j.copy()
+  for part in ["nodes", "edges"]:
+    for x in expanded[part].getElems():
+      let a = x["attrs"]
+      if a.hasKey("facets") and a["facets"].kind == JInt: a["facets"] = j["facetSets"][a["facets"].getInt()]
+      if a.hasKey("guarantee") and a["guarantee"].kind == JInt: a["guarantee"] = j["texts"][a["guarantee"].getInt()]
+  for i, n in g.nodes: doAssert expanded["nodes"][i]["attrs"] == n.attrs, "node " & n.id & " expands to its attrs"
+  for i, e in g.edges: doAssert expanded["edges"][i]["attrs"] == e.attrs, "edge " & e.src & "→" & e.dst & " expands to its attrs"
+  var plain = 0
+  for n in g.nodes: plain += len($n.attrs)
+  var sent = len($j["facetSets"]) + len($j["texts"])
+  for x in j["nodes"]: sent += len($x["attrs"])
+  doAssert sent < plain, "interning makes the nodes smaller: " & $sent & " vs " & $plain
+  doAssert $g.toJson() == $j, "the same graph gives the same bytes"
+  echo "15. shared facets and guarantees are sent once and expand back exactly OK"
 
 echo "room_graph_test: all OK"

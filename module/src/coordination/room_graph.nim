@@ -557,14 +557,35 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   result.edges.sort(proc (a, b: GraphEdge): int = cmp((a.seq, a.src, a.dst, a.kind), (b.seq, b.src, b.dst, b.kind)))
 
 proc toJson*(g: RoomGraph): JsonNode =
+  ## The map as the view reads it. Every entry of a kind shares its facets and guarantee,
+  ## so each distinct facet set is sent once in `facetSets` and each guarantee once in
+  ## `texts`, an attr holding the index where the value was (exo-dde.19: two fifths of a
+  ## 420-entry map was those repeats). Indices follow first use in node, then edge,
+  ## order, so the same graph gives the same bytes. The view expands them on parse.
+  var facetSets = newJArray()
+  var texts = newJArray()
+  var setAt = initTable[string, int]()
+  var textAt = initTable[string, int]()
+  proc interned(attrs: JsonNode): JsonNode =
+    if attrs.kind != JObject or not (attrs.hasKey("facets") or attrs.hasKey("guarantee")): return attrs
+    result = attrs.copy()
+    if result.hasKey("facets"):
+      let k = $result["facets"]
+      if k notin setAt: (setAt[k] = facetSets.len; facetSets.add result["facets"])
+      result["facets"] = %setAt[k]
+    if result.hasKey("guarantee") and result["guarantee"].kind == JString:
+      let k = result["guarantee"].getStr()
+      if k notin textAt: (textAt[k] = texts.len; texts.add %k)
+      result["guarantee"] = %textAt[k]
   var nodes = newJArray()
   for n in g.nodes:
-    nodes.add %*{"id": n.id, "kind": n.kind, "seq": n.seq, "epoch": n.epoch, "attrs": n.attrs}
+    nodes.add %*{"id": n.id, "kind": n.kind, "seq": n.seq, "epoch": n.epoch, "attrs": interned(n.attrs)}
   var edges = newJArray()
   for e in g.edges:
-    edges.add %*{"src": e.src, "dst": e.dst, "kind": e.kind, "seq": e.seq, "attrs": e.attrs}
+    edges.add %*{"src": e.src, "dst": e.dst, "kind": e.kind, "seq": e.seq, "attrs": interned(e.attrs)}
   var epochs = newJArray()
   for ep in g.epochs:
     epochs.add %*{"epoch": ep.epoch, "fromSeq": ep.fromSeq, "admitted": ep.admitted}
   %*{"viewer": g.viewer, "readFrom": g.readFrom, "seqMax": g.seqMax, "epochs": epochs,
-     "nodes": nodes, "edges": edges, "crossings": g.crossings, "fingerprints": g.fingerprints}
+     "nodes": nodes, "edges": edges, "crossings": g.crossings, "fingerprints": g.fingerprints,
+     "facetSets": facetSets, "texts": texts}
