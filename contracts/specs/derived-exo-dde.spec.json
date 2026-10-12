@@ -1,0 +1,125 @@
+{
+  "id": "derived-exo-dde",
+  "original_statement": "exo-dde.3 (G2): an invariant probe for the room map. The map (coordination/room_graph.nim, coordinate_graph) makes promises that touch invariants: (1) a later joiner's map holds nothing from before its admission (inv 7, F-16); (2) the map says nothing about a member beyond what the log proves (inv 9); (3) two members' maps of one log differ only in viewer and readFrom, and the room fingerprint per epoch depends only on held entries; (4) structure, never content; (5) `after` never reaches state or any signing path (inv 4, 5, 10). (Scope, operator-confirmed 2026-10-12: (1), (3) and (5); (2) left out; (4) dropped and reversed \u2014 the map is local and carries all of the content \u2014 so (1) and (3) are graded with content in the map. Catastrophic.)",
+  "restatement": "The room map draws a room from the log a member's own client holds, content included. Whatever that log is, the map keeps three promises: (s1) A later joiner's room map holds nothing from before its admission: every entry, proposal and approval key on it comes from an event its own session decrypted, and none from an epoch whose key it was never granted (invariant 7, F-16). The map carries each entry's content, so this holds for content too: no message, effect, chain reference or other content of an event the joiner never decrypted reaches its map. (s2) The same log draws the same map: two members' maps of one set of events differ only in who is viewing (viewer) and from which epoch they read (readFrom), whatever order the events arrived in and however often they were duplicated, including copies that differ only in their causal-order annotation; and a room fingerprint from an epoch is the same for any two members who hold the same entries from that epoch, and changes when an entry differs. (s3) `after`, the causal-order annotation, never reaches state: stripping or rewriting it on any event leaves unchanged the state digest, every fold the room's decisions read, and every byte a member signs (invariants 4, 5, 10).",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "A later joiner's room map holds nothing from before its admission: every entry, proposal and approval key on it comes from an event its own session decrypted, and none from an epoch whose key it was never granted (invariant 7, F-16). The map carries each entry's content, so this holds for content too: no message, effect, chain reference or other content of an event the joiner never decrypted reaches its map."
+    },
+    {
+      "id": "s2",
+      "text": "The same log draws the same map: two members' maps of one set of events differ only in who is viewing (viewer) and from which epoch they read (readFrom), whatever order the events arrived in and however often they were duplicated, including copies that differ only in their causal-order annotation; and a room fingerprint from an epoch is the same for any two members who hold the same entries from that epoch, and changes when an entry differs."
+    },
+    {
+      "id": "s3",
+      "text": "`after`, the causal-order annotation, never reaches state: stripping or rewriting it on any event leaves unchanged the state digest, every fold the room's decisions read, and every byte a member signs (invariants 4, 5, 10)."
+    }
+  ],
+  "goal": "A typed spec graded by exophial whose oracles hold the room map to three promises over every log the probes reach.",
+  "acceptance_criteria": [
+    "A later joiner's room map holds nothing from before its admission: every entry, proposal and approval key on it comes from an event its own session decrypted, and none from an epoch whose key it was never granted (invariant 7, F-16). The map carries each entry's content, so this holds for content too: no message, effect, chain reference or other content of an event the joiner never decrypted reaches its map.",
+    "The same log draws the same map: two members' maps of one set of events differ only in who is viewing (viewer) and from which epoch they read (readFrom), whatever order the events arrived in and however often they were duplicated, including copies that differ only in their causal-order annotation; and a room fingerprint from an epoch is the same for any two members who hold the same entries from that epoch, and changes when an entry differs.",
+    "`after`, the causal-order annotation, never reaches state: stripping or rewriting it on any event leaves unchanged the state digest, every fold the room's decisions read, and every byte a member signs (invariants 4, 5, 10)."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "A later joiner's room map holds nothing from before its admission: every entry, proposal and approval key on it comes from an event its own session decrypted, and none from an epoch whose key it was never granted (invariant 7, F-16). The map carries each entry's content, so this holds for content too: no message, effect, chain reference or other content of an event the joiner never decrypted reaches its map."
+    },
+    {
+      "id": "c2",
+      "text": "The same log draws the same map: two members' maps of one set of events differ only in who is viewing (viewer) and from which epoch they read (readFrom), whatever order the events arrived in and however often they were duplicated, including copies that differ only in their causal-order annotation; and a room fingerprint from an epoch is the same for any two members who hold the same entries from that epoch, and changes when an entry differs."
+    },
+    {
+      "id": "c3",
+      "text": "`after`, the causal-order annotation, never reaches state: stripping or rewriting it on any event leaves unchanged the state digest, every fold the room's decisions read, and every byte a member signs (invariants 4, 5, 10)."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s1",
+      "proves": "20 cases: admission point (after the founding message and account, after the proposal, after the first approval, after settlement, Carol after the proposal and Dave after settlement) x re-announced or not x family (a Safe payment settled on chain, a split paid in parts), over REAL sessions, epoch crypto and the join handshake with the real Safe and split drivers; every event carrying text carries a unique marker. Each joiner's map is built as coordinate_graph builds it. Correct iff every entry is an event the joiner's session holds, at or after its admission; no event it does not hold reaches the map (not its id, not its marker) while every held event's id and marker do; a proposal appears only if its propose is held, an approval key only if an approval signed with it is held; every edge names nodes on the map. Catches a map built over the raw log or another member's, a re-announce that drags approvals forward, an earlier epoch label, earlier content leaking through a summary, crossing or account, and an empty map passing. Shown red by building Carol's map over Alice's log.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_room_map_joiner_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 30,
+      "description": "A later joiner's room map holds nothing from before its admission: every entry, proposal and approval key on it comes from an event its own session decrypted, and none from an epoch whose key it was never granted (invariant 7, F-16). The map carries each entry's content, so this holds for content too: no message, effect, chain reference or other content of an event the joiner never decrypted reaches its map.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "24 cases: four logs from REAL sessions (a settled Safe payment, a split paid in parts, a forged message and a refused approval, two admissions) x six transforms (reversed, two seeded shuffles, every event duplicated, extra copies differing only in `after` in two orders, the same events viewed by each member). Correct iff the map equals the reference exactly (the viewer transform: once viewer and readFrom are removed, for every member); removing the first, a middle or the last entry changes the fingerprint of every epoch at or before that entry's epoch and of no later one; adding a fresh message in the last epoch changes every fingerprint. Catches arrival-order dependence, the viewer leaking into the map, the kept `after` copy depending on arrival, and a fingerprint that ignores an entry or depends on who looks. Shown red by a viewer-dependent flag on member nodes.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_room_map_same_log_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 34,
+      "description": "The same log draws the same map: two members' maps of one set of events differ only in who is viewing (viewer) and from which epoch they read (readFrom), whatever order the events arrived in and however often they were duplicated, including copies that differ only in their causal-order annotation; and a room fingerprint from an epoch is the same for any two members who hold the same entries from that epoch, and changes when an entry differs.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "21 cases: three logs from REAL sessions whose events carry the `after` their publishers stamped (a settled Safe payment with in-app approvals and attestations, a split paid in parts, a member joined mid-proposal with a re-announce) x seven rewrites of EVERY event's `after` (stripped, another arrival's honest heads, random log ids, itself, later events forming cycles, ids from no room, 64-id lists). Correct iff byte-identical between the published and rewritten log: the state digest, intent views, flow, log provenance; per proposal P, its inputs, approval parents, lineage, approval grades (who, round, grade, which event counted) and the exported audit file; the log proof digest; which author-signed events verify. Catches any fold or signing path that reads `after`, and a proof, audit file or author signature that covers it. Shown red by putting `after` inside the event id.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_after_never_reaches_state_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 31,
+      "description": "`after`, the causal-order annotation, never reaches state: stripping or rewriting it on any event leaves unchanged the state digest, every fold the room's decisions read, and every byte a member signs (invariants 4, 5, 10).",
+      "clause_id": "c3"
+    }
+  ],
+  "criticality": "catastrophic",
+  "declared_new_entrypoints": [
+    "tests/probes/probe_room_map_joiner_stepper.nim",
+    "tests/probes/probe_room_map_same_log_stepper.nim",
+    "tests/probes/probe_after_never_reaches_state_stepper.nim"
+  ]
+}
