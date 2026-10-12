@@ -42,15 +42,16 @@ block:
   doAssert payeeOffer.candidates[0].material.public == "0xACCT"
   echo "1. recipient offers: authority fills owner, account fills payee OK"
 
-# ── 2. choosing material is choosing observers (s6): the payee candidate carries "to" → chain ─
+# ── 2. choosing material is choosing observers (s6): the payee candidate carries "to" →
+# the room (sharing it shows it there at once) and → the chain (the manifest's row) ─
 block:
   let offers = recipientOffers(m.requirements, myCat, m)
   for o in offers:
     if o.requirement.kind == rqAddress:
-      doAssert o.candidates[0].discloses.len == 1
-      doAssert o.candidates[0].discloses[0].field == "to"
-      doAssert o.candidates[0].discloses[0].to == obChainObserver
-  echo "2. a candidate carries the manifest rows its choice would disclose (to → chain) OK"
+      doAssert o.candidates[0].discloses.len == 2, $o.candidates[0].discloses
+      doAssert o.candidates[0].discloses[0] == row("to", obRoomMember)
+      doAssert o.candidates[0].discloses[1] == row("to", obChainObserver)
+  echo "2. a candidate carries every row its choice would disclose (to → the room, the chain) OK"
 
 # ── 3. graded about me only (s3): another member's holdings never change my offers ────
 block:
@@ -116,8 +117,10 @@ block:
       doAssert not c.hasKey("score") and not c.hasKey("rank"), "nothing scored or ranked (s7)"
     if o["requirement"]["kind"].getStr() == "address":
       sawPayee = true
+      # the room first (the share shows it there at once), then the chain (exo-3f2, s6)
       doAssert o["candidates"][0]["discloses"][0]["field"].getStr() == "to"
-      doAssert o["candidates"][0]["discloses"][0]["to"].getStr() == "chain-observer"
+      doAssert o["candidates"][0]["discloses"][0]["to"].getStr() == "room-member"
+      doAssert o["candidates"][0]["discloses"][1]["to"].getStr() == "chain-observer"
   doAssert sawPayee
   # an unsatisfiable surface reports ready:false honestly.
   doAssert offersPayload(recipientOffers(m.requirements, @[myKey], m))["ready"].getBool() == false
