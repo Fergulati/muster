@@ -36,6 +36,7 @@ type
     answered: HashSet[string]    ## beacon-request nonces already answered (a store catchup window re-delivers them)
     sealedIn*: Table[string, int] ## event id → the earliest epoch whose key opened (or sealed) it here; log + keys, never position (exo-dde)
     authorChecked*: Table[string, bool]  ## exo-f76: event id → its author signature verifies (authorship.nim). A pure function of (topic, event), so safe to cache
+    afterChecked*: Table[string, bool]   ## C5: (event id, afterSig, after) → the author signed that `after` (authorship.afterVerified); pure, so safe to cache
 
 # Every frame on the topic carries a 1-byte kind, so the membership handshake
 # shares the topic with data without either misreading the other.

@@ -9,6 +9,8 @@
 ##   4. an event that names no author is untouched
 ##   5. none of it reaches state: the authentic view's state digest and ids are the same
 ##      with or without the forged copies
+##   6. the session's cached view (roomEvents) is the uncached one (authenticEvents over
+##      every copy), on both members, after forged copies were checked and cached
 ## LocalTransport + epoch crypto; needs libsecp256k1 + libsodium.
 
 import std/[strutils, sequtils, algorithm]
@@ -97,5 +99,20 @@ block:
   doAssert reduce(a).stateDigest == reduce(b).stateDigest
   doAssert a.mapIt(eventId(it)).sorted().deduplicate() == b.mapIt(eventId(it)).sorted().deduplicate()
   echo "5. none of it reaches state OK"
+
+block:
+  # a forged copy reusing the genuine signature over another `after` is cached as forged,
+  # and a second read gives the same view as the first, cached or not
+  var reuse = honest
+  reuse.after = @["cd".repeat(32)]
+  bob.publish(reuse)
+  alice.poll(); bob.poll()
+  for s in [alice, bob]:
+    let first = s.roomEvents()
+    let again = s.roomEvents()
+    let fresh = authenticEvents(s.log.allVariants(), topic)
+    doAssert $first == $fresh and $again == $fresh, "the cached view is the uncached one"
+    doAssert s.authentic(k).after == honest.after, "a reused signature over another after is not the author's"
+  echo "6. the cached view is the uncached one OK"
 
 echo "after_signed_test: all OK"

@@ -212,20 +212,17 @@ proc afterVerified*(room: string, e: Event): bool =
   except CatchableError:
     false
 
-proc authenticEvents*(events: seq[Event], room: string): seq[Event] =
-  ## The events a room's views may read: every author-bearing event whose author signed
-  ## it — one copy per id, the one whose `after` its author signed (the smallest by
-  ## afterDigest among those), else the event with no ordering claim — and every event
-  ## that names no author, as given.
+proc authenticEventsWith(events: seq[Event],
+                         authorOk, afterOk: proc(e: Event): bool {.closure.}): seq[Event] =
   var chosen = initOrderedTable[EventId, Event]()
   for e in events:
     if not authorOf(e).authored:
       result.add e
       continue
-    if not authorVerified(room, e): continue
+    if not authorOk(e): continue
     let id = eventId(e)
     var c = e
-    if not afterVerified(room, c): (c.after = @[]; c.afterSig = "")
+    if not afterOk(c): (c.after = @[]; c.afterSig = "")
     if id notin chosen: chosen[id] = c
     else:
       let held = chosen[id]
@@ -234,22 +231,31 @@ proc authenticEvents*(events: seq[Event], room: string): seq[Event] =
       if cSigned and (not heldSigned or afterDigest(c) < afterDigest(held)): chosen[id] = c
   for _, e in chosen: result.add e
 
+proc authenticEvents*(events: seq[Event], room: string): seq[Event] =
+  ## The events a room's views may read: every author-bearing event whose author signed
+  ## it — one copy per id, the one whose `after` its author signed (the smallest by
+  ## afterDigest among those), else the event with no ordering claim — and every event
+  ## that names no author, as given.
+  authenticEventsWith(events,
+    proc(e: Event): bool = authorVerified(room, e),
+    proc(e: Event): bool = afterVerified(room, e))
+
 proc roomEvents*(s: CoordinationSession): seq[Event] =
   ## The session's log as the room's views read it: `authenticEvents` over the raw log,
-  ## with each verdict cached by event id (a pure function of the room and the event).
-  var authored: seq[Event]
-  for e in s.log.allVariants():
-    if not authorOf(e).authored:
-      result.add e
-      continue
-    let id = eventId(e)
-    var ok = s.authorChecked.getOrDefault(id, false)
-    if id notin s.authorChecked:
-      ok = authorVerified(s.topic, e)
-      s.authorChecked[id] = ok
-    if ok: authored.add e
-  # of the copies of each authentic author-bearing event, the one whose after its author signed
-  result.add authenticEvents(authored, s.topic)
+  ## each verdict cached (a pure function of the room and what it covers): the author
+  ## signature by event id, the `after` signature by id, signature and `after` — so a
+  ## copy that reuses a genuine signature over another `after` is checked, never assumed.
+  let room = s.topic
+  authenticEventsWith(s.log.allVariants(),
+    proc(e: Event): bool =
+      let id = eventId(e)
+      if id notin s.authorChecked: s.authorChecked[id] = authorVerified(room, e)
+      s.authorChecked[id],
+    proc(e: Event): bool =
+      if e.after.len == 0: return false
+      let k = eventId(e) & "|" & e.afterSig & "|" & e.after.join(",")
+      if k notin s.afterChecked: s.afterChecked[k] = afterVerified(room, e)
+      s.afterChecked[k])
 
 proc publishAuthored*(s: CoordinationSession, ks: Keystore, e: Event) =
   ## Sign an author-bearing event as this member, for this room, and publish it — with
