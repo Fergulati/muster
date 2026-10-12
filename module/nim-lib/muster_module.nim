@@ -577,7 +577,9 @@ proc musterIdentity(): string =
     "ed25519": toHex(enc.ed),
     "x25519": toHex(enc.x),
     # the key a Bitcoin multisig names you by — what you give whoever sets one up (exo-59c)
-    "btcPubKey": toHex(ks.btcPubKey())
+    "btcPubKey": toHex(ks.btcPubKey()),
+    # where a Bitcoin split's share is paid from, per network: fund it from your node (exo-408)
+    "btcPayers": payerAddresses(ks.btcPubKey()).mapIt(%*{"network": it.network, "chain": it.chain, "address": it.address})
   })
 
 proc safeProtocolVersion(): string =
@@ -4569,7 +4571,10 @@ proc musterSettings(): string =
     "identity": {"address": toHex(ks.address()),
                  "ed25519": toHex(enc.ed), "x25519": toHex(enc.x),
                  # the compressed key a Bitcoin multisig names you by (exo-59c)
-                 "btcPubKey": toHex(ks.btcPubKey())}
+                 "btcPubKey": toHex(ks.btcPubKey()),
+                 # where a Bitcoin split's share is paid from, per network (exo-408)
+                 "btcPayers": payerAddresses(ks.btcPubKey()).mapIt(%*{"network": it.network, "chain": it.chain,
+                                                                       "address": it.address})}
   })
 
 proc musterSetSetting(key, value: string): string =
