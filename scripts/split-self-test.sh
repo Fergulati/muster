@@ -113,7 +113,7 @@ grep -ahE 'MUSTER-LP split ' "$D/B.log" | tail -6 | sed 's/^/  B │ /'
 
 if [ -n "$AWAY" ]; then
   # A must have left the split's room, and before it confirmed the payment
-  awayAt=$(grep -an 'AUTOAWAY' "$D/A.log" | head -1 | cut -d: -f1)
+  awayAt=$(grep -anE 'MUSTER-LP subscribe .*split-away' "$D/A.log" | head -1 | cut -d: -f1)   # the module joining it
   confAt=$(grep -an 'MUSTER-LP split confirmed' "$D/A.log" | head -1 | cut -d: -f1)
   echo "A left the room at log line ${awayAt:-never}, confirmed at ${confAt:-never}"
   { [ -n "$awayAt" ] && [ -n "$confAt" ] && [ "$awayAt" -lt "$confAt" ]; } || ok=0
