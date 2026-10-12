@@ -79,8 +79,22 @@ Item {
         room.mapOpen = true;
     }
     readonly property var graph: {
-        try { return JSON.parse(backend ? backend.graphJson : "{}"); }
+        var g;
+        try { g = JSON.parse(backend ? backend.graphJson : "{}"); }
         catch (e) { return ({}); }
+        // the module sends each shared facet set and guarantee once (exo-dde.19): an attr
+        // holding a number is an index into facetSets / texts. A map recorded before has none.
+        var sets = g.facetSets || [], texts = g.texts || [];
+        function expand(list) {
+            for (var i = 0; i < (list || []).length; i++) {
+                var a = list[i].attrs;
+                if (!a) continue;
+                if (typeof a.facets === "number") a.facets = sets[a.facets] || [];
+                if (typeof a.guarantee === "number") a.guarantee = texts[a.guarantee] || "";
+            }
+        }
+        expand(g.nodes); expand(g.edges);
+        return g;
     }
 
     // Admit someone who asked to join — from the notice in the thread, or People.
