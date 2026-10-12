@@ -480,7 +480,7 @@ Item {
             catch (e) { return []; }
         }
         backend: root.backend
-        onCreateRoom: {
+        onCreateRoom: function (verb, peer, topic, policy, draftJson) {
             root.labelRoom(topic, String(verb || "room") + (peer ? " · with " + root.shortId(peer) : ""));
             // the invite (and with it their admission) goes out inside enterRoom
             root.enterRoom(topic, verb, policy, draftJson, peer);
