@@ -594,7 +594,7 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
       # a membership transition, from the log itself (exo-275 / M4)
       result.add ActivityEntry(seq: i, order: 0, kind: "admit", intentId: "",
         account: p[3], title: "A member was admitted — room re-keyed to epoch " & p[1],
-        detail: "they read from here on, nothing before (F-16)")
+        detail: "they read from here on, nothing before")
       continue
     if p.len < 3 or p[0] != "intent": continue
     let id = p[1]
@@ -841,7 +841,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "admit", account: p[3],
         accountable: true, what: "a member was admitted",
         detail: "room re-keyed to epoch " & p[1],
-        guarantee: "sealed under the new epoch by the admitting member — the joiner reads from here on, nothing before (F-16)",
+        guarantee: "sealed under the new epoch by the admitting member — the joiner reads from here on, nothing before",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
       continue
     if p.len >= 2 and p[0] == "message":
@@ -853,7 +853,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "message", account: author,
         accountable: true, what: "a message",
         detail: "",
-        guarantee: "sealed to the room's epoch and signed by its author, bound to this room — the room's views read it only if that signature verifies (exo-f76)",
+        guarantee: "sealed to the room's epoch and signed by its author, bound to this room — the room's views read it only if that signature verifies",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
       continue
     if p.len < 3 or p[0] != "intent": continue
@@ -863,13 +863,13 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
       if not ownProposal(id, e): continue   # a substitute under the id is no one's proposal
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "propose", intentId: id,
         accountable: true, what: "a proposal", detail: summarizeEffect(e.value),
-        guarantee: "sealed to the room's epoch — only a member could have placed it; the materialization is re-derived by every client (F-4)",
+        guarantee: "sealed to the room's epoch — only a member could have placed it; the materialization is re-derived by every client",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "policy":
       if not ownProposal(id, e): continue
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "policy", intentId: id,
         accountable: true, what: "the policy this intent runs under", detail: e.value,
-        guarantee: "sealed to the room's epoch; every member folds the identical driver (invariant 6)",
+        guarantee: "sealed to the room's epoch; every member folds the identical driver",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "sig":
       if p.len < 4 or (id & "/" & p[3]) in seenSig: continue
@@ -901,7 +901,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
         account: p[4], accountable: true,
         what: "shared material for '" & (if field.len > 0: field else: p[3]) & "'",
         detail: "",
-        guarantee: "sealed to the room's epoch; the room learns the PUBLIC face the sharer chose (never a handle), not that it is theirs — only a driver-verified signature proves control (F-20)",
+        guarantee: "sealed to the room's epoch; the room learns the PUBLIC face the sharer chose (never a handle), not that it is theirs — only a driver-verified signature proves control",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "binding":
       if p.len < 4: continue
@@ -909,18 +909,18 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
         account: p[3], accountable: true,
         what: "a key-binding for an approval",
         detail: "",
-        guarantee: "the authorization key that signed is bound by a secp signature to the member's admitted encryption identity — the room can check the approval came from an admitted member, not merely a valid owner (F-14, F-9); scoped to this epoch (invariant 7)",
+        guarantee: "the authorization key that signed is bound by a secp signature to the member's admitted encryption identity — the room can check the approval came from an admitted member, not merely a valid owner; scoped to this epoch",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "context":
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "context", intentId: id,
         accountable: true, what: "the context approvals bind to", detail: e.value,
-        guarantee: "sealed to the room's epoch by the proposer; every attestation commits to it, so an approval is worthless in any other environment, account, slot, or after expiry (invariant 2)",
+        guarantee: "sealed to the room's epoch by the proposer; every attestation commits to it, so an approval is worthless in any other environment, account, slot, or after expiry",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "read":
       result.add LogProvItem(seq: i, cls: icExternalRead, kind: "read", intentId: id,
         accountable: true, what: "an outside read that reached the proposal",
         detail: (if p.len >= 4: p[3] else: ""),
-        guarantee: "an external read: what the proposer's source reported, recorded so its origin is accountable — not proof the world agrees (F-10)",
+        guarantee: "an external read: what the proposer's source reported, recorded so its origin is accountable — not proof the world agrees",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "attest":
       if p.len < 5: continue
@@ -939,7 +939,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
     of "final":
       result.add LogProvItem(seq: i, cls: icExternalRead, kind: "final", intentId: id,
         accountable: true, what: "settled outside the room",
-        detail: "", guarantee: "an external read: observed from the chain (R-8), never asserted; graded attested unless proof-checked (F-10)",
+        detail: "", guarantee: "an external read: observed from the chain, never asserted; graded attested unless proof-checked",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "part":
       # a counted part report (exo-a90.2); an uncounted one never reached the decision
@@ -959,6 +959,6 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
         result.add LogProvItem(seq: i, cls: icExternalRead, kind: "part-confirmed", intentId: id,
           account: author, accountable: true, what: "the counterparty's confirmation of a part",
           detail: (if tx.len > 0: tx else: "received outside muster"),
-          guarantee: "an external read disclosed by the one party the part is owed to: their own read of their own infrastructure (F-10, attested), or their word that it arrived outside muster",
+          guarantee: "an external read disclosed by the one party the part is owed to: their own read of their own infrastructure (attested), or their word that it arrived outside muster",
           epoch: sealedIn.getOrDefault(eventId(e), epoch))
     else: discard

@@ -46,7 +46,7 @@ method securityLevel*(t: Transport): SecurityLevel {.base, gcsafe.} =
   securityLevel(
     axisLevel(rungNull, "not authenticated here — the driver binds the speaker"),
     axisLevel(rungNull, "not attested here — the log attests provenance"),
-    axisLevel(rungNull, "payload opaque; confidentiality is the epoch layer's (F-16)"))
+    axisLevel(rungNull, "payload opaque; confidentiality is the epoch layer's"))
 
 method publish*(t: Transport, contentTopic: string, payload: seq[byte]): string
     {.base, gcsafe.} =

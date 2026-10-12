@@ -112,8 +112,8 @@ Item {
                 ActionButton {
                     objectName: "startSomethingButton"
                     text: qsTr("Start something")
-                    icon.source: MusterStyle.icon("plus")
-                    icon.color: Theme.palette.background
+                    iconSource: MusterStyle.icon("plus")
+                    iconColor: Theme.palette.background
                     variant: LogosButton.Variant.Primary
                     onClicked: home.newActivity()
                 }

@@ -36,7 +36,8 @@ import Logos.Controls
 Item {
     id: root
 
-    readonly property var backend: logos.module("muster_ui")
+    // `logos` is null while the host tears the view down, so every use of it is guarded
+    readonly property var backend: (typeof logos !== "undefined" && logos) ? logos.module("muster_ui") : null
     // Main passed down to the surfaces that read its state (AccountPage), as `root`:
     // `root: root` there would bind the surface's own property to itself.
     readonly property Item mainItem: root
@@ -426,7 +427,7 @@ Item {
         actions: root.homeActions
         setup: root.homeSetup
         onManageAccounts: {
-            if (typeof logos !== "undefined" && typeof logos.request === "function")
+            if (typeof logos !== "undefined" && !!logos && typeof logos.request === "function")
                 logos.request("evm.accounts.manage", {}, function (res) {});
             else root.view = "settings";
         }
@@ -479,7 +480,7 @@ Item {
             catch (e) { return []; }
         }
         backend: root.backend
-        onCreateRoom: {
+        onCreateRoom: function (verb, peer, topic, policy, draftJson) {
             root.labelRoom(topic, String(verb || "room") + (peer ? " · with " + root.shortId(peer) : ""));
             // the invite (and with it their admission) goes out inside enterRoom
             root.enterRoom(topic, verb, policy, draftJson, peer);
@@ -683,7 +684,7 @@ Item {
     }
     property var escorted: ({})          // handle → what the shell answered
     property string signerNote: ""
-    readonly property bool canRaiseIntents: typeof logos !== "undefined" && typeof logos.request === "function"
+    readonly property bool canRaiseIntents: typeof logos !== "undefined" && !!logos && typeof logos.request === "function"
     function openSigner(handle) {
         if (!root.canRaiseIntents) {
             root.signerNote = qsTr("Approve it in the Logos Signer (this host has no app-to-app requests).");

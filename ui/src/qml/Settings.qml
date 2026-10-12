@@ -311,7 +311,7 @@ Item {
                     LogosText {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: qsTr("Store nodes and RPC are untrusted infrastructure you choose (invariant 8). "
+                        text: qsTr("Store nodes and RPC are untrusted infrastructure you choose. "
                                  + "Point them at your own node.")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
@@ -363,6 +363,9 @@ Item {
                         spacing: Theme.spacing.small
                         LogosText {
                             objectName: "settingsRpcNow"
+                            // bounded: one long value must not widen the whole column
+                            Layout.fillWidth: true
+                            elide: Text.ElideMiddle
                             text: qsTr("RPC endpoint  ·  now: %1")
                                   .arg(String((settings.s && (settings.showRpc ? settings.s.rpc
                                                                                : settings.s.rpcMasked)) || "(unset)"))
@@ -408,6 +411,9 @@ Item {
                         spacing: Theme.spacing.small
                         LogosText {
                             objectName: "settingsBtcRpcNow"
+                            // bounded: one long value must not widen the whole column
+                            Layout.fillWidth: true
+                            elide: Text.ElideMiddle
                             text: qsTr("Bitcoin node  ·  now: %1")
                                   .arg(String((settings.s && (settings.showBtcRpc ? settings.s.btcRpc
                                                                                   : settings.s.btcRpcMasked))
@@ -454,6 +460,9 @@ Item {
                         spacing: Theme.spacing.small
                         LogosText {
                             objectName: "settingsLezRpcNow"
+                            // bounded: one long value must not widen the whole column
+                            Layout.fillWidth: true
+                            elide: Text.ElideMiddle
                             text: qsTr("LEZ sequencer  ·  now: %1  (%2)")
                                   .arg(String((settings.s && settings.s.lez && (settings.showLezRpc ? settings.s.lez.rpc
                                                                                                     : settings.s.lez.rpcMasked))
@@ -497,7 +506,13 @@ Item {
 
                     // ── delivery config ──
                     LogosText {
+                        // the config is one long JSON line: wrapped and bounded, or its width
+                        // widens the whole column and every text in it runs off the page
+                        Layout.fillWidth: true
                         Layout.topMargin: Theme.spacing.small
+                        wrapMode: Text.WrapAnywhere
+                        maximumLineCount: 4
+                        elide: Text.ElideRight
                         text: qsTr("Delivery node config  ·  now: %1")
                               .arg(String((settings.s && settings.s.delivery) || "{}"))
                         color: Theme.palette.textSecondary

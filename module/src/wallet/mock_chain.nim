@@ -67,7 +67,7 @@ method securityLevel*(m: MockChain): SecurityLevel =
   ## shielded rail. A consumer reads this rung; it never branches on `m of MockChain`.
   securityLevel(
     axisLevel(rungNull, "chain does not authenticate the room member"),
-    axisLevel(rungNull, "reads from untrusted RPC (invariant 8)"),
+    axisLevel(rungNull, "reads from untrusted RPC"),
     axisLevel(rungReal, "shielded accounts — amounts and parties hidden"))
 
 method accounts*(m: MockChain, ks: Keystore): seq[Account] =

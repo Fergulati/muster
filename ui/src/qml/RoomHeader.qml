@@ -183,7 +183,7 @@ ColumnLayout {
             objectName: "roomInviteButton"
             visible: header.room.joined && !renameRow.visible
             text: qsTr("Invite")
-            icon.source: MusterStyle.icon("link")
+            iconSource: MusterStyle.icon("link")
             onClicked: invitePop.opened ? invitePop.close() : invitePop.open()
             Popup {
                 id: invitePop
@@ -241,7 +241,7 @@ ColumnLayout {
                             objectName: "copyRoomTopic"
                             property bool copied: false
                             text: copied ? qsTr("Copied") : qsTr("Copy")
-                            icon.source: LogosIcons.copy
+                            iconSource: LogosIcons.copy
                             onClicked: { roomCode.selectAll(); roomCode.copy(); roomCode.deselect(); copied = true; copiedReset.restart(); }
                             Timer { id: copiedReset; interval: 2000; onTriggered: copyCode.copied = false }
                         }

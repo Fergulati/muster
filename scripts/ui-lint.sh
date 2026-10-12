@@ -27,9 +27,26 @@ trap 'rm -rf "$OUT"' EXIT
 
 "$QMLLINT_BIN" -I "$LOGOS_QML_LIB" -I "${QML_IMPORT_PATH%%:*}" --json "$OUT/lint.json" ui/src/qml/*.qml >/dev/null 2>&1
 
-python3 - "$OUT/lint.json" "$LOGOS_QML_LIB/Logos/Theme/DarkTheme.qml" ui/tests/qmllint-baseline.json "${1:-}" <<'EOF'
+# 1b. The same QML against the design system Basecamp ships (infra/basecamp/release-*.env):
+#     Basecamp resolves every plugin's Logos.* imports to its own compiled copy, an older
+#     release than the runner's, so a property only the newer one has fails the whole view
+#     there and nowhere else (2026-10-12: Launch did nothing). Fetched once into a cache.
+. infra/basecamp/release-0.3.2.env
+DS_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/muster/logos-design-system-$BASECAMP_DESIGN_SYSTEM_REV"
+if [ ! -f "$DS_CACHE/src/qml/Logos/Controls/qmldir" ]; then
+  rm -rf "$DS_CACHE"; mkdir -p "$(dirname "$DS_CACHE")"
+  { git clone -q https://github.com/logos-co/logos-design-system "$DS_CACHE" &&
+    git -C "$DS_CACHE" checkout -q "$BASECAMP_DESIGN_SYSTEM_REV"; } >/dev/null 2>&1 || rm -rf "$DS_CACHE"
+fi
+if [ -f "$DS_CACHE/src/qml/Logos/Controls/qmldir" ]; then
+  "$QMLLINT_BIN" -I "$DS_CACHE/src/qml" -I "${QML_IMPORT_PATH%%:*}" --json "$OUT/lint-basecamp.json" ui/src/qml/*.qml >/dev/null 2>&1
+else
+  echo "NOTE: could not fetch logos-design-system $BASECAMP_DESIGN_SYSTEM_REV; Basecamp's design system not checked"
+fi
+
+python3 - "$OUT/lint.json" "$LOGOS_QML_LIB/Logos/Theme/DarkTheme.qml" ui/tests/qmllint-baseline.json "${1:-}" "$OUT/lint-basecamp.json" <<'EOF'
 import collections, glob, json, os, re, sys
-lint_path, theme_path, baseline_path, mode = sys.argv[1:5]
+lint_path, theme_path, baseline_path, mode, basecamp_path = sys.argv[1:6]
 GATED = {"missing-property", "missing-enum-entry", "missing-type", "unresolved-type",
          "import", "syntax", "unresolved-alias", "incompatible-type", "read-only-property",
          "uncreatable-type", "non-list-property", "duplicate-property-binding"}
@@ -39,6 +56,12 @@ for f in json.load(open(lint_path))["files"]:
     for w in f.get("warnings", []):
         if w.get("id") in GATED:
             found[f"{name} · {w['id']} · {w['message']}"] += 1
+if os.path.exists(basecamp_path):
+    for f in json.load(open(basecamp_path))["files"]:
+        name = os.path.basename(f["filename"])
+        for w in f.get("warnings", []):
+            if w.get("id") in GATED:
+                found[f"{name} · basecamp-0.3.2 · {w['id']} · {w['message']}"] += 1
 theme = set(re.findall(r"readonly property \w+ (\w+)\s*:", open(theme_path).read()))
 for path in sorted(glob.glob("ui/src/qml/*.qml")):
     for key in re.findall(r"Theme\.palette\.(\w+)", open(path).read()):
