@@ -345,6 +345,8 @@ Item {
                              : qsTr("They pay from their own wallet, on the chain; the room holds only the agreement. Pick where it settles once you're in the room."))
                           : String(composer.pickedPolicy).endsWith("-split")
                           ? qsTr("Each person pays their own share from their own wallet, on the chain; the room holds only the agreement. Once you're in it, pick where it settles: Ethereum, Bitcoin, Monero, or privately on the LEZ.")
+                          : composer.pickedVerb === "talk"
+                          ? qsTr("Just the conversation: nothing to sign or settle. You can propose something from the room at any time.")
                           : qsTr("This is a group endorsement — the room signs off, nothing touches a chain. You can change how the room approves once you're in it.")
                     color: Theme.palette.textTertiary
                     font.pixelSize: Theme.typography.secondaryText
@@ -428,7 +430,8 @@ Item {
             // ── footer ────────────────────────────────────────────────────────
             LogosText {
                 Layout.fillWidth: true
-                text: qsTr("%1 people can read this. Nobody else.").arg(composer.scopeCount)
+                text: composer.scopeCount === 1 ? qsTr("Only you can read this, until someone joins.")
+                                                : qsTr("%1 people can read this. Nobody else.").arg(composer.scopeCount)
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.secondaryText
                 wrapMode: Text.WordWrap
