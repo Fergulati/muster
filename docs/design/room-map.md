@@ -1,6 +1,6 @@
 # The room map: a room's state and history as a graph (epic exo-dde)
 
-**Status:** G0, G1, G3 and G4 landed 2026-10-11 (`coordination/room_graph.nim`, `coordinate_graph(room_topic)`, `ui/src/qml/RoomMap.qml`); G5 and G6 landed in part (§9); G2 and G7 are ahead. Mock: [`ui/prototype/room-map.html`](../../ui/prototype/room-map.html), a self-contained HTML/JS simulation on Logos.Theme's token values, like `desktop-v3.html`. It is not the app.
+**Status:** G0, G1, G3 and G4 landed 2026-10-11 (`coordination/room_graph.nim`, `coordinate_graph(room_topic)`, `ui/src/qml/RoomMap.qml`); G2 (spec `derived-exo-dde`, graded 3/3), G5 and the validation lenses landed since; G6 and G7 in part (§9). Mock: [`ui/prototype/room-map.html`](../../ui/prototype/room-map.html), a self-contained HTML/JS simulation on Logos.Theme's token values, like `desktop-v3.html`. It is not the app.
 **Reads with:** [action-manifest.md](action-manifest.md) (the manifest, M4 provenance, M5 flow), [side-modules.md](side-modules.md) §4 (what may leave `muster_module`), [ui-modernization.md](ui-modernization.md) §9 (where Room details lives now).
 **Paths:** short paths are under `module/src/`.
 
@@ -34,7 +34,7 @@ So:
 
 - **The projection is a fold in `muster_module`**: `coordination/room_graph.nim`, `reduceRoomGraph(events, driverFor, founders, viewer)`, served as one new lidl method `coordinate_graph(topic)`. It is a pure function of the authenticated log (`roomEvents`), so it obeys invariant 4 and inherits authorship (exo-f76) for free.
 - **The view is QML in `muster_ui`**: `RoomMap.qml`, opened from Room details as a fourth tab beside People, Accounts and History, and from a card's "Who sees this?" as a filtered view.
-- **The graph carries structure, never content.** Nodes name kinds, actors, fields and observers. Message bodies, effect payloads and materials stay behind the existing methods. If the view later becomes its own UI-only module, what crosses the boundary is the room's shape, which is less than `coordinate_messages` already answers.
+- **The graph carries the content, all of it** (operator's decision, 2026-10-12; it first carried structure only). The map is local, read by the member's own client, and a map missing what was said, what was proposed and what was paid is not useful. So each entry carries its value parsed (message text, the effect, context, read values, signatures, chain references, payment reports, material, account details), each proposal its effect, summary and materialization hash, and each crossing the values that left and the transaction that sent them. What bounds it is invariant 7, not a content rule: the graph holds nothing this member's session did not decrypt, content included, which is what spec `derived-exo-dde` s1 grades. `coordinate_messages` already serves the same text to the same callers.
 
 ## 4. The data contract
 
@@ -120,7 +120,7 @@ Each slice's accept criteria become a test before the code (working agreement).
 |---|---|---|
 | **G0** ✓ | exo-c7c: `reduceFlow` places part settles and every envelope | `flow_test`: a settled split part yields the manifest's chain-observer rows at that part's seq; every entry yields a store-node row |
 | **G1** ✓ | `coordination/room_graph.nim` `reduceRoomGraph` over the existing folds; no new truth | `room_graph_test`: order and duplication give the same graph (R-2/R-3); two members' graphs differ only in `viewer`/`readFrom`; a joiner's graph has no node from an earlier epoch |
-| **G2** | invariant probe for the map's two promises: no epoch leak, no claim about a member beyond the log | new probe under `tests/probes/`, append-only |
+| **G2** ✓ | spec `derived-exo-dde` (discuss-issue, catastrophic): s1 a joiner's map holds nothing it did not decrypt, content included; s2 the same log draws the same map, and fingerprints change exactly where an entry differs; s3 `after` never reaches state or a signing path | `probe_room_map_joiner_stepper` (20), `probe_room_map_same_log_stepper` (24), `probe_after_never_reaches_state_stepper` (21) over real sessions; graded 3/3 by `scripts/grade-specs.sh exo-dde`; each shown red by a mutation |
 | **G3** ✓ | `coordinate_graph` in `muster.lidl`, regen, hosted in `muster_module.nim` | `room_graph_live_test`: over real sessions, a joiner's map (what its session decrypted) starts at its admission; what both hold maps the same; the host module compiles (`probe_return_marshalling_host`) |
 | **G4** ✓ | `RoomMap.qml`: deterministic layout, membrane, observers, edges, inspector (QtQuick Shapes) | `scripts/card-self-test.sh`: the map loads offscreen and names the room's observers |
 | **G5** ✓ | timeline scrubber + digest; lens switching with animation | offscreen: scrubbing to k shows exactly the nodes with `seq ≤ k` |
