@@ -143,7 +143,24 @@ Each slice's accept criteria become a test before the code (working agreement).
 - **Fixed since:** flow and provenance read each entry's epoch from the key that opened it (exo-dde.9, `epoch_attribution_test`); the message guarantee text (exo-37e); a per-thread `eventId` memo (exact, tested) took ~20% off every fold.
 - **The sealed count.** The session drops envelopes it cannot open, so the map says "sealed to you" without a number.
 
-## 10. Open questions
+## 10. Validating a room: trust, crossings and fingerprints (exo-f2d, exo-737, exo-26a)
+
+Three questions a member should be able to answer without reading code:
+
+- **Which connections are commitments the code enforces, and which rest on someone's word?** Every entry carries **facets** and every edge a **credibility**, in the claims registry's vocabulary (`docs/design/action-manifest.md` §2):
+  - **imperative**: the discretion to defect is removed structurally;
+  - **motivational**: a named party could defect but has a reason not to;
+  - **exposed**: the information reaches an unbound observer;
+  - **not-applicable**: nothing is promised (a refused entry).
+  Each facet names what it is about, the party and the mechanism. The mechanisms restate guarantees the code already enforces; `room_graph.facetsFor` is the one place they are written, and no facet adds a guarantee. A payment report is two facets: "who wrote it" is imperative (an author signature bound to the room), and "that it was paid" is motivational, the payer's word until the counterparty confirms from their own read. Every entry also says who could read it (imperative: that epoch's key) and that the store node saw it arrive (exposed). The **Trust** lens colours every connection by class and lists, grouped by party, what the room relies on. It counts; it never scores.
+- **What left the room, to whom and when; what came in, how and when?** The graph's **crossings** list every boundary crossing, in causal order:
+  - **out:** each field an outside observer learned, at the entry that sent it (the store node's metadata is one summary row);
+  - **in:** each outside read, with its source and how it was recorded (invariant 10): a nonce, a rate, the chain's answer, a counterparty's confirmation; plus accounts and material members brought in;
+  - **join:** each admission, from which epoch the joiner reads.
+  The **Crossings** lens lists them with their class, up to the replay point. Selecting a row opens the entry that caused it.
+- **Do I hold the same room as you?** The graph carries a **fingerprint** per epoch: a digest of the ids of the entries held from that epoch on. It is offered only from an epoch whose entries are held, so it depends on what is held, never on who looks. Two members who read the fingerprint from an epoch they both held aloud, and get the same value, hold the same entries from then on. In the recorded split, Alice and Bob both read `8132 aec2 06c6 a030…` from epoch 1. The panel also counts the entries the room **dropped** because their author signature failed (raw log minus the authenticated view).
+
+## 11. Open questions
 
 1. **A UI-only module later?** The map could ship as its own `.lgx` calling `coordinate_graph`. It would be a second reader of room structure. Recommendation: start inside `muster_ui`, decide after G6.
 2. **Export.** The map of a room is a picture someone may want to share. A shared picture of a room is a disclosure, so any export should say what it reveals (who is in the room, when they acted) the way the audit download does.
