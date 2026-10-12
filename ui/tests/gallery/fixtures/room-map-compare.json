@@ -1,0 +1,61 @@
+{
+  "about": "Comparing fingerprints on the room map (exo-26a): another member's, typed in, matches this device's from epoch 1; then one that does not.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "set": [
+        "roomMapCompareField",
+        "text",
+        "8132 aec2 06c6 a030"
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "roomMapCompareResult",
+        "text",
+        "~Matches your fingerprint from epoch 1"
+      ]
+    },
+    {
+      "shot": "match"
+    },
+    {
+      "set": [
+        "roomMapCompareField",
+        "text",
+        "8132 aec2 06c6 a031"
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "roomMapCompareResult",
+        "text",
+        "~Matches none you hold"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

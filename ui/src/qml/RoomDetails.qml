@@ -197,7 +197,7 @@ Rectangle {
                         font.pixelSize: MusterStyle.caption
                         font.underline: true
                         HoverHandler { id: mapHover; cursorShape: Qt.PointingHandCursor }
-                        TapHandler { onTapped: details.room.openMap("leaks", details.room.detailsIntent) }
+                        TapHandler { onTapped: details.room.openMap(details.room.detailsIntent.length > 0 ? "crossings" : "leaks", details.room.detailsIntent) }
                     }
                     FlowView {
                         id: flowView

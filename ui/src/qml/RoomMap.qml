@@ -32,6 +32,7 @@ Rectangle {
     property string selected: ""
     property int k: seqMax                // the replay position
     property bool following: true         // k follows the end of the log as it grows
+    property string crossingsFilter: ""   // Crossings shows one proposal's rows when set
     property int lastSeen: -1             // entries held when this device last closed the map here (-1: never)
     signal openCard(string intentId)
     signal closeRequested()
@@ -897,6 +898,30 @@ Rectangle {
             header: ColumnLayout {
                 width: crossingsList.width
                 spacing: 4
+                Rectangle {
+                    objectName: "roomMapCrossingsChip"
+                    visible: map.crossingsFilter.length > 0
+                    Layout.fillWidth: true
+                    implicitHeight: chipRow.implicitHeight + 2 * Theme.spacing.small
+                    radius: Theme.spacing.radiusLarge
+                    color: MusterStyle.needsSoft
+                    RowLayout {
+                        id: chipRow
+                        anchors { fill: parent; leftMargin: Theme.spacing.medium; rightMargin: Theme.spacing.tiny }
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: qsTr("Showing one proposal: %1").arg(map.intentWord(map.crossingsFilter))
+                            color: MusterStyle.needsText
+                            font.pixelSize: MusterStyle.caption; font.weight: Theme.typography.weightBold
+                        }
+                        IconAction {
+                            size: 24
+                            label: qsTr("Show the whole room")
+                            icon: LogosIcons.close
+                            onClicked: map.crossingsFilter = ""
+                        }
+                    }
+                }
                 LogosText {
                     text: qsTr("What crossed the room's boundary")
                     color: Theme.palette.text
@@ -1008,7 +1033,23 @@ Rectangle {
         }
         return e.kind;
     }
-    readonly property var crossings: graph && graph.crossings ? graph.crossings : []
+    readonly property var allCrossings: graph && graph.crossings ? graph.crossings : []
+    readonly property var crossings: {
+        if (crossingsFilter.length === 0) return allCrossings;
+        var out = [];
+        for (var i = 0; i < allCrossings.length; i++)
+            if (String(allCrossings[i].intent || "") === crossingsFilter) out.push(allCrossings[i]);
+        return out;
+    }
+    // compare another member's fingerprint with the ones this device holds
+    function compareFingerprint(text) {
+        var t = String(text || "").toLowerCase().replace(/[^0-9a-f]/g, "");
+        if (t.length < 16) return { state: "short", epoch: -1 };
+        var fps = (graph || {}).fingerprints || [];
+        for (var i = 0; i < fps.length; i++)
+            if (String(fps[i].digest).indexOf(t) === 0) return { state: "match", epoch: Number(fps[i].fromEpoch) };
+        return { state: "differs", epoch: -1 };
+    }
     function crossingCount(dir) {
         var c = 0;
         for (var i = 0; i < crossings.length; i++) {
@@ -1246,6 +1287,25 @@ Rectangle {
                             font.pixelSize: MusterStyle.body
                         }
                     }
+                }
+                LogosTextField {
+                    id: compareField
+                    objectName: "roomMapCompareField"
+                    visible: inspector.info.copyable.length > 0
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("Another member's fingerprint")
+                }
+                LogosText {
+                    objectName: "roomMapCompareResult"
+                    readonly property var res: map.compareFingerprint(compareField.text)
+                    visible: compareField.visible && compareField.text.trim().length > 0
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    font.pixelSize: MusterStyle.caption
+                    color: res.state === "match" ? MusterStyle.settled : res.state === "differs" ? MusterStyle.refused : Theme.palette.textSecondary
+                    text: res.state === "match" ? qsTr("Matches your fingerprint from epoch %1: you hold the same entries from then on.").arg(res.epoch)
+                        : res.state === "differs" ? qsTr("Matches none you hold. Check you both read the same epoch's line; if you did, your logs differ. Crossings and Log show what you hold.")
+                        : qsTr("Enter at least 16 characters of it.")
                 }
                 RowLayout {
                     spacing: Theme.spacing.small

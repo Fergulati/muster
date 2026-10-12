@@ -70,6 +70,7 @@ Item {
         if (room.backend) room.backend.loadGraph("");
         roomMap.lens = lens || "room";
         roomMap.focusIntent = String(intentId || "");
+        roomMap.crossingsFilter = lens === "crossings" ? String(intentId || "") : "";
         roomMap.selected = intentId ? "i:" + intentId : "";
         var seen = {};
         try { seen = JSON.parse(roomPrefs.mapSeen); } catch (e) { seen = {}; }
