@@ -15,6 +15,11 @@
 # because it holds that address; A pays its share; B's own read confirms it. Passes when
 # both log final and B's balance rose by exactly A's share.
 #
+# SPLIT_AWAY=1 (exo-408 item 1): right after proposing, A joins a second room
+# (MUSTER_AUTOAWAY_TOPIC), so the split's room is no longer the one on A's screen when
+# B pays. Passes only if A still confirms the payment — from the room it left — and its
+# switch is logged before the confirmation.
+#
 # What this proves, and what it does not: the backend slots the Split composer and the
 # card call (proposeSplit / contributeInRoom / settlePart), the module, the fleet and the
 # chain, in the real runner. Offscreen, the QML view is never instantiated
@@ -41,6 +46,7 @@ KEY1=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d   # anvi
 ADDR0=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
 ADDR1=0x70997970C51812dc3A010C7d01b50e0d17dc79C8
 ONBEHALF="${SPLIT_ON_BEHALF:-}"
+AWAY="${SPLIT_AWAY:-}"
 PAYEE=$([ -n "$ONBEHALF" ] && echo "$ADDR1" || echo "$ADDR0")   # who is paid: the creditor
 TOTAL=600000000000000000   # 0.6 ETH: A's own share 0.3, B owes 0.3
 SHARE=300000000000000000
@@ -82,7 +88,9 @@ if [ -n "$ONBEHALF" ]; then
   CFG=$(ui_peer_config "$D/A.log") || exit 1
   launch B MUSTER_DEV_SECP_KEY="$KEY1" MUSTER_AUTOSHARE=1 MUSTER_AUTOPAYSPLIT=1
 else
-  launch A MUSTER_DEV_SECP_KEY="$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL"
+  AWAYENV=()
+  [ -n "$AWAY" ] && { echo "A switches to another room once it has proposed"; AWAYENV=(MUSTER_AUTOAWAY_TOPIC="/muster/1/split-away-$(date +%s)/proto"); }
+  launch A MUSTER_DEV_SECP_KEY="$KEY0" MUSTER_AUTOADMIT=1 MUSTER_AUTOSPLIT="$TOTAL" "${AWAYENV[@]}"
   CFG=$(ui_peer_config "$D/A.log") || exit 1
   launch B MUSTER_DEV_SECP_KEY="$KEY1" MUSTER_AUTOPAYSPLIT=1
 fi
@@ -102,6 +110,14 @@ echo "A members=2: $(saw 'members=2' A) · A proposed: $(saw 'MUSTER-LP split pr
      "· $C confirmed: $(saw 'MUSTER-LP split confirmed' $C)"
 grep -ahE 'MUSTER-LP split ' "$D/A.log" | tail -6 | sed 's/^/  A │ /'
 grep -ahE 'MUSTER-LP split ' "$D/B.log" | tail -6 | sed 's/^/  B │ /'
+
+if [ -n "$AWAY" ]; then
+  # A must have left the split's room, and before it confirmed the payment
+  awayAt=$(grep -an 'AUTOAWAY' "$D/A.log" | head -1 | cut -d: -f1)
+  confAt=$(grep -an 'MUSTER-LP split confirmed' "$D/A.log" | head -1 | cut -d: -f1)
+  echo "A left the room at log line ${awayAt:-never}, confirmed at ${confAt:-never}"
+  { [ -n "$awayAt" ] && [ -n "$confAt" ] && [ "$awayAt" -lt "$confAt" ]; } || ok=0
+fi
 
 AFTER=$(cast balance "$PAYEE" --rpc-url "$RPC")
 GAIN=$(python3 -c "print(int('$AFTER') - int('$BEFORE'))")
