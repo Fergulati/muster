@@ -1,0 +1,48 @@
+{
+  "about": "The room map since this device last looked: the new entries marked, and a replay of just them.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "set": [
+        "roomMap",
+        "lastSeen",
+        6
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "log"
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMapNewSince",
+        "text",
+        "~6 new"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

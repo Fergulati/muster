@@ -1,0 +1,41 @@
+{
+  "about": "The room map's Trust lens (exo-f2d): connections coloured imperative, motivational or exposed, and what the room relies on, by whom.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "trust"
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMapInspectorTitle",
+        "text",
+        "What this room relies on"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "about": "Validating the room as the joiner (exo-26a): Bob's fingerprint from epoch 1 matches Alice's.",
+  "snapshot": "data/split-bob-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 600
+    },
+    {
+      "expectProp": [
+        "roomMapFingerprint",
+        "text",
+        "~8132 aec2"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

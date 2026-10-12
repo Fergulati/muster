@@ -46,6 +46,9 @@ Item {
         category: "MusterUi"
         property bool detailsOpen: false
         property string detailsTab: "people"
+        // the room map: how many entries each room held when this device last closed it
+        // (a per-device convenience, never in the room)
+        property string mapSeen: "{}"
     }
     property alias detailsOpen: roomPrefs.detailsOpen
     property alias detailsTab: roomPrefs.detailsTab
@@ -61,11 +64,16 @@ Item {
     // The room map (exo-dde, RoomMap.qml): the room as a graph, over the conversation.
     // Opened from ⋯ or from Privacy; a proposal opens it on that proposal.
     property bool mapOpen: false
+    // however the map closes (its ×, Esc, a card), remember how much of the log it showed
+    onMapOpenChanged: if (!room.mapOpen && roomMap.replayOrder.length > 0) roomMap.seen(roomMap.replayOrder.length)
     function openMap(lens, intentId) {
         if (room.backend) room.backend.loadGraph("");
         roomMap.lens = lens || "room";
         roomMap.focusIntent = String(intentId || "");
         roomMap.selected = intentId ? "i:" + intentId : "";
+        var seen = {};
+        try { seen = JSON.parse(roomPrefs.mapSeen); } catch (e) { seen = {}; }
+        roomMap.lastSeen = seen[room.topic] !== undefined ? Number(seen[room.topic]) : -1;
         room.detailsOpen = false;
         room.mapOpen = true;
     }
@@ -1498,6 +1506,12 @@ Item {
         intents: room.intents
         members: room.members
         onCloseRequested: room.mapOpen = false
+        onSeen: function (count) {
+            var m = {};
+            try { m = JSON.parse(roomPrefs.mapSeen); } catch (e) { m = {}; }
+            m[room.topic] = count;
+            roomPrefs.mapSeen = JSON.stringify(m);
+        }
         onOpenCard: function (intentId) { room.mapOpen = false; room.jumpRequested(intentId); }
     }
     // the map is a fold of the log: refreshed while it is open, on the room's slow cadence

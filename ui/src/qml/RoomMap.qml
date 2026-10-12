@@ -32,8 +32,12 @@ Rectangle {
     property string selected: ""
     property int k: seqMax                // the replay position
     property bool following: true         // k follows the end of the log as it grows
+    property int lastSeen: -1             // entries held when this device last closed the map here (-1: never)
     signal openCard(string intentId)
     signal closeRequested()
+    signal seen(int count)                // how many entries are held now, for the host to remember
+    readonly property int newCount: lastSeen >= 0 ? Math.max(0, replayOrder.length - lastSeen) : 0
+    function isNew(n) { return lastSeen >= 0 && n.kind === "entry" && rank(n.seq) >= lastSeen; }
 
     // The replay runs in causal order: each node's seq is its place in log.causalOrder,
     // the order members published in (the `after` each stamped, exo-655), concurrent
@@ -137,6 +141,20 @@ Rectangle {
              : b === "key-signed" ? qsTr("Signed by the approving key")
              : qsTr("Sealed to the room; it names no author");
     }
+    // the claims registry's credibility classes (docs/design/action-manifest.md §2):
+    // imperative — enforced structurally; motivational — someone's conduct, named;
+    // exposed — reaches an unbound observer. Classified, never scored.
+    function credColor(c) {
+        return c === "imperative" ? MusterStyle.settled : c === "motivational" ? MusterStyle.warning
+             : c === "exposed" ? MusterStyle.info : Theme.palette.textTertiary;
+    }
+    function credTone(c) {
+        return c === "imperative" ? "settled" : c === "motivational" ? "warning" : c === "exposed" ? "info" : "waiting";
+    }
+    function credWord(c) {
+        return c === "imperative" ? qsTr("Imperative") : c === "motivational" ? qsTr("Motivational")
+             : c === "exposed" ? qsTr("Exposed") : qsTr("Nothing promised");
+    }
     function clsColor(c) {
         return c === "driver-contribution" ? MusterStyle.settled
              : c === "external-read" ? Theme.palette.textSecondary
@@ -226,7 +244,7 @@ Rectangle {
             if (n.kind === "entry") continue;
             out.push(n);
         }
-        if (readFrom > 0 && (lens === "room" || lens === "me" || lens === "leaks"))
+        if (readFrom > 0 && (lens === "room" || lens === "me" || lens === "trust" || lens === "leaks"))
             out.push({ id: "sealed", kind: "sealed", seq: -1, epoch: readFrom - 1, attrs: {} });
         if (lens === "prov" && provIntent.length > 0)
             out.push({ id: "bytes", kind: "bytes", seq: -1, epoch: 0, attrs: {} });
@@ -460,6 +478,18 @@ Rectangle {
                 font.weight: Theme.typography.weightBold
             }
             LogosText {
+                objectName: "roomMapNewSince"
+                visible: map.newCount > 0
+                text: qsTr("%n new since you last looked", "", map.newCount)
+                color: MusterStyle.needsText
+                font.pixelSize: MusterStyle.caption
+                font.weight: Theme.typography.weightBold
+                TapHandler {
+                    onTapped: { map.following = false; map.k = Math.max(0, map.lastSeen - 1); player.start(); }
+                }
+                HoverHandler { cursorShape: Qt.PointingHandCursor }
+            }
+            LogosText {
                 text: qsTr("%n entries you can open", "", map.replayOrder.length)
                       + (map.readFrom > 0 ? qsTr(" · from epoch %1, when you joined").arg(map.readFrom) : "")
                 color: Theme.palette.textSecondary
@@ -468,8 +498,8 @@ Rectangle {
         }
         Item { Layout.fillWidth: true }
         Repeater {
-            model: [["room", qsTr("Room")], ["me", qsTr("Me")], ["leaks", qsTr("Where it left")],
-                    ["prov", qsTr("Provenance")], ["log", qsTr("Log")]]
+            model: [["room", qsTr("Room")], ["me", qsTr("Me")], ["trust", qsTr("Trust")], ["leaks", qsTr("Where it left")],
+                    ["crossings", qsTr("Crossings")], ["prov", qsTr("Provenance")], ["log", qsTr("Log")]]
             delegate: ActionButton {
                 required property var modelData
                 objectName: "roomMapLens_" + modelData[0]
@@ -496,6 +526,7 @@ Rectangle {
 
         Item {
             id: stage
+            visible: map.lens !== "crossings"
             width: 1000; height: 680
             anchors.centerIn: parent
             scale: Math.min(viewport.width / 1000, viewport.height / 680)
@@ -504,7 +535,7 @@ Rectangle {
             Shape {
                 id: membrane
                 anchors.fill: parent
-                opacity: (map.lens === "room" || map.lens === "me" || map.lens === "leaks") ? 1 : 0
+                opacity: (map.lens === "room" || map.lens === "me" || map.lens === "trust" || map.lens === "leaks") ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 300 } }
                 ShapePath {
                     strokeColor: MusterStyle.tint(Theme.palette.primary, 0.45)
@@ -583,11 +614,15 @@ Rectangle {
                     readonly property real sy: a.y + (b.y - a.y) * ra / len
                     readonly property real tx: b.x - (b.x - a.x) * rb / len
                     readonly property real ty: b.y - (b.y - a.y) * rb / len
-                    readonly property real bend: kind === "prov" ? 0 : kind === "parent" ? 0.12 : 0.13
+                    // connections between the same two nodes bend apart by kind, so each stays visible
+                    readonly property real bend: kind === "prov" ? 0 : kind === "parent" ? 0.12
+                        : kind === "part" ? -0.2 : kind === "proposed" ? 0.3 : kind === "declined" ? -0.34 : 0.13
                     readonly property bool hot: map.hovered.length > 0 && (modelData.src === map.hovered || modelData.dst === map.hovered)
                     opacity: map.hovered.length > 0 ? (hot ? 1 : 0.08)
                            : (map.lens === "me" && (map.dimmed(modelData.src) || map.dimmed(modelData.dst))) ? 0.08 : 1
-                    readonly property color ink: kind === "leaves" ? MusterStyle.info
+                    readonly property string cred: modelData.attrs && modelData.attrs.credibility ? String(modelData.attrs.credibility) : ""
+                    readonly property color ink: map.lens === "trust" ? map.credColor(cred)
+                        : kind === "leaves" ? MusterStyle.info
                         : kind === "enters" ? Theme.palette.textSecondary
                         : kind === "parent" ? Theme.palette.textTertiary
                         : kind === "prov" ? (modelData.attrs && modelData.attrs.out ? MusterStyle.info : map.clsColor(modelData.attrs ? modelData.attrs.cls : ""))
@@ -597,9 +632,11 @@ Rectangle {
                         strokeColor: edge.ink
                         strokeWidth: edge.kind === "leaves" ? 1.6 + Math.min(4, ((edge.modelData.attrs && edge.modelData.attrs.fields) || []).length * 0.35)
                                    : edge.kind === "parent" ? 1 : edge.kind === "approved" || edge.kind === "part" ? 1.2 : 1.6
-                        strokeStyle: (edge.kind === "leaves" || edge.kind === "enters" || edge.kind === "disclosed" || edge.kind === "bound")
+                        strokeStyle: map.lens === "trust" ? (edge.cred === "imperative" ? ShapePath.SolidLine : ShapePath.DashLine)
+                                   : (edge.kind === "leaves" || edge.kind === "enters" || edge.kind === "disclosed" || edge.kind === "bound")
                                      ? ShapePath.DashLine : ShapePath.SolidLine
-                        dashPattern: edge.kind === "leaves" ? [1.5, 3.5] : edge.kind === "enters" ? [3, 2.5] : [0.8, 2.5]
+                        dashPattern: map.lens === "trust" ? (edge.cred === "exposed" ? [1.5, 3.5] : [4, 3])
+                                   : edge.kind === "leaves" ? [1.5, 3.5] : edge.kind === "enters" ? [3, 2.5] : [0.8, 2.5]
                         dashOffset: edge.kind === "leaves" ? map.flowPhase / 2 : edge.kind === "enters" ? map.flowPhase / 3 : 0
                         capStyle: ShapePath.RoundCap
                         fillColor: "transparent"
@@ -782,6 +819,11 @@ Rectangle {
                         sourceComponent: Item {
                             readonly property var a: node.modelData.attrs || {}
                             readonly property bool wentOut: map.entryLeft(node.modelData)
+                            Rectangle {      // new since this device last looked
+                                visible: map.isNew(node.modelData)
+                                x: node.r - 2; y: -node.r - 4; width: 6; height: 6; radius: 3
+                                color: MusterStyle.needs
+                            }
                             Rectangle {
                                 visible: parent.wentOut
                                 x: -node.r - 4; y: -node.r - 4; width: 2 * node.r + 8; height: width; radius: width / 2
@@ -842,19 +884,155 @@ Rectangle {
             }
         }
 
+        // ── Crossings: every time information crossed the room's boundary, in order ──
+        ListView {
+            id: crossingsList
+            objectName: "roomMapCrossings"
+            visible: map.lens === "crossings"
+            anchors.fill: parent
+            anchors.margins: Theme.spacing.small
+            clip: true
+            spacing: 2
+            model: map.crossings
+            header: ColumnLayout {
+                width: crossingsList.width
+                spacing: 4
+                LogosText {
+                    text: qsTr("What crossed the room's boundary")
+                    color: Theme.palette.text
+                    font.pixelSize: MusterStyle.subtitle
+                    font.weight: Theme.typography.weightBold
+                }
+                LogosText {
+                    objectName: "roomMapCrossingsSummary"
+                    Layout.fillWidth: true
+                    wrapMode: Text.Wrap
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    text: qsTr("Out: %1 · In: %2 · Joined: %3 — up to the replay point, in the order members saw them. Select a row to see the entry that caused it.")
+                          .arg(map.crossingCount("out")).arg(map.crossingCount("in")).arg(map.crossingCount("join"))
+                }
+                Item { implicitHeight: Theme.spacing.small }
+            }
+            delegate: Rectangle {
+                id: row
+                required property var modelData
+                required property int index
+                readonly property bool reached: modelData.seq < 0 || map.rank(modelData.seq) <= map.k
+                readonly property string dir: String(modelData.dir || "")
+                width: crossingsList.width
+                implicitHeight: rowCol.implicitHeight + 2 * Theme.spacing.small
+                radius: 8
+                opacity: reached ? 1 : 0.35
+                color: map.selected.length > 0 && map.selected === String(modelData.entry || "") ? MusterStyle.needsSoft
+                     : dir === "out" ? MusterStyle.infoSoft : MusterStyle.neutralSoft
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: if (String(row.modelData.entry || "").length > 0) map.selected = String(row.modelData.entry)
+                }
+                RowLayout {
+                    anchors { fill: parent; margins: Theme.spacing.small }
+                    spacing: Theme.spacing.medium
+                    LogosText {
+                        Layout.preferredWidth: 44
+                        Layout.alignment: Qt.AlignTop
+                        text: row.modelData.seq < 0 ? qsTr("all") : "#" + (map.rank(row.modelData.seq) + 1)
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: MusterStyle.caption; font.family: MusterStyle.mono
+                    }
+                    LogosText {
+                        Layout.preferredWidth: 46
+                        Layout.alignment: Qt.AlignTop
+                        text: row.dir === "out" ? qsTr("OUT →") : row.dir === "join" ? qsTr("JOIN +") : qsTr("IN ←")
+                        color: row.dir === "out" ? MusterStyle.infoText : row.dir === "join" ? MusterStyle.settled : Theme.palette.text
+                        font.pixelSize: MusterStyle.caption; font.weight: Theme.typography.weightBold
+                    }
+                    ColumnLayout {
+                        id: rowCol
+                        Layout.fillWidth: true
+                        spacing: 2
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            text: map.crossingTitle(row.modelData)
+                            color: Theme.palette.text
+                            font.pixelSize: MusterStyle.body
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            text: String(row.modelData.mechanism || "")
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: MusterStyle.caption
+                        }
+                    }
+                    StatusPill {
+                        Layout.alignment: Qt.AlignTop
+                        text: map.credWord(String(row.modelData.credibility || ""))
+                              + (String(row.modelData.party || "").length > 0 ? " · " + String(row.modelData.party) : "")
+                        tone: map.credTone(String(row.modelData.credibility || ""))
+                    }
+                }
+            }
+        }
+
         LogosText {
             anchors { left: parent.left; bottom: parent.bottom; margins: Theme.spacing.small }
             width: Math.min(parent.width - 2 * Theme.spacing.small, 520)
             wrapMode: Text.Wrap
             color: Theme.palette.textSecondary
             font.pixelSize: MusterStyle.caption
+            visible: map.lens !== "crossings"
             text: map.lens === "me" ? qsTr("You, the keys bound to you, the proposals you took part in, and what of them left the room. Everything else is dimmed.")
+                : map.lens === "trust" ? qsTr("Green is imperative: enforced by the code. Amber dashes are motivational: someone's word or conduct, named in the panel. Blue dots are exposed: seen by someone outside.")
                 : map.lens === "leaks" ? qsTr("Each outside observer, and exactly the fields it learned, placed at the entry where they left.")
                 : map.lens === "prov" ? (map.provIntent.length > 0 ? qsTr("Every input that reached the signed bytes, then the approvals over them. Select a proposal to trace another.")
                                                                    : qsTr("No proposal yet. Provenance traces one proposal's inputs."))
                 : map.lens === "log" ? qsTr("Every entry you can open, in the order members saw them; lines are the hash links to what each depends on.")
                 : qsTr("Members and what they decided sit inside the boundary. Blue carries information out; grey dashes bring outside reads in.")
         }
+    }
+    function linkText(e) {
+        var who = actorName(e.src), what = String(e.dst).indexOf("i:") === 0 ? intentWord(String(e.dst).slice(2)) : actorName(e.dst);
+        switch (e.kind) {
+        case "proposed": return qsTr("%1 proposed %2").arg(who).arg(what);
+        case "approved": return qsTr("%1 approved %2").arg(who).arg(what);
+        case "declined": return qsTr("%1 declined %2").arg(who).arg(what);
+        case "part": return (String((e.attrs || {}).step) === "settled" ? qsTr("%1 reported paying a part of %2") : qsTr("%1 confirmed a part of %2")).arg(who).arg(what);
+        case "disclosed": return qsTr("%1 disclosed %2").arg(who).arg(String(e.dst).slice(2));
+        case "joined": return qsTr("%1 joined a key ceremony").arg(who);
+        case "bound": return qsTr("%1's approval key %2").arg(who).arg(shortId(String(e.dst).slice(2)));
+        case "leaves": return qsTr("%1 learned %2").arg(obsWord(e.dst, 0)).arg(((e.attrs || {}).fields || []).join(", "));
+        case "enters": return qsTr("an outside read into %1").arg(what);
+        }
+        return e.kind;
+    }
+    readonly property var crossings: graph && graph.crossings ? graph.crossings : []
+    function crossingCount(dir) {
+        var c = 0;
+        for (var i = 0; i < crossings.length; i++) {
+            var x = crossings[i];
+            if (String(x.dir) === dir && x.seq >= 0 && rank(x.seq) <= k) c++;
+        }
+        return c;
+    }
+    function crossingTitle(x) {
+        var dir = String(x.dir || ""), kd = String(x.kind || "");
+        var fields = (x.fields || []).join(", ");
+        var intent = String(x.intent || "").length > 0 ? intentWord(String(x.intent)) : "";
+        if (dir === "out" && kd === "envelopes")
+            return qsTr("%1 of every entry → %2 (%n envelopes so far)", "", heldCount).arg(fields).arg(obsWord(String(x.observer), 0));
+        if (dir === "out")
+            return qsTr("%1 → %2, when %3 settled").arg(fields).arg(obsWord(String(x.observer), 0)).arg(intent);
+        if (dir === "join")
+            return qsTr("%1 joined at epoch %2").arg(memberName(String(x.member || ""))).arg(x.epoch);
+        if (kd === "read") return qsTr("%1 → %2: an outside read").arg(String(x.source || qsTr("a source"))).arg(intent);
+        if (kd === "final") return qsTr("the chain's answer → %1: it settled").arg(intent);
+        if (kd === "part-confirmed") return qsTr("the counterparty's read → %1: a part arrived").arg(intent);
+        if (kd === "account") return qsTr("%1 brought an account into the room").arg(actorName(String(x.member || "")));
+        if (kd === "material") return qsTr("%1 shared material for %2").arg(actorName(String(x.member || ""))).arg(intent);
+        return kd;
     }
     function radiusOf(id) {
         var n = id === "sealed" ? { kind: "sealed" } : id === "bytes" ? { kind: "bytes" } : nodeById[id];
@@ -935,8 +1113,10 @@ Rectangle {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
                         LogosText {
-                            Layout.preferredWidth: 104
+                            Layout.preferredWidth: 120
+                            Layout.maximumWidth: 120
                             Layout.alignment: Qt.AlignTop
+                            wrapMode: Text.Wrap
                             text: modelData[0]
                             color: Theme.palette.textSecondary
                             font.pixelSize: MusterStyle.caption
@@ -944,7 +1124,7 @@ Rectangle {
                         LogosText {
                             Layout.fillWidth: true
                             text: modelData[1]
-                            wrapMode: Text.WrapAnywhere
+                            wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                             color: modelData.length > 2 && modelData[2] === "out" ? MusterStyle.infoText : Theme.palette.text
                             font.pixelSize: MusterStyle.caption
                             font.family: modelData.length > 2 && modelData[2] === "mono" ? MusterStyle.mono : Theme.typography.publicSans
@@ -964,6 +1144,107 @@ Rectangle {
                         wrapMode: Text.Wrap
                         color: Theme.palette.text
                         font.pixelSize: MusterStyle.caption
+                    }
+                }
+                // what each guarantee is, against whom, and how (imperative / motivational / exposed)
+                LogosText {
+                    visible: inspector.info.facets.length > 0
+                    text: qsTr("WHAT IT GUARANTEES")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: MusterStyle.badge; font.family: MusterStyle.mono
+                }
+                Repeater {
+                    model: inspector.info.facets
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        objectName: "roomMapFacet"
+                        Layout.fillWidth: true
+                        spacing: 2
+                        RowLayout {
+                            spacing: Theme.spacing.small
+                            StatusPill { text: map.credWord(String(modelData["class"])); tone: map.credTone(String(modelData["class"])) }
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.Wrap
+                                text: String(modelData.about) + (String(modelData.party || "").length > 0 ? qsTr(" · relies on %1").arg(modelData.party) : "")
+                                color: Theme.palette.text
+                                font.pixelSize: MusterStyle.caption; font.weight: Theme.typography.weightBold
+                            }
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            text: String(modelData.mechanism)
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: MusterStyle.caption
+                        }
+                    }
+                }
+                LogosText {
+                    visible: inspector.info.reliance.length > 0
+                    text: qsTr("WHAT IT RELIES ON")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: MusterStyle.badge; font.family: MusterStyle.mono
+                }
+                Repeater {
+                    model: inspector.info.reliance
+                    delegate: RowLayout {
+                        required property var modelData
+                        objectName: "roomMapReliance"
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        StatusPill { text: map.credWord(modelData.cred); tone: map.credTone(modelData.cred) }
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            text: modelData.text
+                            color: Theme.palette.text
+                            font.pixelSize: MusterStyle.caption
+                        }
+                    }
+                }
+                LogosText {
+                    visible: inspector.info.links.length > 0
+                    text: qsTr("CONNECTIONS")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: MusterStyle.badge; font.family: MusterStyle.mono
+                }
+                Repeater {
+                    model: inspector.info.links
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        StatusPill { text: map.credWord(modelData.cred); tone: map.credTone(modelData.cred) }
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.Wrap
+                            text: modelData.text + (String(modelData.party || "").length > 0 ? qsTr(" · relies on %1").arg(modelData.party) : "")
+                            color: Theme.palette.text
+                            font.pixelSize: MusterStyle.caption
+                        }
+                    }
+                }
+                // values a person reads aloud or copies: selectable
+                Repeater {
+                    model: inspector.info.copyable
+                    delegate: ColumnLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: 2
+                        LogosText { text: modelData[0]; color: Theme.palette.textSecondary; font.pixelSize: MusterStyle.caption }
+                        TextEdit {
+                            objectName: "roomMapFingerprint"
+                            Layout.fillWidth: true
+                            readOnly: true
+                            selectByMouse: true
+                            wrapMode: TextEdit.WrapAnywhere
+                            text: modelData[1]
+                            color: Theme.palette.text
+                            selectionColor: MusterStyle.infoSoft
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.body
+                        }
                     }
                 }
                 RowLayout {
@@ -992,8 +1273,52 @@ Rectangle {
         }
     }
     function describe(n) {
-        var d = { kicker: "", title: "", pill: "", tone: "waiting", lead: "", rows: [], guarantee: "" };
+        var d = { kicker: "", title: "", pill: "", tone: "waiting", lead: "", rows: [], guarantee: "",
+                  facets: [], links: [], copyable: [], reliance: [] };
         var i, e, a;
+        if (!n && map.lens === "trust") {
+            // what the room takes on someone's word, grouped by whose; what is exposed, by to whom
+            d.kicker = qsTr("TRUST");
+            d.title = qsTr("What this room relies on");
+            var mot = {}, exp = {}, imp = 0, order = [];
+            for (i = 0; i < allNodes.length; i++) {
+                var en = allNodes[i];
+                if (en.kind !== "entry" || !shownAt(en)) continue;
+                var fs = (en.attrs || {}).facets || [];
+                for (var j = 0; j < fs.length; j++) {
+                    var fc = fs[j], cl = String(fc["class"]), pty = String(fc.party || "");
+                    if (cl === "imperative") imp++;
+                    else if (cl === "motivational") {
+                        if (!mot[pty]) { mot[pty] = {}; order.push(pty); }
+                        mot[pty][fc.about] = (mot[pty][fc.about] || 0) + 1;
+                    } else if (cl === "exposed") exp[pty] = (exp[pty] || 0) + 1;
+                }
+            }
+            d.lead = qsTr("%n guarantees here are imperative: the code enforces them, and no one can defect from them.", "", imp)
+                   + " " + qsTr("The rest rely on someone, named below. Muster classifies; it never scores.");
+            for (i = 0; i < order.length; i++) {
+                var parts = [], abouts = mot[order[i]];
+                for (var ab in abouts) parts.push(abouts[ab] > 1 ? ab + " ×" + abouts[ab] : ab);
+                d.links.push({ cred: "motivational", text: order[i] + ": " + parts.join("; "), party: "" });
+            }
+            for (var p2 in exp)
+                d.links.push({ cred: "exposed", text: qsTr("%1 saw when %n entries arrived, and their topic", "", exp[p2]).arg(p2), party: "" });
+            var outs = ["o:rpc-provider", "o:chain-observer", "o:target-module"];
+            for (i = 0; i < outs.length; i++) {
+                var lf = map.learned(outs[i]);
+                if (lf.length > 0) d.links.push({ cred: "exposed", text: qsTr("%1 learned %2").arg(map.obsWord(outs[i], 0)).arg(lf.join(", ")), party: "" });
+            }
+            return d;
+        }
+        if (!n && map.lens === "crossings") {
+            d.kicker = qsTr("CROSSINGS");
+            d.title = qsTr("In, out, and who joined");
+            d.lead = qsTr("Out is what an outside observer learned, at the entry that sent it. In is what the room took from outside, and how it was recorded. A join is a member admitted; they read from that epoch on.");
+            d.rows.push([qsTr("Out"), String(map.crossingCount("out")), "out"]);
+            d.rows.push([qsTr("In"), String(map.crossingCount("in"))]);
+            d.rows.push([qsTr("Joined"), String(map.crossingCount("join"))]);
+            return d;
+        }
         if (!n) {
             d.kicker = qsTr("THE ROOM");
             d.title = qsTr("How this room got here");
@@ -1007,6 +1332,18 @@ Rectangle {
                 var f = map.learned(obs[i]);
                 if (f.length > 0) d.rows.push([map.obsWord(obs[i], 0), f.join(", "), "out"]);
             }
+            // validate: the room's fingerprint from each epoch this device holds, to compare
+            // with another member out loud; and what the room refused to read
+            var dropped = Number((map.graph || {}).dropped || 0);
+            d.rows.push([qsTr("Dropped"), dropped > 0 ? qsTr("%n entries failed their author signature; no view reads them", "", dropped)
+                                                      : qsTr("none: every author-signed entry verified")]);
+            var fps = (map.graph || {}).fingerprints || [];
+            for (i = 0; i < fps.length; i++) {
+                var dg = String(fps[i].digest || "").slice(0, 32).replace(/(.{4})/g, "$1 ").trim();
+                d.copyable.push([qsTr("Room fingerprint from epoch %1 · %n entries", "", Number(fps[i].entries)).arg(fps[i].fromEpoch), dg]);
+            }
+            if (fps.length > 0)
+                d.guarantee = qsTr("To check that you and another member hold the same room, read the fingerprint from an epoch you both held aloud. If it matches, you hold the same entries from that epoch on.");
             return d;
         }
         a = n.attrs || {};
@@ -1025,6 +1362,11 @@ Rectangle {
                 if (e.src === n.id && e.kind === "bound") keys.push(map.shortId(e.dst.slice(2)));
             }
             d.rows.push([qsTr("Signed entries"), String(did)]);
+            for (i = 0; i < allEdges.length; i++) {
+                e = allEdges[i];
+                if (e.src !== n.id || map.rank(e.seq) > map.k || e.kind === "authored") continue;
+                d.links.push({ cred: String((e.attrs || {}).credibility || ""), party: String((e.attrs || {}).party || ""), text: map.linkText(e) });
+            }
             if (keys.length > 0) d.rows.push([qsTr("Approval keys"), keys.join(", "), "mono"]);
             return d;
         }
@@ -1045,6 +1387,31 @@ Rectangle {
                     d.rows.push([map.obsWord(e.dst, 0) + qsTr(" at #%1").arg(e.seq), ((e.attrs && e.attrs.fields) || []).join(", "), "out"]);
             }
             d.guarantee = qsTr("Re-derived on each device from the effect · %n inputs, each traced to its entry in the log", "", inputs);
+            // before you approve: what this proposal takes on someone's word, by whose
+            var rel = {}, relOrder = [], impN = 0;
+            for (i = 0; i < allNodes.length; i++) {
+                var en2 = allNodes[i], at2 = en2.attrs || {};
+                if (en2.kind !== "entry" || String(at2.intent || "") !== id || !at2.counted || !shownAt(en2)) continue;
+                var fs2 = at2.facets || [];
+                for (var j2 = 0; j2 < fs2.length; j2++) {
+                    var c2 = String(fs2[j2]["class"]);
+                    if (c2 === "imperative") impN++;
+                    if (c2 !== "motivational") continue;
+                    var pty2 = String(fs2[j2].party);
+                    if (!rel[pty2]) { rel[pty2] = []; relOrder.push(pty2); }
+                    if (rel[pty2].indexOf(fs2[j2].about) < 0) rel[pty2].push(fs2[j2].about);
+                }
+            }
+            for (i = 0; i < relOrder.length; i++)
+                d.reliance.push({ cred: "motivational", text: relOrder[i] + ": " + rel[relOrder[i]].join("; "), party: "" });
+            if (relOrder.length === 0 && impN > 0)
+                d.reliance.push({ cred: "imperative", text: qsTr("nothing so far rests on anyone's word: %n guarantees, all enforced by the code", "", impN), party: "" });
+            for (i = 0; i < allEdges.length; i++) {
+                e = allEdges[i];
+                if (map.rank(e.seq) > map.k) continue;
+                if ((e.dst === n.id && e.kind !== "input") || (e.src === n.id && e.kind === "leaves"))
+                    d.links.push({ cred: String((e.attrs || {}).credibility || ""), party: String((e.attrs || {}).party || ""), text: map.linkText(e) });
+            }
             return d;
         }
         if (n.kind === "observer" || n.kind === "outside") {
@@ -1076,6 +1443,7 @@ Rectangle {
                     d.rows.push([qsTr("Left to %1").arg(map.obsWord(e.dst, 0)), ((e.attrs && e.attrs.fields) || []).join(", "), "out"]);
             }
             d.guarantee = String(a.guarantee || "");
+            d.facets = a.facets || [];
             return d;
         }
         if (n.kind === "account") {
@@ -1174,6 +1542,12 @@ Rectangle {
                             color: modelData.out ? MusterStyle.info : map.clsColor(modelData.cls)
                             opacity: modelData.at <= map.k ? 1 : 0.25
                         }
+                    }
+                    Rectangle {      // where what is new since the last look begins
+                        visible: map.newCount > 0
+                        x: (map.readFrom > 0 ? 14 : 0) + map.lastSeen * (track.width - (map.readFrom > 0 ? 14 : 0)) / Math.max(1, map.seqMax) - 6
+                        y: 0; width: Math.max(4, track.width - x); height: 2
+                        color: MusterStyle.needs
                     }
                     Rectangle {
                         x: (map.readFrom > 0 ? 14 : 0) + Math.max(0, map.k) * (track.width - (map.readFrom > 0 ? 14 : 0)) / Math.max(1, map.seqMax) - 1
