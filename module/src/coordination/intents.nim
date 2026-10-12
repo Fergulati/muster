@@ -564,6 +564,12 @@ proc countedPartsAt(ordered: seq[Event], folded: Table[string, Intent],
     if drv.settlementParts(it.effect).len == 0: continue
     result[id] = countedParts(ordered, drv, it.effect, id).at
 
+proc countedPartIndexes*(events: seq[Event], driverFor: DriverFor): Table[string, Table[string, int]] =
+  ## The counted part reports, as `countedPartsAt` reads them: intent id → "<part>/<step>"
+  ## → its index in canonicalOrder(events). For the flow view (exo-c7c): a payment leaves
+  ## the room at a COUNTED settled report, never at one the fold refused.
+  countedPartsAt(canonicalOrder(events), reduceIntents(events, driverFor), driverFor, events)
+
 proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntry] =
   ## The room's coordination history as reduce(log). See the section note above.
   let ordered = canonicalOrder(events)
@@ -676,15 +682,18 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     if $it.state in ["executable", "submitted", "settling", "final"]:
       result.add ActivityEntry(seq: lastSig[id], order: 1, kind: "ready", intentId: id,
         account: "", title: "Ready — the approvals are collected", detail: "")
-  # Order for reading, not by content hash. canonicalOrder among these events is
-  # smallest-id-first (they carry no parent links), which scrambles a proposal's
-  # lifecycle — an approval could sort before its propose. Instead: group every line
-  # of one intent together (by where the intent was proposed), and within the group
-  # walk the lifecycle — proposed → approvals → ready → submitted → settled. A
-  # membership admit has no intent, so it sits at its own position. Deterministic (a
-  # pure function of the event set, invariant 4) and chronological for the common
-  # single-intent flow; interleaved multi-intent timing without an authored clock is
-  # a known limit (the log carries no wall-clock on coordination events).
+  # Order for reading, not by content hash. Group every line of one intent together (by
+  # where the intent was proposed), and within the group walk the lifecycle — proposed →
+  # approvals → ready → submitted → settled. A membership admit has no intent, so it sits
+  # at its own position. Positions here are CAUSAL (log.causalOrder: the `after` each
+  # publisher stamped, exo-655), so proposals and admits read in the order they
+  # happened; events from before causal order (no `after`) fall back to content-id order
+  # among themselves. Deterministic: a pure function of the event set (invariant 4).
+  # `seq` itself stays the canonical position every other fold uses.
+  var causalAt = initTable[EventId, int]()
+  for i, e in causalOrder(events): causalAt[eventId(e)] = i
+  proc at(canonSeq: int): int =
+    if canonSeq >= 0 and canonSeq < ordered.len: causalAt.getOrDefault(eventId(ordered[canonSeq]), canonSeq) else: canonSeq
   proc lifecycleRank(kind: string): int =
     case kind
     of "propose": 0
@@ -694,7 +703,7 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     of "settled", "part-confirmed": 4
     else: 0                       # admit / anything else: no intra-intent phase
   proc groupOrder(e: ActivityEntry): int =
-    if e.intentId.len > 0 and e.intentId in proposeSeq: proposeSeq[e.intentId] else: e.seq
+    at(if e.intentId.len > 0 and e.intentId in proposeSeq: proposeSeq[e.intentId] else: e.seq)
   result.sort(proc (a, b: ActivityEntry): int =
     let ga = groupOrder(a)
     let gb = groupOrder(b)
@@ -702,7 +711,7 @@ proc reduceActivity*(events: seq[Event], driverFor: DriverFor): seq[ActivityEntr
     let ra = lifecycleRank(a.kind)
     let rb = lifecycleRank(b.kind)
     if ra != rb: return cmp(ra, rb)
-    if a.seq != b.seq: return cmp(a.seq, b.seq)
+    if a.seq != b.seq: return cmp(at(a.seq), at(b.seq))
     cmp(a.order, b.order))
 
 # ── provenance: how this decision's data got in front of you (invariant 10) ────
@@ -807,7 +816,11 @@ proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]
   ## the NEW epoch, so the joiner reads its own admission and nothing before it (F-16).
   Event(parents: parents, key: "membership/" & $epoch & "/admit/" & joinerHex, value: "1")
 
-proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] =
+proc logProvenance*(events: seq[Event], driverFor: DriverFor,
+                    sealedIn = initTable[string, int]()): seq[LogProvItem] =
+  ## `sealedIn` (CoordinationSession.sealedIn) names the epoch whose key opened each
+  ## event; an item's epoch comes from it, else from the admissions before it in
+  ## canonical order — right only for a log whose events carry their parents (exo-dde.9).
   let ordered = canonicalOrder(events)
   let gradeOf = gradeLookup(events, driverFor)
   let partsAt = countedPartsAt(ordered, reduceIntents(events, driverFor), driverFor, events)
@@ -829,7 +842,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         accountable: true, what: "a member was admitted",
         detail: "room re-keyed to epoch " & p[1],
         guarantee: "sealed under the new epoch by the admitting member — the joiner reads from here on, nothing before",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
       continue
     if p.len >= 2 and p[0] == "message":
       var author = ""
@@ -840,8 +853,8 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "message", account: author,
         accountable: true, what: "a message",
         detail: "",
-        guarantee: "sealed to the room's epoch — a member placed it; the author is what the sender wrote, not a verified signature",
-        epoch: epoch)
+        guarantee: "sealed to the room's epoch and signed by its author, bound to this room — the room's views read it only if that signature verifies",
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
       continue
     if p.len < 3 or p[0] != "intent": continue
     let id = p[1]
@@ -851,13 +864,13 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "propose", intentId: id,
         accountable: true, what: "a proposal", detail: summarizeEffect(e.value),
         guarantee: "sealed to the room's epoch — only a member could have placed it; the materialization is re-derived by every client",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "policy":
       if not ownProposal(id, e): continue
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "policy", intentId: id,
         accountable: true, what: "the policy this intent runs under", detail: e.value,
         guarantee: "sealed to the room's epoch; every member folds the identical driver",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "sig":
       if p.len < 4 or (id & "/" & p[3]) in seenSig: continue
       let (grade, counted, _) = gradeOf(id, p[3], (if p.len >= 5: p[4] else: "1"))
@@ -871,14 +884,14 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         attestation: grade,
         detail: (if p.len >= 5 and p[4] != "1": "round " & p[4] else: ""),
         guarantee: "the driver verified this recovers to a configured member — a non-member never reaches the fold",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "decline":
       if p.len < 4 or (id & "/" & p[3]) in seenDecline: continue
       seenDecline.incl(id & "/" & p[3])
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "decline", intentId: id,
         account: p[3], accountable: true, what: "a decline",
         detail: "", guarantee: "sealed to the room's epoch; final — the decliner's approval counts for nothing",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "material":
       if p.len < 5: continue
       var field = ""
@@ -889,7 +902,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         what: "shared material for '" & (if field.len > 0: field else: p[3]) & "'",
         detail: "",
         guarantee: "sealed to the room's epoch; the room learns the PUBLIC face the sharer chose (never a handle), not that it is theirs — only a driver-verified signature proves control",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "binding":
       if p.len < 4: continue
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "binding", intentId: id,
@@ -897,18 +910,18 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         what: "a key-binding for an approval",
         detail: "",
         guarantee: "the authorization key that signed is bound by a secp signature to the member's admitted encryption identity — the room can check the approval came from an admitted member, not merely a valid owner; scoped to this epoch",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "context":
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "context", intentId: id,
         accountable: true, what: "the context approvals bind to", detail: e.value,
         guarantee: "sealed to the room's epoch by the proposer; every attestation commits to it, so an approval is worthless in any other environment, account, slot, or after expiry",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "read":
       result.add LogProvItem(seq: i, cls: icExternalRead, kind: "read", intentId: id,
         accountable: true, what: "an outside read that reached the proposal",
         detail: (if p.len >= 4: p[3] else: ""),
         guarantee: "an external read: what the proposer's source reported, recorded so its origin is accountable — not proof the world agrees",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "attest":
       if p.len < 5: continue
       let att = gradeOf(id, p[3], p[4])
@@ -917,17 +930,17 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
         account: p[3], accountable: true, what: "a member's commitment to an approval's inputs",
         attestation: att.grade,
         detail: "", guarantee: "signed by the approving key over the context, the materialization, and the provenance of every input (invariants 2 and 10); every member re-derives what it must cover",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "submit":
       result.add LogProvItem(seq: i, cls: icExternalRead, kind: "submit", intentId: id,
         accountable: true, what: "submitted outside the room",
         detail: "", guarantee: "an external read: the submitting member's report of what it sent — the chain's answer arrives as final",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "final":
       result.add LogProvItem(seq: i, cls: icExternalRead, kind: "final", intentId: id,
         accountable: true, what: "settled outside the room",
         detail: "", guarantee: "an external read: observed from the chain, never asserted; graded attested unless proof-checked",
-        epoch: epoch)
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
     of "part":
       # a counted part report (exo-a90.2); an uncounted one never reached the decision
       if p.len < 5 or id notin partsAt or partsAt[id].getOrDefault(p[3] & "/" & p[4], -1) != i: continue
@@ -941,11 +954,11 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor): seq[LogProvItem] 
           account: author, accountable: true, what: "a party's report that it settled its part",
           detail: tx,
           guarantee: "signed by the party it names, bound to this room (authorship); a claim until the counterparty confirms it — the room shows who reported paying, not that they did",
-          epoch: epoch)
+          epoch: sealedIn.getOrDefault(eventId(e), epoch))
       else:
         result.add LogProvItem(seq: i, cls: icExternalRead, kind: "part-confirmed", intentId: id,
           account: author, accountable: true, what: "the counterparty's confirmation of a part",
           detail: (if tx.len > 0: tx else: "received outside muster"),
           guarantee: "an external read disclosed by the one party the part is owed to: their own read of their own infrastructure (attested), or their word that it arrived outside muster",
-          epoch: epoch)
+          epoch: sealedIn.getOrDefault(eventId(e), epoch))
     else: discard

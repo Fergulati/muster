@@ -146,7 +146,7 @@ cmd_record() {
   # never touch the person's ~/.config
   env -u WAYLAND_DISPLAY DISPLAY=":$disp" MUSTER_QPA=xcb QT_QUICK_BACKEND=software QT_FORCE_STDERR_LOGGING=1 \
       XDG_CONFIG_HOME="$out/.config" \
-      MUSTER_RUNNER="$dev/bin/muster-ui" "$@" "$test"
+      MUSTER_RUNNER="$dev/bin/muster-ui" MUSTER_RECORD_DIR="$dev/plugin/qml/snapshots" "$@" "$test"
   local rc=$?
   cp "$dev"/plugin/qml/snapshots/*.json "$out"/ 2>/dev/null
   echo "$test exited $rc; $(ls "$out"/*.json 2>/dev/null | wc -l) snapshot(s) in $out"

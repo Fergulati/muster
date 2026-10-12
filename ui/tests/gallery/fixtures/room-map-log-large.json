@@ -1,0 +1,108 @@
+{
+ "about": "The Log lens on a 420-entry room: past 80 entries it shows the 80 around the replay point, and an entry's label only on hover or selection (from the recorded scale run, as room-map-large).",
+ "snapshot": "data/mapscale-420.json",
+ "sizes": [
+  "1440x900"
+ ],
+ "steps": [
+  {
+   "view": "room"
+  },
+  {
+   "emit": [
+    "roomMapButton",
+    "triggered"
+   ]
+  },
+  {
+   "expect": {
+    "slot": "loadGraph"
+   }
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "set": [
+    "roomMap",
+    "lens",
+    "log"
+   ]
+  },
+  {
+   "set": [
+    "roomMap",
+    "following",
+    false
+   ]
+  },
+  {
+   "set": [
+    "roomMap",
+    "k",
+    200
+   ]
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "expectProp": [
+    "roomMap",
+    "logLo",
+    160
+   ]
+  },
+  {
+   "expectProp": [
+    "roomMap",
+    "logHi",
+    239
+   ]
+  },
+  {
+   "expectProp": [
+    "roomMapLogWindow",
+    "text",
+    "~Entries 161\u2013240 of 420"
+   ]
+  },
+  {
+   "shot": "middle"
+  },
+  {
+   "set": [
+    "roomMap",
+    "k",
+    419
+   ]
+  },
+  {
+   "wait": 1000
+  },
+  {
+   "expectProp": [
+    "roomMap",
+    "logLo",
+    340
+   ]
+  },
+  {
+   "expectProp": [
+    "roomMap",
+    "logHi",
+    419
+   ]
+  },
+  {
+   "expectProp": [
+    "roomMapLogWindow",
+    "text",
+    "~Entries 341\u2013420 of 420"
+   ]
+  },
+  {
+   "shot": "end"
+  }
+ ]
+}

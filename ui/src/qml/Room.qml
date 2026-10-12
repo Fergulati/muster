@@ -46,6 +46,9 @@ Item {
         category: "MusterUi"
         property bool detailsOpen: false
         property string detailsTab: "people"
+        // the room map: how many entries each room held when this device last closed it
+        // (a per-device convenience, never in the room)
+        property string mapSeen: "{}"
     }
     property alias detailsOpen: roomPrefs.detailsOpen
     property alias detailsTab: roomPrefs.detailsTab
@@ -58,6 +61,27 @@ Item {
     onDetailsTabChanged: if (room.detailsTab !== "privacy") room.detailsIntent = ""
     // The pinned line's Review: the thread scrolls to that proposal's card.
     signal jumpRequested(string intentId)
+    // The room map (exo-dde, RoomMap.qml): the room as a graph, over the conversation.
+    // Opened from ⋯ or from Privacy; a proposal opens it on that proposal.
+    property bool mapOpen: false
+    // however the map closes (its ×, Esc, a card), remember how much of the log it showed
+    onMapOpenChanged: if (!room.mapOpen && roomMap.replayOrder.length > 0) roomMap.seen(roomMap.replayOrder.length)
+    function openMap(lens, intentId) {
+        if (room.backend) room.backend.loadGraph("");
+        roomMap.lens = lens || "room";
+        roomMap.focusIntent = String(intentId || "");
+        roomMap.crossingsFilter = lens === "crossings" ? String(intentId || "") : "";
+        roomMap.selected = intentId ? "i:" + intentId : "";
+        var seen = {};
+        try { seen = JSON.parse(roomPrefs.mapSeen); } catch (e) { seen = {}; }
+        roomMap.lastSeen = seen[room.topic] !== undefined ? Number(seen[room.topic]) : -1;
+        room.detailsOpen = false;
+        room.mapOpen = true;
+    }
+    readonly property var graph: {
+        try { return JSON.parse(backend ? backend.graphJson : "{}"); }
+        catch (e) { return ({}); }
+    }
 
     // Admit someone who asked to join — from the notice in the thread, or People.
     function admitMember(identityHex) {
@@ -1347,12 +1371,13 @@ Item {
     // proposal panel (exo-720.12, U-10). A popup (Invite, ⋯, the picker) closes itself first.
     Shortcut {
         sequences: [StandardKey.Cancel]
-        enabled: room.visible && (room.detailsShown || room.composing)
-        onActivated: room.detailsShown ? room.closeDetails() : (room.composing = false)
+        enabled: room.visible && (room.mapOpen || room.detailsShown || room.composing)
+        onActivated: room.mapOpen ? (room.mapOpen = false) : room.detailsShown ? room.closeDetails() : (room.composing = false)
     }
     // the same, for a host where the Shortcut does not fire (see Main.qml's Ctrl+K)
     Keys.onEscapePressed: function (event) {
-        if (room.detailsShown) { room.closeDetails(); event.accepted = true; }
+        if (room.mapOpen) { room.mapOpen = false; event.accepted = true; }
+        else if (room.detailsShown) { room.closeDetails(); event.accepted = true; }
         else if (room.composing) { room.composing = false; event.accepted = true; }
         else event.accepted = false;
     }
@@ -1470,6 +1495,34 @@ Item {
         anchors.bottom: parent.bottom
         anchors.right: parent.right
         z: 5
+    }
+
+    // The room map (RoomMap.qml), over everything in the room while it is open
+    RoomMap {
+        id: roomMap
+        visible: room.joined && room.mapOpen
+        anchors.fill: parent
+        z: 6
+        // fed only while open: a closed map computes nothing (its folds and layout are
+        // per graph, and the graph refreshes every few seconds while the room is open)
+        graph: room.mapOpen ? room.graph : ({})
+        intents: room.mapOpen ? room.intents : []
+        members: room.mapOpen ? room.members : []
+        onCloseRequested: room.mapOpen = false
+        onSeen: function (count) {
+            var m = {};
+            try { m = JSON.parse(roomPrefs.mapSeen); } catch (e) { m = {}; }
+            m[room.topic] = count;
+            roomPrefs.mapSeen = JSON.stringify(m);
+        }
+        onOpenCard: function (intentId) { room.mapOpen = false; room.jumpRequested(intentId); }
+    }
+    // the map is a fold of the log: refreshed while it is open, on the room's slow cadence
+    Timer {
+        interval: 2000
+        running: room.joined && room.mapOpen
+        repeat: true
+        onTriggered: if (room.backend) room.backend.loadGraph("")
     }
 
     // Live refresh while a room is open. Delivery is polled (inbound arrives on the

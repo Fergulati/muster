@@ -9,12 +9,14 @@
 ## at the entry where the information actually leaves: the baseline metadata rows
 ## on every entry (the store node sees timing/topic for all of them, FS-9), the
 ## driver's declared rows at SUBMIT/FINAL (that is when the chain and the RPC see
-## the transaction, not at propose). Undeclared manifests yield a row that says so.
+## the transaction, not at propose); for an intent that settles in parts (a split), at
+## each COUNTED "settled" report — that payment is when its payer, payee and amount reach
+## the chain (exo-c7c). Undeclared manifests yield a row that says so. Every entry of every
+## prefix names the store node, since every entry is an envelope it keeps.
 ## Nothing here is per-viewer; it is the room's shared truth (invariant 4).
 
 import std/[json, tables, strutils, algorithm, sets]
 import ../log/log
-import ../drivers/driver
 import ../drivers/manifest
 import ../intents/disclosure
 import ./intents
@@ -31,53 +33,89 @@ type
     epoch*: int
     declared*: bool        ## false when the action's driver has not declared its disclosure
 
+proc foundersOf*(events: seq[Event], roster: seq[string]): seq[string] =
+  ## The members present at epoch 0: the roster minus every joiner the log admits. The
+  ## log names admits, not the founding set, so the caller supplies the roster.
+  var admitted = initHashSet[string]()
+  for e in events:
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "membership" and p[2] == "admit": admitted.incl p[3].toLowerAscii()
+  for m in roster:
+    if m.toLowerAscii() notin admitted: result.add m
+
 proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
-                 founders: seq[string]): seq[FlowRow] =
+                 founders: seq[string], sealedIn = initTable[string, int]()): seq[FlowRow] =
   ## `founders` are the members present at epoch 0 (the current roster minus every
   ## joiner the log admits — the caller derives it; the log does not name founders).
+  ## `sealedIn` is the session's record of which epoch's key opened each event
+  ## (CoordinationSession.sealedIn). An entry's epoch comes from it, and its readers are
+  ## the founders plus everyone admitted at or before that epoch. Only an event it does
+  ## not name falls back to the admissions before it in canonical order — right only
+  ## for a log whose events carry their parents (exo-dde.9).
   let ordered = canonicalOrder(events)
   var epoch = 0
-  var present = initHashSet[string]()
-  for f in founders: present.incl f
+  var admittedAt = initTable[string, int]()   # joiner → the epoch its admission opened
+  for e in ordered:
+    let p = e.key.split('/')
+    if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
+      try:
+        let ep = parseInt(p[1])
+        admittedAt[p[3]] = min(admittedAt.getOrDefault(p[3], ep), ep)
+      except ValueError: discard
   var manifests = initTable[string, ActionManifest]()   # intent id → manifest
-  proc membersNow(): seq[string] =
+  let partsAt = countedPartIndexes(events, driverFor)
+  proc membersAt(ep: int): seq[string] =
+    var present = initHashSet[string]()
+    for f in founders: present.incl f
+    for j, at in admittedAt: (if at <= ep: present.incl j)
     for m in present: result.add m
     result.sort()
+  var entryEpoch = 0
   proc addRows(res: var seq[FlowRow], i: int, kind, intentId: string,
                rows: seq[DisclosureRow], declared: bool) =
     for d in rows:
       res.add FlowRow(seq: i, kind: kind, intentId: intentId, field: d.field, to: d.to,
-                      members: (if d.to == obRoomMember: membersNow() else: @[]),
-                      epoch: epoch, declared: declared)
+                      members: (if d.to == obRoomMember: membersAt(entryEpoch) else: @[]),
+                      epoch: entryEpoch, declared: declared)
+  let envelope = @[row("timing", obStoreNode), row("topic", obStoreNode)]
   for i in 0 ..< ordered.len:
     let e = ordered[i]
     let p = e.key.split('/')
     if p.len >= 4 and p[0] == "membership" and p[2] == "admit":
       try: epoch = max(epoch, parseInt(p[1]))
       except ValueError: discard
-      present.incl p[3]
-      result.addRows(i, "admit", "", @[row("membership", obRoomMember), row("timing", obStoreNode),
-                                        row("topic", obStoreNode)], true)
+      entryEpoch = sealedIn.getOrDefault(eventId(e), epoch)
+      result.addRows(i, "admit", "", @[row("membership", obRoomMember)] & envelope, true)
       continue
+    entryEpoch = sealedIn.getOrDefault(eventId(e), epoch)
     if p.len >= 2 and p[0] == "message":
       result.addRows(i, "message", "", baselineDisclosure(), true)
       continue
-    if p.len < 3 or p[0] != "intent": continue
+    if p.len >= 4 and p[0] == "account" and p[^2] == "disclose":
+      # a member discloses an account into the room (accounts.nim): the room learns it
+      result.addRows(i, "account", "", @[row("account", obRoomMember)] & envelope, true)
+      continue
+    if p.len >= 3 and p[0] == "frost":
+      # a key ceremony's step: public ceremony data, inside the room
+      result.addRows(i, "ceremony", "", @[row("ceremony", obRoomMember)] & envelope, true)
+      continue
+    if p.len < 3 or p[0] != "intent":
+      # an entry this fold does not know still reached the store node as an envelope
+      result.addRows(i, (if p.len > 0: p[0] else: "entry"), "", envelope, true)
+      continue
     let id = p[1]
     if id notin manifests:
       let drv = driverFor(intentPolicyOf(events, id))
       manifests[id] = drv.manifest(effectFromJson(effectJsonOf(events, id)))
     let m = manifests[id]
+    proc outside(m: ActionManifest): seq[DisclosureRow] =
+      if m.declared: m.discloses else: @[row("undeclared", obChainObserver)]
     case p[2]
-    of "propose", "policy", "sig", "decline":
-      # inside the boundary + the store node's metadata; the driver's outside rows wait
-      # for submit — nothing has left the room yet.
-      result.addRows(i, p[2], id, baselineDisclosure(), m.declared)
     of "material":
       # a shared material discloses its PUBLIC face to the room now (the sharer's explicit
       # act, exo-45e K5); the field it fills reaches the OUTSIDE observers only at submit,
       # via the manifest's declared rows — so nothing extra leaves the room here.
-      var field = p[3]
+      var field = if p.len >= 4: p[3] else: "material"
       try: (let f = parseJson(e.value){"field"}.getStr(); (if f.len > 0: field = f))
       except CatchableError: discard
       result.addRows(i, "material", id, baselineDisclosure() & @[row(field, obRoomMember)], m.declared)
@@ -87,11 +125,23 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
       # itself it stays inside the room — nothing leaves until submit.
       result.addRows(i, "binding", id, baselineDisclosure() & @[row("key-binding", obRoomMember)], m.declared)
     of "submit", "final":
+      result.addRows(i, p[2], id, baselineDisclosure() & m.outside, m.declared)
+    of "part":
+      # a part report (exo-a90.2). Its payment left when a COUNTED settled report says so:
+      # that is when this part's payer, payee and amount reach the chain. A confirmation is
+      # the counterparty's own read; a report the fold refused put nothing on chain.
+      # the part's name may hold a '/': split on the last one, as countedParts does
+      let rest = if p.len >= 4: e.key["intent/".len + id.len + "/part/".len .. ^1] else: ""
+      let slash = rest.rfind('/')
+      let step = if slash > 0: rest[slash + 1 .. ^1] else: ""
       var rows = baselineDisclosure()
-      if m.declared: rows.add m.discloses
-      else: rows.add row("undeclared", obChainObserver)
-      result.addRows(i, p[2], id, rows, m.declared)
-    else: discard
+      if step == "settled" and partsAt.getOrDefault(id).getOrDefault(rest, -1) == i:
+        rows.add m.outside
+      result.addRows(i, (if step.len > 0: "part-" & step else: "part"), id, rows, m.declared)
+    else:
+      # propose · policy · sig · decline · context · read · attest · proposer · …: inside
+      # the boundary + the store node's metadata; nothing has left the room yet.
+      result.addRows(i, p[2], id, baselineDisclosure(), m.declared)
 
 proc toJson*(rows: seq[FlowRow]): JsonNode =
   result = newJArray()

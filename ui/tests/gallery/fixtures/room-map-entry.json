@@ -1,0 +1,48 @@
+{
+  "about": "An entry's guarantees on the room map (exo-f2d): a payment report \u2014 who wrote it is imperative, that it was paid is the payer's word.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "log"
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "selected",
+        "e:3df748cb2169acdd004a017cedf5a56c73e539439c3c6dbd8d939fcb6714d9ab"
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMapFacet",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

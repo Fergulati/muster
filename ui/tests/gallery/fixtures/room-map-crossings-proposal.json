@@ -1,0 +1,55 @@
+{
+  "about": "Crossings for one proposal (exo-737): what the split sent out and took in, with the chip that offers the whole room.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "set": [
+        "roomMap",
+        "crossingsFilter",
+        "0xa566cea2c7c46cff"
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "crossings"
+      ]
+    },
+    {
+      "wait": 600
+    },
+    {
+      "expectProp": [
+        "roomMapCrossingsChip",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapCrossingsSummary",
+        "text",
+        "~Out: 2 \u00b7 In: 1 \u00b7 Joined: 0"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

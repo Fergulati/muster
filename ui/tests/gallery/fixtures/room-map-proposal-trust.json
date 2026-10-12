@@ -1,0 +1,41 @@
+{
+  "about": "A proposal on the room map: before you approve, what it relies on, by whom (exo-f2d).",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "set": [
+        "roomMap",
+        "selected",
+        "i:0xa566cea2c7c46cff"
+      ]
+    },
+    {
+      "wait": 700
+    },
+    {
+      "expectProp": [
+        "roomMapReliance",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

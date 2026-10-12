@@ -1,0 +1,82 @@
+{
+  "about": "Replaying the room map (exo-dde G5, exo-655 C4): in the order members published; at the first entry only it is drawn, mid-way the split reads its state then.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "set": [
+        "roomMap",
+        "following",
+        false
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "k",
+        0
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMap",
+        "heldCount",
+        1
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapNow",
+        "text",
+        "~1 of 12"
+      ]
+    },
+    {
+      "shot": "first"
+    },
+    {
+      "set": [
+        "roomMap",
+        "k",
+        6
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMap",
+        "heldCount",
+        7
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapNow",
+        "text",
+        "~commitment by You"
+      ]
+    },
+    {
+      "shot": "middle"
+    }
+  ]
+}

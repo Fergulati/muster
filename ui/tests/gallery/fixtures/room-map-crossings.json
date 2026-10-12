@@ -1,0 +1,41 @@
+{
+  "about": "The room map's Crossings lens (exo-737): every time information left the room, came in, or a member joined, in order.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "crossings"
+      ]
+    },
+    {
+      "wait": 600
+    },
+    {
+      "expectProp": [
+        "roomMapCrossingsSummary",
+        "text",
+        "~Out: 2 \u00b7 In: 1 \u00b7 Joined: 1"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

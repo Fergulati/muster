@@ -1,0 +1,31 @@
+{
+  "about": "The room map as a later joiner sees it (exo-dde): Bob joined at epoch 1; what was sealed before is drawn as such.",
+  "snapshot": "data/split-bob-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "expectProp": [
+        "roomMapNode_o:store-node",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

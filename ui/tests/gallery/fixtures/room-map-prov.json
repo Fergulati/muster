@@ -1,0 +1,36 @@
+{
+  "about": "The room map's Provenance lens: the split's inputs into the signed bytes, the approvals over them, the parts after.",
+  "snapshot": "data/split-alice-map.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "emit": [
+        "roomMapButton",
+        "triggered"
+      ]
+    },
+    {
+      "expect": {
+        "slot": "loadGraph"
+      }
+    },
+    {
+      "set": [
+        "roomMap",
+        "lens",
+        "prov"
+      ]
+    },
+    {
+      "wait": 800
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

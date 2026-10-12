@@ -5,7 +5,7 @@ import QtQuick
 
 QtObject {
     // the contract's PROP names, in .rep order (the recorder snapshots exactly these)
-    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "flowJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson"]
+    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson"]
     // every SLOT call, in order: [{slot, args}]
     property var calls: []
     function record(slot, args) { calls.push({ slot: slot, args: Array.prototype.slice.call(args) }); }
@@ -50,6 +50,7 @@ QtObject {
     property string frostCeremoniesJson: "[]"
     property string frostCeremonyJson: "{}"
     property string flowJson: "{\"rows\":[],\"matrix\":{}}"
+    property string graphJson: "{}"
     property string policyJson: "{\"policy\":\"threshold\",\"kind\":\"threshold\"}"
     property string policyErrorJson: "{}"
     property string accountsJson: "[]"
@@ -139,6 +140,7 @@ QtObject {
     function frostCeremonyJoin(ceremonyId) { record("frostCeremonyJoin", arguments); }
     function loadFrostCeremonies() { record("loadFrostCeremonies", arguments); }
     function loadFlow() { record("loadFlow", arguments); }
+    function loadGraph(roomTopic) { record("loadGraph", arguments); }
     function loadRlnStatus() { record("loadRlnStatus", arguments); }
     function loadKeystoreStatus() { record("loadKeystoreStatus", arguments); }
     function keystoreSelect(address) { record("keystoreSelect", arguments); }

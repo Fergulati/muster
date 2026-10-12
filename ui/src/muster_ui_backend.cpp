@@ -946,6 +946,13 @@ void MusterUiBackend::loadFlow()
     setFlowJson(modules().muster_module.coordinate_flow());
 }
 
+void MusterUiBackend::loadGraph(const QString &roomTopic)
+{
+    // coordinate_graph → the room map: the room's nodes and edges, folded from the log
+    // this instance holds (exo-dde). A pure fold, no RPC; the view replays it by seq.
+    setGraphJson(modules().muster_module.coordinate_graph(roomTopic));
+}
+
 void MusterUiBackend::setPolicy(const QString &kind)
 {
     // coordinate_set_policy → choose the room's driver (safe | threshold). The same
@@ -1085,6 +1092,20 @@ void MusterUiBackend::onContextReady()
                 qInfo().noquote() << "[muster_ui] AUTOTITLE conversations ->" << conversationsJson();
             }
             QTimer::singleShot(3000, this, [this]() { requestJoin(); });
+            // Room-map scale self-test (exo-dde.8): MUSTER_AUTOCHAT=<n> posts n chat lines
+            // into the joined room through the module call the composer's send makes, so a
+            // recorded room is long enough for the map's windowing to show. The thread is
+            // re-read once at the end, not after every line as a person's send does.
+            const int autochat = qgetenv("MUSTER_AUTOCHAT").toInt();
+            if (autochat > 0) {
+                QTimer::singleShot(2000, this, [this, autochat]() {
+                    for (int i = 0; i < autochat; ++i)
+                        modules().muster_module.coordinate_post_message(
+                            QStringLiteral("scale line %1 of %2").arg(i + 1).arg(autochat));
+                    loadMessages();
+                    qInfo() << "[muster_ui] AUTOCHAT posted" << autochat;
+                });
+            }
             // Invite self-test: MUSTER_AUTOINVITE=<contact alias> invites that contact to
             // this room once joined, exactly as the composer's "Open the room with them"
             // does (sendInvite with the contact's chat id). Seeded demo peers carry the

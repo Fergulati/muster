@@ -289,6 +289,11 @@ class MusterUi
     // matrix:{observer:[fields]}}. A fold over the sealed log (no RPC), refreshed on
     // the slower tick. Lands on flowJson.
     SLOT(void loadFlow())
+    // The room map (coordinate_graph, exo-dde, docs/design/room-map.md): the room as nodes
+    // and edges folded from the log — {viewer, readFrom, seqMax, epochs, nodes, edges}.
+    // Structure only; labels come from intentsJson. An empty topic is the current room.
+    // Lands on graphJson.
+    SLOT(void loadGraph(const QString &roomTopic))
 
     PROP(QString health="unknown" READONLY)
 
@@ -395,6 +400,8 @@ class MusterUi
     // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
     // observer matrix + per-action rows; the store node is always present (FS-9).
     PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)
+    // The room map (loadGraph): nodes and edges, each with the log position it appears at.
+    PROP(QString graphJson="{}" READONLY)
 
     // The room's coordination policy — its driver — as JSON {policy, threshold,
     // domain}. The view shows which policy governs the room and picks it.

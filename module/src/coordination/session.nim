@@ -34,7 +34,9 @@ type
     lastBeacon: seq[byte]        ## the join key we last announced
     lastBeaconAt: float          ## when (epoch seconds) — answers to beacon requests are rate-limited
     answered: HashSet[string]    ## beacon-request nonces already answered (a store catchup window re-delivers them)
+    sealedIn*: Table[string, int] ## event id → the earliest epoch whose key opened (or sealed) it here; log + keys, never position (exo-dde)
     authorChecked*: Table[string, bool]  ## exo-f76: event id → its author signature verifies (authorship.nim). A pure function of (topic, event), so safe to cache
+    afterChecked*: Table[string, bool]   ## C5: (event id, afterSig, after) → the author signed that `after` (authorship.afterVerified); pure, so safe to cache
 
 # Every frame on the topic carries a 1-byte kind, so the membership handshake
 # shares the topic with data without either misreading the other.
@@ -66,7 +68,15 @@ proc encodeEvent(e: Event): seq[byte] =
   ## recomputed on ingest, so this is transport framing, not the signed form.
   var ps = newJArray()
   for p in e.parents: ps.add %p
-  toBytes($(%*{"parents": ps, "key": e.key, "value": e.value}))
+  var j = %*{"parents": ps, "key": e.key, "value": e.value}
+  if e.after.len > 0:
+    # only when present: a client from before causal order ignores the field, and the id
+    # never covers it (docs/design/causal-parents.md §3.3)
+    var af = newJArray()
+    for a in e.after: af.add %a
+    j["after"] = af
+  if e.afterSig.len > 0: j["afterSig"] = %e.afterSig
+  toBytes($j)
 
 proc decodeEvent(b: seq[byte]): Event =
   let j = parseJson(toStr(b))
@@ -74,6 +84,9 @@ proc decodeEvent(b: seq[byte]): Event =
   result.value = j["value"].getStr()
   if j.hasKey("parents") and j["parents"].kind == JArray:
     for p in j["parents"]: result.parents.add p.getStr()
+  if j.hasKey("after") and j["after"].kind == JArray:
+    for a in j["after"]: result.after.add a.getStr()
+  if j.hasKey("afterSig") and j["afterSig"].kind == JString: result.afterSig = j["afterSig"].getStr()
 
 proc announceBeacon*(s: CoordinationSession) =
   ## Announce the room's current join key, so someone who knows only the topic can ask
@@ -98,7 +111,11 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
   try:
     case kind
     of FrameData:
-      s.log.ingest(decodeEvent(s.crypto.open(body)))
+      let (ep, plain) = s.crypto.openedEpoch(body)
+      let ev = decodeEvent(plain)
+      s.log.ingest(ev)
+      let id = eventId(ev)
+      if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
     of FrameJoinRequest:
       # sealed to a join key; only a member opens it. A request for another room, expired,
       # or not signed by the identity it names is dropped here: nobody asks in another's name
@@ -135,9 +152,20 @@ proc newCoordinationSession*(transport: Transport, crypto: ConversationCrypto,
 proc topic*(s: CoordinationSession): string = s.topic
   ## The room's content topic — what an author signature binds to (authorship.nim).
 
-proc publish*(s: CoordinationSession, e: Event) =
-  ## Record locally, then broadcast the sealed event to the room.
+proc publish*(s: CoordinationSession, ev: Event) =
+  ## Record locally, then broadcast the sealed event to the room. A new event names the
+  ## log's heads in `after` (what this member had seen; never part of the id, never read
+  ## by a fold). An event the log already holds — a re-announce, a second submit — is
+  ## re-sealed as the stored copy, so it carries its original order, not a fresh one
+  ## (docs/design/causal-parents.md §3.2).
+  var e = ev
+  let id = eventId(e)
+  let held = s.log.find(id)
+  if held.found: e = held.event
+  elif e.after.len == 0: e.after = s.log.heads()
   s.log.ingest(e)
+  let ep = (try: s.crypto.epoch() except CatchableError: -1)
+  if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
   discard s.transport.publish(s.topic, @[FrameData] & s.crypto.seal(encodeEvent(e)))
 
 # ── membership handshake ───────────────────────────────────────────────────────
@@ -253,6 +281,9 @@ proc poll*(s: CoordinationSession) =
   ## (LocalTransport) it is a no-op — messages already arrived via publish. The
   ## host calls this in its loop.
   s.transport.poll()
+
+proc heads*(s: CoordinationSession): seq[EventId] = s.log.heads()
+  ## what a new event published now would name in `after`
 
 proc state*(s: CoordinationSession): State = s.log.state()
 proc digest*(s: CoordinationSession): string = s.log.state().stateDigest
