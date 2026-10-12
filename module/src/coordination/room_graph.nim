@@ -24,6 +24,8 @@
 
 import std/[json, strutils, tables, sets, algorithm]
 import ../log/log
+import ../dcbor/dcbor
+import ../hashing/hash_input
 import ../intents/disclosure
 import ./intents
 import ./flow
@@ -59,6 +61,8 @@ type
     epochs*: seq[RoomEpoch]
     nodes*: seq[GraphNode]
     edges*: seq[GraphEdge]
+    crossings*: seq[JsonNode]     ## every boundary crossing, in causal order (exo-737)
+    fingerprints*: seq[JsonNode]  ## per epoch: {fromEpoch, entries, digest} (exo-26a)
 
 const AuthorSigned = ["message", "decline", "material", "account", "join", "part-settled",
                       "part-confirmed", "proposer"]
@@ -77,6 +81,102 @@ proc rawKind(p: seq[string]): string =
   of "frost": (if p.len >= 3: p[2] else: "ceremony")
   of "membership": (if p.len >= 3: p[2] else: "membership")
   else: p[0]
+
+# ── credibility: what each entry and connection guarantees, against whom, and how ──
+# The vocabulary is the claims registry's (docs/design/action-manifest.md §2): imperative
+# — the discretion to defect is removed structurally; motivational — a named party could
+# defect but has a reason not to; exposed — the information reaches an unbound observer;
+# not-applicable — nothing is promised. Muster classifies; it never scores. Every line
+# below restates a guarantee the code already enforces (the guarantee strings in
+# intents.logProvenance, the drivers, authorship.nim); none adds one (exo-f2d).
+
+proc facet(about, class, party, mechanism: string): JsonNode =
+  %*{"about": about, "class": class, "party": party, "mechanism": mechanism}
+
+proc facetsFor(kind, attestation, source: string, counted: bool, epoch: int): JsonNode =
+  result = newJArray()
+  result.add facet("who could read it", "imperative", "",
+    "sealed under epoch " & $epoch & "'s key: only the members of that epoch could open it")
+  result.add facet("that it exists", "exposed", "the store node",
+    "it keeps every envelope, so it sees when this one arrived and which topic it is on, never what it says")
+  if not counted:
+    result.add facet("this entry", "not-applicable", "",
+      "the fold refused it, so it counts for nothing and names no one")
+    return
+  case kind
+  of "message":
+    result.add facet("who wrote it", "imperative", "", "its author signed it, bound to this room; the room's views drop one whose signature fails")
+    result.add facet("what it says", "motivational", "its author", "a member's word, as any message is")
+  of "propose":
+    result.add facet("who could place it", "imperative", "", "sealed under the epoch key: only a member could have placed it")
+    result.add facet("what is signed", "imperative", "", "every device re-derives the materialization from the effect and refuses on mismatch (F-4)")
+  of "proposer":
+    result.add facet("who proposed it", "imperative", "", "the proposer's signed claim, bound to this room and to exactly what was proposed")
+  of "policy":
+    result.add facet("how it is decided", "imperative", "", "every member folds the identical driver (invariant 6)")
+  of "context":
+    result.add facet("where an approval counts", "imperative", "", "every approval commits to it, so one is worthless in another environment, account or slot, or after expiry (invariant 2)")
+  of "read":
+    result.add facet("what it says", "motivational", (if source.len > 0: source else: "the proposer's source"),
+      "what the source reported; recorded, not proof the world agrees (F-10)")
+    result.add facet("where it came from", "imperative", "", "recorded with its source before any approval, and every approval names it (invariant 10)")
+  of "sig":
+    result.add facet("who approved", "imperative", "", "the driver verified the signature recovers to a configured signer; a non-member never reaches the fold")
+    case attestation
+    of "committed":
+      result.add facet("what the approver saw", "imperative", "", "signed over the context, the materialization and the origin of every input (invariants 2 and 10)")
+    of "unattested":
+      result.add facet("what the approver saw", "motivational", "the approver",
+        "counted, but signed outside muster: the approver committed to no inputs here")
+    else: discard
+  of "attest":
+    result.add facet("what the approver saw", "imperative", "", "the approving key signed the context, the materialization and the provenance of every input; every member re-derives what it must cover")
+  of "binding":
+    result.add facet("whose key approved", "imperative", "", "the key's own signature ties it to the member's admitted identity (F-14)")
+  of "decline":
+    result.add facet("who declined", "imperative", "", "signed by the decliner, bound to this room")
+    result.add facet("what it does", "imperative", "", "final: the decliner's approval counts for nothing")
+  of "admit":
+    result.add facet("who reads what", "imperative", "", "the room re-keyed forward: the joiner reads from here on, nothing before (F-16)")
+    result.add facet("who was let in", "motivational", "the admitting member", "any member may decide to admit; the room trusts that judgment")
+  of "part-settled":
+    result.add facet("who wrote it", "imperative", "", "signed by the party it names, bound to this room")
+    result.add facet("that it was paid", "motivational", "the payer", "a claim until the counterparty confirms it from their own read")
+  of "part-confirmed":
+    result.add facet("that it arrived", "motivational", "the counterparty and their own endpoint",
+      "their own read of their own infrastructure, or their word that it arrived outside muster (F-10)")
+  of "submit":
+    result.add facet("what was sent", "motivational", "the submitting member", "their report of what they sent; the chain's answer arrives as final")
+  of "final":
+    result.add facet("that it settled", "motivational", "the reader's endpoint", "observed from the chain through the reader's own endpoint; attested unless proof-checked (F-10)")
+  of "account":
+    result.add facet("who disclosed it", "imperative", "", "signed by the member who disclosed it")
+    result.add facet("that it is as disclosed", "motivational", "each reader's endpoint", "each client checks it against the chain before acting from it")
+  of "material":
+    result.add facet("who shared it", "imperative", "", "signed by the sharer")
+    result.add facet("that it is theirs", "motivational", "the sharer", "only a driver-verified signature proves control of what was shared")
+  of "join", "open", "pmsg1", "pmsg2":
+    result.add facet("the ceremony step", "imperative", "", "public ceremony data every member checks and computes from the log")
+  else:
+    result.add facet("what it means", "not-applicable", "", "no guarantee is declared for this kind of entry")
+
+proc edgeCredibility(e: GraphEdge, obsLabel: proc (id: string): string): tuple[class, party, mechanism: string] =
+  case e.kind
+  of "leaves":
+    ("exposed", obsLabel(e.dst), "the driver's manifest declares it; it leaves when the room settles, and cannot be taken back")
+  of "enters":
+    ("motivational", "the source it came from", "an outside read, recorded so its origin is accountable; not proof the world agrees (F-10)")
+  of "approved":
+    if e.attrs{"attestation"}.getStr() == "committed": ("imperative", "", "a driver-verified signature over the inputs it commits to")
+    else: ("motivational", "the approver", "a driver-verified signature, made outside muster, committing to no inputs here")
+  of "part":
+    if e.attrs{"step"}.getStr() == "settled": ("motivational", "the payer", "a signed claim until the counterparty confirms it")
+    else: ("motivational", "the counterparty", "their own read, or their word")
+  of "input":
+    if e.attrs{"kind"}.getStr() == "read": ("motivational", "the source", "an outside read the signature names (invariant 10)")
+    else: ("imperative", "", "a member's sealed entry the signature names (invariant 10)")
+  of "parent": ("imperative", "", "a hash link: the child's id commits to it")
+  else: ("imperative", "", "a signed entry by the member it names")
 
 proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[string],
                       viewer: string, sealedIn = initTable[string, int]()): RoomGraph =
@@ -196,6 +296,13 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       elif p.len >= 4 and p[0] == "intent" and p[2] == "proposer":
         basis = "author-signed"; author = p[3]; attrs["counted"] = %true
     attrs["basis"] = %basis
+    var source = ""
+    if attrs["kind"].getStr() == "read":
+      try: source = parseJson(e.value){"source"}.getStr()
+      except CatchableError: discard
+      if source.len > 0: attrs["source"] = %source
+    attrs["facets"] = facetsFor(attrs["kind"].getStr(), attrs{"attestation"}.getStr(), source,
+                                attrs["counted"].getBool(), epochAt[i])
     addNode(id, "entry", i, epochAt[i], attrs)
     for par in e.parents:
       if par in idAt: addEdge(idAt[par], id, "parent", i)
@@ -313,6 +420,76 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
     if e.src == "o:outside" and (outsideAt < 0 or e.seq < outsideAt): outsideAt = e.seq
   if outsideAt >= 0: addNode("o:outside", "outside", outsideAt, epochAt[outsideAt], newJObject())
 
+  # ── every connection's credibility (exo-f2d) ──────────────────────────────────
+  proc obsLabel(id: string): string =
+    case id
+    of "o:store-node": "the store node"
+    of "o:rpc-provider": "the RPC provider"
+    of "o:chain-observer": "anyone reading the chain"
+    of "o:target-module": "the module the call reaches"
+    else: id
+  for e in result.edges.mitems:
+    let c = edgeCredibility(e, obsLabel)
+    e.attrs["credibility"] = %c.class
+    e.attrs["party"] = %c.party
+    e.attrs["mechanism"] = %c.mechanism
+
+  # ── crossings: what left the room, what came in, who joined (exo-737) ────────────
+  result.crossings.add %*{"seq": -1, "dir": "out", "kind": "envelopes", "observer": "o:store-node",
+    "fields": ["timing", "topic"], "entries": ordered.len, "credibility": "exposed", "party": "the store node",
+    "mechanism": "every entry is an envelope the store node keeps: it sees when each arrived and its topic, never what it says"}
+  for e in result.edges:
+    if e.kind != "leaves": continue
+    result.crossings.add %*{"seq": e.seq, "dir": "out", "kind": "leaves", "observer": e.dst,
+      "fields": e.attrs["fields"], "intent": e.src[2 .. ^1], "entry": "e:" & eventId(ordered[e.seq]),
+      "declared": e.attrs{"declared"}.getBool(true),
+      "credibility": "exposed", "party": obsLabel(e.dst), "mechanism": e.attrs["mechanism"]}
+  for n in result.nodes:
+    if n.kind != "entry" or not n.attrs["counted"].getBool(): continue
+    let k = n.attrs["kind"].getStr()
+    let intent = n.attrs{"intent"}.getStr()
+    case k
+    of "read":
+      result.crossings.add %*{"seq": n.seq, "dir": "in", "kind": "read", "source": n.attrs{"source"}.getStr(),
+        "intent": intent, "entry": n.id, "credibility": "motivational",
+        "party": (if n.attrs{"source"}.getStr().len > 0: n.attrs{"source"}.getStr() else: "the proposer's source"),
+        "mechanism": "recorded before any approval; every approval names it (invariant 10)"}
+    of "final", "part-confirmed":
+      result.crossings.add %*{"seq": n.seq, "dir": "in", "kind": k, "source": "the chain, through the reader's own endpoint",
+        "intent": intent, "entry": n.id, "credibility": "motivational",
+        "party": (if k == "final": "the reader's endpoint" else: "the counterparty and their own endpoint"),
+        "mechanism": "an external read, graded attested unless proof-checked (F-10)"}
+    of "admit":
+      result.crossings.add %*{"seq": n.seq, "dir": "join", "kind": "admit", "member": n.attrs{"subject"}.getStr(),
+        "epoch": n.epoch, "entry": n.id, "credibility": "imperative", "party": "",
+        "mechanism": "the room re-keyed forward: they read from epoch " & $n.epoch & " on, nothing before (F-16)"}
+    of "account", "material":
+      result.crossings.add %*{"seq": n.seq, "dir": "in", "kind": k, "member": n.attrs{"account"}.getStr(),
+        "intent": intent, "entry": n.id, "credibility": "imperative", "party": "",
+        "mechanism": (if k == "account": "a member brought an account in, signed; each client checks it against the chain"
+                      else: "a member shared its public face, signed; only that face, never a handle")}
+    else: discard
+  result.crossings.sort(proc (a, b: JsonNode): int =
+    cmp((a["seq"].getInt(), a["dir"].getStr(), a{"observer"}.getStr()), (b["seq"].getInt(), b["dir"].getStr(), b{"observer"}.getStr())))
+
+  # ── fingerprints: what a member holds from each epoch on, comparable aloud (exo-26a) ──
+  # Offered from an epoch only when an entry of that very epoch is held, so the list is a
+  # function of what is held, never of who is looking: a joiner holds nothing from before
+  # its admission and so offers no fingerprint from then.
+  for ep in result.epochs:
+    var ids: seq[string]
+    var holdsEpoch = false
+    for n in result.nodes:
+      if n.kind == "entry" and n.epoch >= ep.epoch: ids.add n.id[2 .. ^1]
+      if n.kind == "entry" and n.epoch == ep.epoch: holdsEpoch = true
+    if not holdsEpoch: continue
+    ids.sort()
+    var arr: seq[CborValue]
+    for x in ids: arr.add cbText(x)
+    let d = toHex(digest(hashInput("muster.room-fingerprint.v1", @[
+      ("fromEpoch", cbUint(uint64(ep.epoch))), ("ids", cbArray(arr))])))
+    result.fingerprints.add %*{"fromEpoch": ep.epoch, "entries": ids.len, "digest": d}
+
   # a stable order for the wire: nodes by (seq, id), edges by (seq, src, dst, kind)
   result.nodes.sort(proc (a, b: GraphNode): int = cmp((a.seq, a.id), (b.seq, b.id)))
   result.edges.sort(proc (a, b: GraphEdge): int = cmp((a.seq, a.src, a.dst, a.kind), (b.seq, b.src, b.dst, b.kind)))
@@ -328,4 +505,4 @@ proc toJson*(g: RoomGraph): JsonNode =
   for ep in g.epochs:
     epochs.add %*{"epoch": ep.epoch, "fromSeq": ep.fromSeq, "admitted": ep.admitted}
   %*{"viewer": g.viewer, "readFrom": g.readFrom, "seqMax": g.seqMax, "epochs": epochs,
-     "nodes": nodes, "edges": edges}
+     "nodes": nodes, "edges": edges, "crossings": g.crossings, "fingerprints": g.fingerprints}

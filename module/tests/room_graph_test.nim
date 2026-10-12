@@ -222,4 +222,79 @@ block:
     doAssert st["state"].getStr() == want
   echo "11. positions are causal; a proposal's state per step is the fold over the causal prefix OK"
 
+proc facets(n: GraphNode): seq[JsonNode] = n.attrs["facets"].getElems()
+proc classes(n: GraphNode): seq[string] = n.facets.mapIt(it["class"].getStr())
+
+block:
+  # V1 (exo-f2d): every held entry says what it guarantees, against whom, and how
+  for n in g.nodes:
+    if n.kind != "entry": continue
+    doAssert n.attrs.hasKey("facets") and n.facets.len > 0, $n
+    for f in n.facets:
+      doAssert f["class"].getStr() in ["imperative", "motivational", "exposed", "not-applicable"]
+      doAssert f["mechanism"].getStr().len > 0
+      if f["class"].getStr() in ["motivational", "exposed"]: doAssert f["party"].getStr().len > 0, $f
+    # who could read it: inside the epoch, imperative; the store node, exposed — on every entry
+    doAssert n.facets.anyIt(it["class"].getStr() == "imperative" and it["about"].getStr() == "who could read it")
+    doAssert n.facets.anyIt(it["class"].getStr() == "exposed" and it["party"].getStr() == "the store node")
+  # a counted payment report: who wrote it is imperative, that it was paid is the payer's word
+  let paid = g.edgesOf("part").filterIt(it.dst == "i:" & idB and it.src == "m:" & bob)
+  doAssert paid.len == 1
+  var settled: GraphNode
+  for n in g.nodes:
+    if n.kind == "entry" and n.attrs["kind"].getStr() == "part-settled" and n.attrs["counted"].getBool(): settled = n
+  doAssert settled.facets.anyIt(it["class"].getStr() == "motivational" and "payer" in it["party"].getStr()), $settled.facets
+  doAssert settled.facets.anyIt(it["class"].getStr() == "imperative" and it["about"].getStr() == "who wrote it")
+  # the chain's answer is an outside read: motivational, on the reader's endpoint
+  let fin = g.entryOf("intent/" & idA & "/final", story)
+  doAssert fin.facets.anyIt(it["class"].getStr() == "motivational" and "endpoint" in it["party"].getStr())
+  # an admission: who reads what is imperative (F-16); who was let in is a member's decision
+  let adm = g.entryOf("membership/1/admit/" & carol, story)
+  doAssert adm.facets.anyIt(it["class"].getStr() == "imperative" and "F-16" in it["mechanism"].getStr())
+  doAssert adm.facets.anyIt(it["class"].getStr() == "motivational" and "admitting member" in it["party"].getStr())
+  # a refused entry promises nothing
+  let o = canonicalOrder(story)
+  let mal = g.node("e:" & eventId(o[o.mapIt(it.key).find("intent/" & idB & "/sig/mallory/1")]))
+  doAssert mal.facets.anyIt(it["class"].getStr() == "not-applicable")
+  # connections carry a class too: what left is exposed to its observer
+  for e in g.edgesOf("leaves"):
+    doAssert e.attrs["credibility"].getStr() == "exposed" and e.attrs["party"].getStr().len > 0
+  for e in g.edgesOf("enters"): doAssert e.attrs["credibility"].getStr() == "motivational"
+  for e in g.edgesOf("bound") & g.edgesOf("proposed"): doAssert e.attrs["credibility"].getStr() == "imperative"
+  echo "12. every entry and connection is graded imperative, motivational or exposed, with its party and mechanism OK"
+
+block:
+  # V2 (exo-737): the crossings ledger — every leave, every outside read, every admission
+  let cj = g.toJson()["crossings"].getElems()
+  let outs = cj.filterIt(it["dir"].getStr() == "out" and it["seq"].getInt() >= 0)
+  doAssert outs.len == g.edgesOf("leaves").len, $outs.len
+  for c in outs:
+    doAssert c["observer"].getStr().startsWith("o:") and c["fields"].len > 0 and c["entry"].getStr().startsWith("e:")
+  doAssert cj.anyIt(it["dir"].getStr() == "out" and it["observer"].getStr() == "o:store-node" and it["seq"].getInt() == -1),
+    "the store node's summary: every envelope"
+  doAssert cj.anyIt(it["dir"].getStr() == "in" and it["kind"].getStr() == "final")
+  doAssert cj.anyIt(it["dir"].getStr() == "join" and it["member"].getStr() == "m:" & carol and it["epoch"].getInt() == 1)
+  for c in cj: doAssert c.hasKey("credibility") and c.hasKey("mechanism")
+  # in causal order
+  var last = -2
+  for c in cj: (doAssert c["seq"].getInt() >= last; last = c["seq"].getInt())
+  echo "13. the crossings ledger names every leave, read and admission, in order OK"
+
+block:
+  # V3 (exo-26a): a fingerprint per epoch two members can compare. Carol holds the room
+  # from her admission on; her fingerprint from epoch 1 equals alice's from epoch 1.
+  let o = canonicalOrder(story)
+  var at = 0
+  while not o[at].key.startsWith("membership/"): inc at
+  let gc = reduceRoomGraph(o[at .. ^1], both, founders, carol)
+  proc fp(gr: RoomGraph, ep: int): string =
+    for f in gr.toJson()["fingerprints"].getElems(): (if f["fromEpoch"].getInt() == ep: return f["digest"].getStr())
+    ""
+  doAssert fp(g, 1).len == 64 and fp(g, 1) == fp(gc, 1), "the same room from epoch 1 reads the same on both"
+  doAssert fp(g, 0).len == 64 and fp(gc, 0) == "", "carol has no epoch-0 fingerprint to give"
+  var tampered = story
+  tampered.add Event(key: "message/extra", value: "{}")
+  doAssert fp(reduceRoomGraph(tampered, both, founders, alice), 1) != fp(g, 1), "one more entry, another fingerprint"
+  echo "14. a fingerprint per epoch, equal for members holding the same entries OK"
+
 echo "room_graph_test: all OK"

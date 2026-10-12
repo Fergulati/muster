@@ -3078,7 +3078,11 @@ proc musterCoordinateGraph(roomTopic: string): string =
   s.poll()
   let events = s.roomEvents()
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
-  result = $reduceRoomGraph(events, driverFor, s.roomFounders(events), me, s.sealedIn).toJson()
+  var j = reduceRoomGraph(events, driverFor, s.roomFounders(events), me, s.sealedIn).toJson()
+  # what the room's views refused to read: entries whose author signature failed (exo-f76),
+  # kept in the raw log, never in a fold — so a member can see the room dropped something
+  j["dropped"] = %max(0, s.log.allEvents().len - events.len)
+  result = $j
   if gLpDebug: stderr.writeLine("MUSTER-LP graph " & result)
 
 proc musterCoordinateAuthorization(intentId: string): string =
