@@ -1499,17 +1499,16 @@ proc splitUnresolvedFor(intentId, part: string): bool =
     if e.pp.intentId == intentId and e.pp.part == part and e.unresolved: return true
   false
 
-proc splitPump() =
-  if gSession == nil or epochTime() - gSplitPumpAt < 2.0: return
-  gSplitPumpAt = epochTime()
-  let ks = moduleKeystore()
-  loadSplitBook()
-  let now = epochTime()
-  let seamOf = proc (pp: PendingPart): PartSeam = seamOfPending(gSession, pp)
-  var note: proc (msg: string) = nil
-  if gLpDebug: note = proc (msg: string) = stderr.writeLine("MUSTER-LP split pending " & msg)
+proc splitPumpRoom(topic: string, sess: CoordinationSession, ks: Keystore, now: float,
+                   note: proc (msg: string)): (bool, bool) =
+  ## One joined room's share of the split pump: its payments in flight, the parts I confirm
+  ## from my own read, and the shares a final settle-up covered. Runs for every room I am
+  ## in, not only the one on screen (exo-408 item 1): a payment made in a room I have
+  ## switched away from still completes, and a payment to me there is still confirmed.
+  ## Returns (whether the book changed, whether a private split waits on me here).
+  let seamOf = proc (pp: PendingPart): PartSeam = seamOfPending(sess, pp)
   var changed = false
-  for (pp, outcome, said) in gSplitBook.pumpBook(gTopic, gSession, ks, driverFor, seamOf, now, note):
+  for (pp, outcome, said) in gSplitBook.pumpBook(topic, sess, ks, driverFor, seamOf, now, note):
     changed = true
     let seam = gSplitSeams.getOrDefault(pp.intentId, PartSeam())
     let full = (if said.len > 0: said & " — " & outcome else: outcome)
@@ -1519,23 +1518,12 @@ proc splitPump() =
                         "tx": seam.landedRef(pp.transfer, pp.tx),
                         "outcome": full, "at": int64(now)}
     if gSplitRecent.len > 20: gSplitRecent.delete(0)
-  if changed: saveSplitBook()
-  # a private split waiting on me — mine to pay or to confirm — keeps my LEZ wallet's scan
-  # moving from the proposal on, so it is at the tip when the payment has to be sent or
-  # found (a real scan is slow: lez_core stores after every block). One bounded step a
-  # tick while behind, one every 15s at the tip; none while my wallet proves (exo-270a).
   var lezWaits = false
-  for v in partsAwaiting(gSession.roomEvents(), driverFor, myIdentity(ks)):
+  for v in partsAwaiting(sess.roomEvents(), driverFor, myIdentity(ks)):
     if splitPolicy(v.policy).kind == "lez-split": lezWaits = true
-  if lezWaits and epochTime() >= gLezScanNext:
-    try:
-      let (ran, code) = splitLezAdapter().scanStep(minGapS = 1.5)
-      if ran: gLezScanNext = epochTime() + (if code == LezSyncOk: 15.0 else: 0.0)
-    except CatchableError:
-      gLezScanNext = epochTime() + 15.0     # the zone unreachable: try again later
   # the creditor's side: confirm what my own read shows, per chain the room's splits use
   var policies: seq[string]
-  for v in reduceIntentViews(gSession.roomEvents(), driverFor):
+  for v in reduceIntentViews(sess.roomEvents(), driverFor):
     # a Monero request is read from "executable" on: its debtors pay outside muster, and the
     # creditor's own wallet confirms a part whether or not anyone reported it (exo-dcc.5)
     if v.parts.len == 0 or v.state notin ["executable", "submitted", "settling"]: continue
@@ -1545,15 +1533,41 @@ proc splitPump() =
       policies.add v.policy
   for pol in policies:
     try:
-      let confirmed = liveConfirmParts(gSession, ks, driverFor, splitSeamFor(pol))
+      let confirmed = liveConfirmParts(sess, ks, driverFor, splitSeamFor(pol))
       if gLpDebug and confirmed.len > 0: stderr.writeLine("MUSTER-LP split confirmed " & $(%confirmed))
     except CatchableError: discard
   # a settle-up final (exo-3c6): the shares it covered that I am owed, marked received —
   # no chain read is involved (the reference is the settle-up), so no seam is used
   try:
-    let covered = settleCovered(gSession, ks, driverFor, PartSeam())
+    let covered = settleCovered(sess, ks, driverFor, PartSeam())
     if gLpDebug and covered.len > 0: stderr.writeLine("MUSTER-LP settle-up covered " & $(%covered))
   except CatchableError: discard
+  (changed, lezWaits)
+
+proc splitPump() =
+  if gSessions.len == 0 or epochTime() - gSplitPumpAt < 2.0: return
+  gSplitPumpAt = epochTime()
+  let ks = moduleKeystore()
+  loadSplitBook()
+  let now = epochTime()
+  var note: proc (msg: string) = nil
+  if gLpDebug: note = proc (msg: string) = stderr.writeLine("MUSTER-LP split pending " & msg)
+  var changed, lezWaits = false
+  for topic, sess in gSessions:
+    let (c, l) = splitPumpRoom(topic, sess, ks, now, note)
+    changed = changed or c
+    lezWaits = lezWaits or l
+  if changed: saveSplitBook()
+  # a private split waiting on me — mine to pay or to confirm — keeps my LEZ wallet's scan
+  # moving from the proposal on, so it is at the tip when the payment has to be sent or
+  # found (a real scan is slow: lez_core stores after every block). One bounded step a
+  # tick while behind, one every 15s at the tip; none while my wallet proves (exo-270a).
+  if lezWaits and epochTime() >= gLezScanNext:
+    try:
+      let (ran, code) = splitLezAdapter().scanStep(minGapS = 1.5)
+      if ran: gLezScanNext = epochTime() + (if code == LezSyncOk: 15.0 else: 0.0)
+    except CatchableError:
+      gLezScanNext = epochTime() + 15.0     # the zone unreachable: try again later
   if gLpDebug and lezWaits:
     # a private split waits on me: say how far my wallet's scan has got
     let (synced, tip) = splitLezAdapter().scanProgress()
@@ -1562,8 +1576,9 @@ proc splitPump() =
       gSplitLogged["lez-scan"] = line
       stderr.writeLine("MUSTER-LEZ scan " & line)
   if gLpDebug:
-    # each split's state, once per change — what an offscreen self-test watches
-    for v in reduceIntentViews(gSession.roomEvents(), driverFor):
+    # each split's state, once per change, in every room — what an offscreen self-test watches
+    for _, sess in gSessions:
+     for v in reduceIntentViews(sess.roomEvents(), driverFor):
       if v.parts.len == 0: continue
       var done = 0
       for pv in v.parts:
