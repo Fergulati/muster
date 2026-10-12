@@ -175,16 +175,70 @@ proc authorVerified*(room: string, e: Event): bool =
   except CatchableError:
     false
 
+# ── `after`, signed by the author (C5, exo-dde.15; docs/design/causal-parents.md §5) ────
+# The author signs the heads they had seen — `afterSig`, over the room, the event's id and
+# its sorted `after` — beside the signature over the event itself. Both `after` and
+# `afterSig` are outside the id, so a copy with another `after` is the same event: it
+# never drops the event (its author signature still verifies), it only loses its ordering
+# claim when no signature covers it. The authentic view reads, of an author-bearing
+# event's copies, the one whose `after` its author signed.
+
+const AfterDomain* = "muster.event.after-claim.v1"
+
+proc afterClaim*(room: string, e: Event): array[32, byte] =
+  var a = e.after
+  sort(a)
+  var arr: seq[CborValue]
+  for x in a: arr.add cbText(x)
+  digest(hashInput(AfterDomain, @[("room", cbText(room)), ("id", cbText(eventId(e))),
+                                  ("after", cbArray(arr))]))
+
+proc signAfter*(ks: Keystore, room: string, e: Event): Event =
+  ## `e` with its author's signature over its `after`.
+  result = e
+  result.afterSig = hexOf(ks.edSign(afterClaim(room, e)))
+
+proc afterVerified*(room: string, e: Event): bool =
+  ## An author-bearing event's `after` is signed by the author it names, in this room.
+  try:
+    let (authored, author) = authorOf(e)
+    if not authored or e.after.len == 0: return false
+    let id = unhex(author)
+    let sigBytes = unhex(e.afterSig)
+    if id.len != 64 or sigBytes.len != 64: return false
+    var sig: Ed25519Sig
+    for i in 0 ..< 64: sig[i] = sigBytes[i]
+    edVerify(encIdentityFromBytes(id).ed, afterClaim(room, e), sig)
+  except CatchableError:
+    false
+
 proc authenticEvents*(events: seq[Event], room: string): seq[Event] =
   ## The events a room's views may read: every author-bearing event whose author signed
-  ## it, and every event that names no author.
+  ## it — one copy per id, the one whose `after` its author signed (the smallest by
+  ## afterDigest among those), else the event with no ordering claim — and every event
+  ## that names no author, as given.
+  var chosen = initOrderedTable[EventId, Event]()
   for e in events:
-    if not authorOf(e).authored or authorVerified(room, e): result.add e
+    if not authorOf(e).authored:
+      result.add e
+      continue
+    if not authorVerified(room, e): continue
+    let id = eventId(e)
+    var c = e
+    if not afterVerified(room, c): (c.after = @[]; c.afterSig = "")
+    if id notin chosen: chosen[id] = c
+    else:
+      let held = chosen[id]
+      let heldSigned = held.after.len > 0
+      let cSigned = c.after.len > 0
+      if cSigned and (not heldSigned or afterDigest(c) < afterDigest(held)): chosen[id] = c
+  for _, e in chosen: result.add e
 
 proc roomEvents*(s: CoordinationSession): seq[Event] =
   ## The session's log as the room's views read it: `authenticEvents` over the raw log,
   ## with each verdict cached by event id (a pure function of the room and the event).
-  for e in s.log.allEvents():
+  var authored: seq[Event]
+  for e in s.log.allVariants():
     if not authorOf(e).authored:
       result.add e
       continue
@@ -193,8 +247,16 @@ proc roomEvents*(s: CoordinationSession): seq[Event] =
     if id notin s.authorChecked:
       ok = authorVerified(s.topic, e)
       s.authorChecked[id] = ok
-    if ok: result.add e
+    if ok: authored.add e
+  # of the copies of each authentic author-bearing event, the one whose after its author signed
+  result.add authenticEvents(authored, s.topic)
 
 proc publishAuthored*(s: CoordinationSession, ks: Keystore, e: Event) =
-  ## Sign an author-bearing event as this member, for this room, and publish it.
-  s.publish(signAuthored(ks, s.topic, e))
+  ## Sign an author-bearing event as this member, for this room, and publish it — with
+  ## the heads this member had seen in `after`, signed too (C5). One it already holds is
+  ## re-sealed as held (publish), so its order stays the one first published.
+  var signed = signAuthored(ks, s.topic, e)
+  if not s.log.find(eventId(signed)).found:
+    signed.after = s.heads()
+    signed = signAfter(ks, s.topic, signed)
+  s.publish(signed)

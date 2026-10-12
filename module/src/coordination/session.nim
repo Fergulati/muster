@@ -74,6 +74,7 @@ proc encodeEvent(e: Event): seq[byte] =
     var af = newJArray()
     for a in e.after: af.add %a
     j["after"] = af
+  if e.afterSig.len > 0: j["afterSig"] = %e.afterSig
   toBytes($j)
 
 proc decodeEvent(b: seq[byte]): Event =
@@ -84,6 +85,7 @@ proc decodeEvent(b: seq[byte]): Event =
     for p in j["parents"]: result.parents.add p.getStr()
   if j.hasKey("after") and j["after"].kind == JArray:
     for a in j["after"]: result.after.add a.getStr()
+  if j.hasKey("afterSig") and j["afterSig"].kind == JString: result.afterSig = j["afterSig"].getStr()
 
 proc announceBeacon*(s: CoordinationSession) =
   ## Announce the room's current join key, so someone who knows only the topic can ask
@@ -278,6 +280,9 @@ proc poll*(s: CoordinationSession) =
   ## (LocalTransport) it is a no-op — messages already arrived via publish. The
   ## host calls this in its loop.
   s.transport.poll()
+
+proc heads*(s: CoordinationSession): seq[EventId] = s.log.heads()
+  ## what a new event published now would name in `after`
 
 proc state*(s: CoordinationSession): State = s.log.state()
 proc digest*(s: CoordinationSession): string = s.log.state().stateDigest

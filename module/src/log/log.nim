@@ -39,6 +39,8 @@ type
     key*: string
     value*: string
     after*: seq[EventId]     ## order: the heads the publisher had seen; NOT in the id, never read by a fold
+    afterSig*: string        ## an author-bearing event's author's signature over `after` (C5,
+                             ## authorship.afterVerified); outside the id like `after`
 
   State* = object
     entries*: Table[string, string]
@@ -195,12 +197,23 @@ proc stateDigest*(s: State): string =
 # ── A minimal in-memory log: a deduplicated event set with incremental ingest ─
 type Log* = object
   events: OrderedTable[EventId, Event]
+  variants: Table[EventId, seq[Event]]   ## every distinct (after, afterSig) copy of an id, up to MaxVariants
+
+const MaxVariants* = 64
+  ## Copies of one event kept beside the chosen one, so the room's authentic view can pick
+  ## the copy whose `after` its author signed (exo-dde.15) — the log itself cannot tell.
 
 proc ingest*(log: var Log, e: Event) =
   ## At-least-once safe: re-ingesting an event (same id) is a no-op.
   ## A copy of a held event replaces it only when it is the one `keep` chooses, so the
   ## log ends up holding the same copy whatever order the copies arrive in.
   let id = eventId(e)
+  var vs = log.variants.getOrDefault(id)
+  var known = false
+  for v in vs: (if v.after == e.after and v.afterSig == e.afterSig: known = true)
+  if not known and vs.len < MaxVariants:
+    vs.add e
+    log.variants[id] = vs
   if id notin log.events:
     log.events[id] = e
   elif e.after != log.events[id].after:
@@ -232,6 +245,13 @@ proc heads*(log: Log): seq[EventId] =
       if latest.len == MaxHeads: break
     result = latest
   result.sort()
+
+proc allVariants*(log: Log): seq[Event] =
+  ## Every copy the log holds, all variants of each id (the authentic view chooses among
+  ## them; every fold dedups by id).
+  for id in log.events.keys:
+    let vs = log.variants.getOrDefault(id)
+    if vs.len == 0: result.add log.events[id] else: result.add vs
 
 proc allEvents*(log: Log): seq[Event] =
   for e in log.events.values: result.add e

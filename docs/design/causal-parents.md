@@ -1,6 +1,6 @@
 # Causal order: events that say what they followed (exo-655, epic exo-dde)
 
-**Status:** C1–C4 built 2026-10-11, with §5's decisions as recommended (an annotation outside identity; unsigned for now; the room map and the activity feed move to causal order). C5 (signing `after`) is later. Tests: `causal_order_test`, `after_state_test`, `causal_publish_test`, `room_graph_test` §11.
+**Status:** C1–C4 built 2026-10-11, with §5's decisions as recommended (an annotation outside identity; the room map and the activity feed move to causal order). C5, the author signing `after`, built 2026-10-12 (§7a). Tests: `causal_order_test`, `after_state_test`, `causal_publish_test`, `after_signed_test`, `room_graph_test` §11.
 **Reads with:** [room-map.md](room-map.md) §9 (why replay is not chronology yet); `log/log.nim` (the log and its order); `coordination/attest.nim` and `coordination/audit.nim` (the code that relies on `parents` as it is); spec `derived-exo-403` (the audit file).
 **Paths:** short paths are under `module/src/`.
 
@@ -84,7 +84,7 @@ An entry's **epoch** still comes from the key that opened it (`CoordinationSessi
 ## 5. Decisions for the operator
 
 1. **`after` as an annotation outside identity (recommended) or as part of the id.** Putting it in the id would make every copy distinct and drop the convergence rules in §3.1. The price is everything in §2: re-announce must reuse stored copies, re-publishing creates duplicates, and the provenance record and audit see more events. The annotation keeps every invariant-guarding path byte-for-byte as it is.
-2. **Sign `after` on author-bearing kinds, now or later.** Unsigned, any member can re-publish a copy with a different `after` and, by grinding its digest, have it chosen. That reorders a view, never state. Signing it needs a second claim version in `authorship.nim` (`muster.event.author.v2` when `after` is present). Recommendation: later, as its own slice, once the map shows replay order and the cost of a misleading order is visible.
+2. **Sign `after` on author-bearing kinds, now or later.** Unsigned, any member can re-publish a copy with a different `after` and, by grinding its digest, have it chosen. That reorders a view, never state. The recommendation was to do it later as its own slice; it was built as C5 with a signature separate from the author's claim, not a second claim version (§7a).
 3. **Which views move to `causalOrder`.** Recommendation: the room map and the activity feed. Flow and provenance get each entry's epoch from `sealedIn` (exo-dde.9), and their row order can stay canonical.
 
 ## 6. Slices
@@ -97,7 +97,7 @@ Each slice's acceptance becomes a test before the code.
 | **C2** | `reduce` and every fold ignore `after` | a probe (append-only) proves invariant 4 is untouched: `reduce(events) == reduce(events with every after stripped or rewritten)`, and every signing-path byte equal |
 | **C3** | `session.publish` stamps heads; re-publishing re-seals the stored copy; wire encode/decode | `session_test`: a new event names the log's heads; a re-announce carries the original `after`; an older client's decode ignores the field and computes the same id |
 | **C4** | the room graph replays by `causalOrder`; each intent's state per step; the activity feed in causal order | `room_graph_test`: replay order follows causality in a two-member run; an intent's state at each step equals `reduceIntentViews` of the causal prefix; the map's "Now:" pill is gone |
-| **C5** (optional) | `after` signed on author-bearing kinds (claim v2) | `authorship_test`: a re-published author-signed copy with a changed `after` no longer verifies |
+| **C5** (built, §7a) | `after` signed on author-bearing kinds (a separate after-claim) | `after_signed_test`: a re-published author-signed copy with a forged `after` reorders and suppresses nothing |
 
 ## 7. As built
 
@@ -107,8 +107,18 @@ Each slice's acceptance becomes a test before the code.
 - `intents.nim` `reduceActivity`: sorts by causal position; `seq` stays canonical.
 - `RoomMap.qml`: replays by causal position, shows each proposal's state at the replay point, and says "in the order members saw them" (until C5).
 
+### 7a. C5, as built: the author signs `after` (exo-dde.15)
+
+A first reading of decision 2 was to put `after` inside the author's signature over the event. That would make an event with a rewritten `after` a forgery the room drops, and the room map's spec (`derived-exo-dde` s3) holds that rewriting `after` never changes state. So the signature is separate:
+
+- `afterSig` is the author's Ed25519 signature over `muster.event.after-claim.v1` (room, the event's id, its sorted `after`). Like `after`, it is outside the id and travels on the wire only when present.
+- `publishAuthored` stamps the heads, signs the event as before (that signature still excludes `after`), then signs `after`.
+- The log keeps up to 64 distinct copies of each event (`Log.allVariants`). The authentic view (`authenticEvents`, `roomEvents`) reads, of an author-bearing event's copies, the one whose `after` its author signed, choosing by digest among those. If none is signed, it keeps the event and drops only its ordering claim.
+- So a member who re-publishes someone's message with a forged `after` reorders nothing and suppresses nothing (`after_signed_test`). Events that name no author keep an `after` that is any member's claim, as before.
+- Bound: a member who floods 64 forged copies before the genuine one arrives fills the variant list; the genuine copy then loses its ordering claim (never the event). Raising the bound costs memory; the case is noted, not handled.
+
 ## 8. What could go wrong
 
 - **A large `after`.** Concurrency is low in a room, and the cap is 8. A log of thousands of events adds about 1–3 ids per event on the wire, inside the sealed envelope.
-- **A misleading order from a hostile member.** Bounded by §3's rule: views only, never state. Until C5, the timeline should say "in the order members saw them".
+- **A misleading order from a hostile member.** Bounded by §3's rule: views only, never state. Since C5 this holds only for sealed kinds (a proposal, a submit), whose `after` any member can claim, so the timeline still says "in the order members saw them".
 - **Mixed clients.** An old client's events have no `after` and stay roots in `causalOrder`, so a room with old clients replays partly in id order. The map can mark events that carry no causal order.
