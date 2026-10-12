@@ -14,8 +14,8 @@ import Logos.Controls
 // signal. It calls no backend and holds no state; the host wires addMember() to
 // the coordination surface and feeds the fold back in through `members`.
 //
-// The scope copy is not decoration: adding someone re-keys the room forward
-// (F-16), so a new member reads from their epoch on and never the log before it.
+// The scope copy is not decoration: adding someone re-keys the room forward,
+// so a new member reads from their epoch on and never the log before it.
 // The panel says that in words at the moment the roster is about to change,
 // which is the only moment it matters (U-6).
 //
@@ -86,20 +86,20 @@ Item {
             width: flick.width - 2 * Theme.spacing.large
             spacing: Theme.spacing.large
 
-            // ── Security level (the null ladder, exo-1ec.5) ────────────────────
-            // The room's active level on three axes — who is speaking (authentication),
-            // where it came from (provenance), who can read it (confidentiality). Each
-            // shows its rung (a green dot = the real level, a dim dot = the null still in
-            // place) and the named mechanism. A level is never a silent fallback; the
-            // module refuses a failed upgrade. Hidden until the room reports one.
+            // ── How this room is protected (the null ladder, exo-1ec.5) ─────────
+            // The room's three protections, said in words: who said what (authentication),
+            // where it came from (provenance), who can read it (confidentiality). The module
+            // reports each as real or as a null still in place; a real one reads as what it
+            // does for you, a null one as what is missing. Hidden until the room reports.
             ColumnLayout {
+                objectName: "roomProtections"
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
                 visible: scope.securityAxes.length > 0
 
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("Security level")
+                    text: qsTr("How this room is protected")
                     color: Theme.palette.text
                     font.family: Theme.typography.publicSans
                     font.pixelSize: Theme.typography.subtitleText
@@ -114,18 +114,18 @@ Item {
                         id: axisRow
                         required property var modelData
                         readonly property bool isReal: !!(axisRow.modelData && axisRow.modelData.real)
+                        readonly property string axis: String((axisRow.modelData && axisRow.modelData.axis) || "")
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
 
-                        // rung dot: green when the real level is active, dim when the null
-                        // is still in place (a null is shown, not alarmed).
-                        Rectangle {
+                        LogosText {
                             Layout.alignment: Qt.AlignTop
-                            Layout.topMargin: Theme.spacing.tiny
-                            width: Theme.spacing.small
-                            height: Theme.spacing.small
-                            radius: width / 2
-                            color: axisRow.isReal ? Theme.palette.success : Theme.palette.textTertiary
+                            Layout.preferredWidth: 14           // ✓ and ! line their text up
+                            horizontalAlignment: Text.AlignHCenter
+                            text: axisRow.isReal ? "✓" : "!"
+                            color: axisRow.isReal ? MusterStyle.settled : MusterStyle.warning
+                            font.pixelSize: MusterStyle.body
+                            font.weight: Theme.typography.weightBold
                         }
 
                         ColumnLayout {
@@ -135,21 +135,28 @@ Item {
                             LogosText {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
-                                text: {
-                                    var axis = String((axisRow.modelData && axisRow.modelData.axis) || "");
-                                    var rung = axisRow.isReal ? qsTr("real") : qsTr("null");
-                                    return axis + "  ·  " + rung;
-                                }
+                                text: axisRow.axis === "authentication" ? qsTr("Who said what")
+                                    : axisRow.axis === "provenance" ? qsTr("Where it came from")
+                                    : axisRow.axis === "confidentiality" ? qsTr("Who can read it")
+                                    : axisRow.axis
                                 color: Theme.palette.text
-                                font.family: MusterStyle.mono
-                                font.pixelSize: MusterStyle.caption
+                                font.pixelSize: MusterStyle.body
                                 font.weight: Theme.typography.weightMedium
                             }
                             LogosText {
                                 Layout.fillWidth: true
                                 wrapMode: Text.WordWrap
-                                text: String((axisRow.modelData && axisRow.modelData.mechanism) || "")
-                                color: Theme.palette.textTertiary
+                                text: axisRow.axis === "authentication"
+                                      ? (axisRow.isReal ? qsTr("Every message and approval is signed by the person who made it.")
+                                                        : qsTr("Not signed: anyone in the room could write as someone else."))
+                                    : axisRow.axis === "provenance"
+                                      ? (axisRow.isReal ? qsTr("Everything is in one signed, linked record that every member can check.")
+                                                        : qsTr("No checkable record of how the room got here."))
+                                    : axisRow.axis === "confidentiality"
+                                      ? (axisRow.isReal ? qsTr("Only the people in the room. Someone added later reads from then on, never what came before.")
+                                                        : qsTr("Not encrypted: anyone who can reach the room's topic can read it."))
+                                    : (axisRow.isReal ? qsTr("In place.") : qsTr("Not in place."))
+                                color: axisRow.isReal ? Theme.palette.textSecondary : MusterStyle.warning
                                 font.pixelSize: MusterStyle.caption
                             }
                         }
@@ -244,15 +251,9 @@ Item {
                                 elide: memberCard.revealed ? Text.ElideNone : Text.ElideRight
                             }
 
-                            // The role tag. For now everyone in the room is a
-                            // signer; "reads only" exists so the seam is drawn
-                            // before a driver ever fills it.
-                            LogosText {
-                                text: qsTr("signer")
-                                color: Theme.palette.textTertiary
-                                font.family: MusterStyle.mono
-                                font.pixelSize: MusterStyle.caption
-                            }
+                            // No role tag: it said "signer" for everyone. What a member can sign is
+                            // a fact about their key, which joining discloses nothing about (exo-a87);
+                            // each proposal's "What this needs" grades your own, never anyone else's.
                         }
 
                         // Tap anywhere on the card to reveal / re-collapse the full

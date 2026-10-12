@@ -207,7 +207,7 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
     if effectJson.len == 0: refuse("this intent was not proposed in this member's log")
     let policy = intentPolicyOf(ordered, intentId)
     let ctx = intentContext(ordered, intentId)
-    if ctx.isPlaceholder: refuse("the intent has no signing context (proposed before exo-ef1)")
+    if ctx.isPlaceholder: refuse("the intent has no signing context (proposed by an older Muster)")
     let inputs = intentInputs(ordered, driverFor, intentId)
     if not inputs.allAccountable:
       refuse("the intent's history reaches an input this member cannot read (an earlier epoch, or never shared)")
@@ -303,7 +303,7 @@ proc exportAudit*(events: seq[Event], driverFor: DriverFor, intentId: string,
         let q = pk.split('/')
         if q.len >= 4 and q[0] == "intent" and q[1] == intentId and q[2] == "sig":
           refuse(what & " links '" & pk & "', a contribution the fold does not count: a file " &
-                 "carrying it could not verify (an approval from before exo-96d linked every signature)")
+                 "carrying it could not verify (an approval from an older Muster linked every signature)")
         refuse(what & " links '" & pk & "', an entry outside this intent's record")
     var approvals: seq[CborValue]
     for i, g in grades:

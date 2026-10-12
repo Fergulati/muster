@@ -197,7 +197,7 @@ method securityLevel*(t: DeliveryTransport): SecurityLevel =
   securityLevel(
     axisLevel(rungNull, "not authenticated here — the driver binds the speaker"),
     axisLevel(rungNull, "not attested here — the log attests provenance"),
-    axisLevel(rungNull, "payload opaque (epoch-sealed); but topic + timing are visible to the store node (FS-9)"))
+    axisLevel(rungNull, "payload opaque (epoch-sealed); but topic + timing are visible to the store node"))
 
 method publish*(t: DeliveryTransport, contentTopic: string, payload: seq[byte]): string =
   var args = newJArray()
