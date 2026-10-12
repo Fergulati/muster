@@ -31,6 +31,7 @@ import ../crypto/curve25519
 import ../drivers/driver
 import ../drivers/safe
 import ../drivers/threshold
+import ../drivers/split
 import ../drivers/frost
 import ../drivers/invoke
 import ../drivers/eip191
@@ -144,6 +145,17 @@ proc fileDriver(policy: string, ctx: SigningContext): Driver =
   of "threshold", "unanimous": newThresholdDriver(@[], 1)
   of "frost": newFrostDriver(@[], 1)
   of "invoke": newInvokeDriver(@[], 1)
+  of "evm-split", "lez-split", "btc-split", "monero-split":
+    # a split's materialization is its effect on its chain, the policy's qualifier
+    # (exo-dcc.7): no roster, which gates proposing and signing, never the bytes
+    let at = policy.find('@')
+    if at < 0 or at == policy.len - 1: refuse("a split's policy names no chain")
+    let family = case kindOf(policy)
+      of "evm-split": EvmSplitFamily
+      of "lez-split": LezSplitFamily
+      of "btc-split": BtcSplitFamily
+      else: MoneroSplitFamily
+    newSplitDriver(family, policy[at + 1 .. ^1])
   else: refuse("unknown policy '" & policy & "'")
 
 proc signedBy(who: string, mat: seq[byte], sigHex: string): bool =
