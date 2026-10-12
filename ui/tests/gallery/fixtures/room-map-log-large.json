@@ -1,5 +1,5 @@
 {
- "about": "The Log lens on a 420-entry room: past 80 entries it shows the 80 around the replay point, and an entry's label only on hover or selection (from the recorded scale run, as room-map-large).",
+ "about": "The Log lens on a 420-entry room: past 80 entries it shows the 80 around the replay point, and an entry's label only on hover or selection; an entry selected shows its facets, which the module sent once for the room (exo-dde.19) (from the recorded scale run, as room-map-large).",
  "snapshot": "data/mapscale-420.json",
  "sizes": [
   "1440x900"
@@ -103,6 +103,26 @@
   },
   {
    "shot": "end"
+  },
+  {
+   "set": [
+    "roomMap",
+    "selected",
+    "e:7919d15d86ef80775a7d0e9b2a9758cd292cb82a2d9dca5b4bd2bf04c7688ad6"
+   ]
+  },
+  {
+   "wait": 800
+  },
+  {
+   "expectProp": [
+    "roomMapFacet",
+    "visible",
+    true
+   ]
+  },
+  {
+   "shot": "selected"
   }
  ]
 }
