@@ -179,6 +179,8 @@ Rectangle {
                                      // a Monero share read from the creditor's wallet now: not there yet
                                      ? qsTr("⚠ Not confirmed yet: %1").arg(room.moneroWhy(String(room.splitResult.error).slice(13).split(":")[0],
                                                                                            String(room.splitResult.error).slice(13)))
+                                     : room.chainErrorWords(String(room.splitResult.error), room.splitResult.detail).length > 0
+                                     ? qsTr("⚠ %1").arg(room.chainErrorWords(String(room.splitResult.error), room.splitResult.detail))
                                      : qsTr("⚠ %1").arg(String(room.splitResult.error) + (room.splitResult.detail ? ": " + String(room.splitResult.detail) : "")))
                                   : room.splitResult.op === "pay"
                                   ? (room.myPartSettled(msg.liveIntent) ? ""

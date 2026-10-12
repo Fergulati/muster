@@ -180,7 +180,12 @@ const ReadMs = 400
 const SendMs = 800
 const ProbeMs = 300
 const ScanMs = 1200
-const SlackMs = 1500        # scheduling and teardown on a busy machine; the hang it guards is unbounded
+const SlackMs = 3000        # scheduling and teardown on a busy machine; the hang it guards is unbounded.
+  # A full suite beside two Basecamps took a 400 ms read to 2305 ms (exo-63e). 3000 still keeps
+  # every read's bound (3400 ms) under the default read budget (5 s), so a call that ignored
+  # its configured budget for the default still fails here; sends and scans have far longer
+  # defaults. The probe's default (1.5 s) sat inside the bound before this too: its budget is
+  # held by the lower bound and by the 300 ms it is set to, not by this ceiling.
 # The sections before the cooldown's hold each call to its OWN budget, so they run with the
 # cooldown off (zero); the cooldown's section turns it on.
 setRpcBudgets(read = ReadMs.milliseconds, send = SendMs.milliseconds, probe = ProbeMs.milliseconds,
@@ -192,6 +197,9 @@ doAssert ScanBudget > SendBudget and ScanBudget <= 10.minutes,
   "a UTXO-set scan gets longer than a broadcast, and still a bound"
 doAssert Cooldown > 10.seconds and Cooldown <= 30.seconds and CooldownCap <= 60.seconds,
   "a cooldown skips at least one accounts poll (10 s), and a recovered node is used within a minute"
+
+doAssert ReadMs + SlackMs < 5000 and SendMs + SlackMs < 30_000,
+  "the ceiling stays under the default read and send budgets, so the configured budget is the one held"
 
 var checked = 0
 var worstOverMs = 0         # the most any call ran past its budget

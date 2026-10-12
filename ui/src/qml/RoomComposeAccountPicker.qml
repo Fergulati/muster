@@ -53,10 +53,9 @@ ColumnLayout {
                 return qsTr("No one has disclosed an account this can act from. Disclose one under Accounts, beside the room.");
             if (e.error === "choose-account")
                 return qsTr("Several accounts are disclosed. Choose which one this acts from.");
-            // a split settles on the chain YOUR RPC serves, read — never assumed (exo-a90)
-            if (e.error === "no-rpc")
-                return qsTr("A split settles on the chain your RPC serves, and it did not answer — check Settings → RPC. %1")
-                       .arg(String(e.detail || ""));
+            // a split settles on the chain YOUR node serves, read — never assumed (exo-a90)
+            var words = room.chainErrorWords(String(e.error || ""), e.detail);
+            if (words.length > 0) return words;
             return e.error ? String(e.error) : "";
         }
         color: Theme.palette.warning
