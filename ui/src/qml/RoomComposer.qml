@@ -1022,6 +1022,9 @@ ColumnLayout {
                 || String(r.error || "") === "no-wallet" || String(r.error || "") === "payto-not-mine")
                 return qsTr("⚠ %1 — %2").arg(what)
                                          .arg(room.moneroWhy(r.error, r.detail));
+            // no node or wallet for the chain (exo-408 item 9): the setting that fixes it
+            var chainWords = room.chainErrorWords(String(r.error || ""), r.detail);
+            if (chainWords.length > 0) return qsTr("⚠ %1 — %2").arg(what).arg(chainWords);
             return qsTr("⚠ %1 — %2%3").arg(what).arg(String(r.error || ""))
                        .arg(r.detail ? ": " + String(r.detail) : "");
         }

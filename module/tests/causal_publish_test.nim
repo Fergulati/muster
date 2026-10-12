@@ -5,6 +5,10 @@
 ##      included — a joiner given a re-announce learns the true order
 ##   4. an author-signed event still verifies after `after` is stamped
 ##   5. a caller's `parents` are kept exactly
+##   6. the activity feed reads proposals in the order they were made
+##   7. the room history reads as it happened (exo-9e3): an admission, one proposal's
+##      whole lifecycle, then a later proposal whose id sorts first — content-id order
+##      listed the later group first; causal order lists them as they happened
 ## LocalTransport + epoch crypto; needs libsecp256k1 + libsodium.
 
 import std/[strutils, sequtils, algorithm]
@@ -107,5 +111,45 @@ block:
   let iy = act.mapIt(it.intentId).find(intentIdFor(ey))
   doAssert ix >= 0 and iy >= 0 and ix < iy, "first proposed reads first: " & $(ix, iy)
   echo "6. the activity feed reads proposals in the order they were made OK"
+
+block:
+  const t2 = "/muster/1/causal-history/proto"
+  let net2 = newLocalNetwork()
+  let a = newCoordinationSession(newLocalTransport(net2), newEpochCrypto(aliceKs, t2), t2)
+  let b = newCoordinationSession(newLocalTransport(net2), newEpochJoiner(bobKs), t2)
+  b.requestJoin(bobKs.joinRequestFor(t2, high(uint64)))
+  a.admit(bobKs.encIdentity())
+  a.publish(membershipEvent(1, hex(bobKs.encIdentity().toBytes())))
+  b.poll()
+  # two effects, the SECOND proposed one's propose id sorting first
+  var ea, eb: string
+  for n in 0 .. 400:
+    ea = """{"to":"0xd","value":""" & $n & "}"
+    eb = """{"to":"0xe","value":""" & $n & "}"
+    if eventId(proposeEvent(intentIdFor(eb), eb)) < eventId(proposeEvent(intentIdFor(ea), ea)): break
+  let (ia, ib) = (intentIdFor(ea), intentIdFor(eb))
+  let stub: DriverFor = proc(kind: string): Driver =
+    newStubDriver(rounds = 1, threshold = 2, finality = finExternal, verifyResult = true)
+  a.publish(proposeEvent(ia, ea)); b.poll()
+  a.publish(contributeEvent(ia, "0xaa", "01")); b.poll()
+  b.publish(contributeEvent(ia, "0xbb", "02")); a.poll()
+  a.publish(submitEvent(ia, chainRef = "0xa1")); b.poll()
+  a.publish(finalEvent(ia, chainRef = "0xa1")); b.poll()
+  b.publish(proposeEvent(ib, eb)); a.poll()
+  b.publish(submitEvent(ib, chainRef = "0xb1")); a.poll()
+  for s in [a, b]:
+    let act = reduceActivity(s.roomEvents(), stub)
+    let admitAt = act.mapIt(it.kind).find("admit")
+    var lastA = -1
+    var firstB = act.len
+    for i, x in act:
+      if x.intentId == ia: lastA = max(lastA, i)
+      if x.intentId == ib: firstB = min(firstB, i)
+    doAssert admitAt >= 0 and lastA >= 0 and firstB < act.len, $act.mapIt((it.kind, it.intentId))
+    doAssert admitAt < firstB and lastA < firstB, "the later proposal reads after the earlier one's whole history: " &
+      $act.mapIt((it.kind, it.intentId == ia))
+    for i, x in act:
+      if x.intentId == ia: doAssert i > admitAt, "the admission reads before the proposal made after it"
+  echo "7. the room history reads as it happened, whatever the proposals' ids OK"
 
 echo "causal_publish_test: all OK"

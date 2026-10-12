@@ -302,6 +302,18 @@ Item {
             return qsTr("Monero Wallet answered: %1").arg(String(r.error || qsTr("no answer")));
         return "";
     }
+    // A chain a split cannot reach, in plain words (exo-408 item 9): each names the setting
+    // that fixes it, and "" for any other error. `detail` is what the endpoint answered.
+    function chainErrorWords(code, detail) {
+        var d = String(detail || "");
+        if (code === "no-rpc")
+            return qsTr("A split settles on the chain your RPC serves, and it did not answer — check Settings → RPC. %1").arg(d);
+        if (code === "no-btc-node")
+            return qsTr("A Bitcoin split settles on the network your Bitcoin node serves, and it did not answer — check Settings → Bitcoin node. %1").arg(d);
+        if (code === "no-lez-wallet")
+            return qsTr("A private split is paid from your LEZ wallet, and it could not be read — set it up under Wallet. %1").arg(d);
+        return "";
+    }
     // A Monero wallet refusal in plain words: the module's code (before the first ':') and
     // its detail, which already names the network and the remedy.
     function moneroWhy(code, detail) {

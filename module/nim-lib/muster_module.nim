@@ -2256,7 +2256,8 @@ proc musterCoordinateSetPolicy(kind: string): string =
     var chain = acct
     if chain.len == 0:
       let (ok, c, detail) = splitChainFor(k)
-      if not ok: return $(%*{"error": (if "lez" in kindInfo(k).settlesOn: "no-lez-wallet" else: "no-rpc"),
+      if not ok: return $(%*{"error": (if "lez" in kindInfo(k).settlesOn: "no-lez-wallet"
+                                       elif "bip122" in kindInfo(k).settlesOn: "no-btc-node" else: "no-rpc"),
                              "kind": k, "detail": detail})
       chain = c
     if not isCaip2(chain) or chain.split(':')[0] notin kindInfo(k).settlesOn:
