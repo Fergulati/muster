@@ -193,7 +193,7 @@ test("muster_ui: an in-room proposal renders the re-derived verify box", async (
     },
     { timeout: 15000, interval: 500, description: "verify box on-display" }
   );
-  await app.expectTexts(["✓ your client re-derived this — the exact bytes you'd sign"]);
+  await app.expectTexts(["✓ Checked on your device — this is exactly what you would sign"]);
 
   // The decisive assertion: the box shows a real re-derived safeTxHash (32 bytes)
   // bound to a non-empty domain (chain + Safe). Polled — the Repeater rows populate

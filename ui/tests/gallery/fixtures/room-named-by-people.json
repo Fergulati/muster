@@ -1,0 +1,61 @@
+{
+  "about": "A room with no name of its own is called after its people: \"Bob\" in the header and the sidebar, \"Carol, Dave and Erin\" for another; never \"Room 1791573223\" (exo-ef6).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "conversationsJson": [
+      {
+        "topic": "/muster/1/proof-1791573223/proto",
+        "title": "",
+        "address": "0x2b863d9543d7027ff0d4ba5571738119efa01731",
+        "lastTs": 1791573236,
+        "active": true,
+        "needs": [
+          {
+            "id": "0xf82713a97f076e35",
+            "what": "approve",
+            "state": "proposed",
+            "text": "a payment: 1000 wei \u2192 0x1111\u20261111"
+          }
+        ],
+        "waiting": 0,
+        "settled": 0,
+        "people": [
+          "Bob"
+        ]
+      },
+      {
+        "topic": "/muster/1/muster.room.0a1b2c3d4e5f6a7b/proto",
+        "title": "",
+        "address": "0x2b863d9543d7027ff0d4ba5571738119efa01731",
+        "lastTs": 0,
+        "people": [
+          "Carol",
+          "Dave",
+          "Erin"
+        ],
+        "active": false,
+        "needs": [],
+        "waiting": 0,
+        "settled": 0
+      }
+    ]
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "roomTitleText",
+        "text",
+        "Bob"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

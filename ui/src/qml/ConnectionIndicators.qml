@@ -161,7 +161,7 @@ Item {
         LogosText {
             Layout.fillWidth: true
             visible: conn.baselineOnly
-            text: qsTr("Nothing outside the room yet. A proposal brings in what its driver needs, such as an RPC for a Safe payment.")
+            text: qsTr("Nothing outside the room yet. A proposal brings in what it needs, such as an Ethereum node for a Safe payment.")
             color: Theme.palette.textTertiary
             font.pixelSize: MusterStyle.caption
             wrapMode: Text.WordWrap

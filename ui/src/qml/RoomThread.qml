@@ -110,6 +110,22 @@ Rectangle {
                 return false;
             }
 
+            // Time in the thread (exo-52d): a divider at each new day, and a run of lines from
+            // one person within five minutes under one header, as chat clients do.
+            readonly property var prev: msg.index > 0 && msg.index - 1 < room.messages.length
+                                        ? room.messages[msg.index - 1] : null
+            readonly property bool newDay: !!modelData.ts
+                                           && (!msg.prev || !msg.prev.ts
+                                               || MusterStyle.dayKey(msg.prev.ts) !== MusterStyle.dayKey(modelData.ts))
+            function isChat(m) {
+                try { var o = JSON.parse(m.body); return !(o && (o.kind || o.type)); }
+                catch (e) { return true; }
+            }
+            readonly property bool continues: !msg.newDay && !!msg.prev && msg.parsedCard === null
+                                              && msg.isChat(msg.prev)
+                                              && String(msg.prev.author || "") === String(modelData.author || "")
+                                              && MusterStyle.msOf(modelData.ts) - MusterStyle.msOf(msg.prev.ts) < 5 * 60 * 1000
+
             // reveal the signature field for THIS inline proposal.
             property bool approving: false
             // reveal the outside-signer panel (PSBT) for THIS inline proposal.
@@ -120,6 +136,24 @@ Rectangle {
                 width: parent.width
                 visible: !msg.isDupRef
                 spacing: Theme.spacing.tiny
+
+                // ── the day, once at its first message ─────────────────────
+                RowLayout {
+                    objectName: "dayDivider"
+                    visible: msg.newDay
+                    Layout.fillWidth: true
+                    Layout.topMargin: msg.index > 0 ? Theme.spacing.medium : 0
+                    Layout.bottomMargin: Theme.spacing.tiny
+                    spacing: Theme.spacing.medium
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.palette.borderSubtle }
+                    LogosText {
+                        text: msg.newDay ? MusterStyle.dayLabel(modelData.ts) : ""
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: MusterStyle.caption
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: Theme.palette.borderSubtle }
+                }
 
                 // ── a proposal, inline (live state from the verified fold) ──
                 MusterCard {
@@ -240,9 +274,9 @@ Rectangle {
                     LogosText {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: qsTr("Paste a signature produced elsewhere over the re-derived "
-                                 + "materialization. It counts only if it comes from a signer this "
-                                 + "intent's policy recognizes (a Safe owner, or a room member).")
+                        text: qsTr("Paste a signature made elsewhere over exactly what this proposal "
+                                 + "signs. It counts only if it comes from a signer this proposal "
+                                 + "recognizes (a Safe owner, or a room member).")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                     }
@@ -608,13 +642,13 @@ Rectangle {
                             if (o.error !== undefined) {
                                 var err = String(o.error);
                                 if (err === "not-invoke")
-                                    return qsTr("⚠ Not an action intent — nothing to run.");
+                                    return qsTr("⚠ This isn't a module action, so there is nothing to run.");
                                 if (err === "not-executable")
                                     return qsTr("⚠ Not ready to run — state is \"%1\".")
                                            .arg(String(o.state || ""));
                                 if (err === "not-allowed")
-                                    return qsTr("⚠ Blocked by the gate — %1.%2 is not on the invoke "
-                                             + "allowlist, or the target's capability policy denied it.")
+                                    return qsTr("⚠ Blocked: %1.%2 isn't on this device's list of module "
+                                             + "actions it may run, or that module refused.")
                                            .arg(String(o.module || "")).arg(String(o.method || ""));
                                 return qsTr("⚠ ") + err + (o.detail ? " — " + String(o.detail) : "");
                             }
@@ -688,19 +722,34 @@ Rectangle {
                     Layout.fillWidth: true
                     spacing: 2
 
-                    LogosText {
-                        text: msg.authorName
-                              + (modelData.ts ? "  ·  " + modelData.ts : "")
-                        color: Theme.palette.textTertiary
-                        font.family: MusterStyle.mono
-                        font.pixelSize: MusterStyle.caption
+                    // who and when, once per run of lines (exo-52d); the full time on hover
+                    RowLayout {
+                        objectName: "messageHeader"
+                        visible: !msg.continues
+                        Layout.topMargin: msg.index > 0 && !msg.newDay ? Theme.spacing.small : 0
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            text: msg.authorName
+                            color: modelData.self ? Theme.palette.textSecondary : Theme.palette.text
+                            font.pixelSize: MusterStyle.caption
+                            font.weight: Theme.typography.weightBold
+                        }
+                        LogosText {
+                            objectName: "messageTime"
+                            visible: !!modelData.ts
+                            text: MusterStyle.ago(modelData.ts)
+                            color: Theme.palette.textTertiary
+                            font.pixelSize: MusterStyle.caption
+                            HoverHandler { id: timeHover }
+                            LogosToolTip { visible: timeHover.hovered; text: MusterStyle.fullTime(modelData.ts) }
+                        }
                     }
                     LogosText {
                         Layout.fillWidth: true
                         text: String(modelData.body || "")
                         color: Theme.palette.text
-                        font.pixelSize: Theme.typography.secondaryText
-                        wrapMode: Text.WrapAnywhere
+                        font.pixelSize: MusterStyle.body
+                        wrapMode: Text.Wrap     // at words; a word longer than the line breaks anywhere
                     }
                 }
             }

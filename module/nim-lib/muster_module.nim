@@ -4220,7 +4220,8 @@ proc homeSummary(ej: string, label: proc(who: string): string): string =
                              tokenInfo(onChain, asset[6 .. ^1])).text
 
 proc musterCoordinateConversations(): string =
-  ## Every joined room, as {topic, address, lastTs, active, needs, waiting, settled} —
+  ## Every joined room, as {topic, title, address, lastTs, people, active, needs, waiting,
+  ## settled} — people: the other members' names (exo-ef6);
   ## the home surface's room list. The active room is flagged; lastTs is each room's
   ## latest message ts (0 if none yet), so home can order by recency. Multi-room: one
   ## entry per session. The home surface is a query over intents (F-18, exo-ed5): `needs`
@@ -4262,8 +4263,14 @@ proc musterCoordinateConversations(): string =
                      "text": homeSummary(it.effectJson, label)}
       of hcWaiting: inc waiting
       of hcSettled: inc settled
+    # who else is in it, by the one name each has here ("Bob", or a short id), so a room
+    # with no name of its own is called after its people, never its code (exo-ef6)
+    var people = newJArray()
+    for m in s.members():
+      let h = toHex(m.toBytes()).toLowerAscii().replace("0x", "")
+      if h != myEncHex: people.add %label(h)
     arr.add %*{"topic": topic, "title": titles.getOrDefault(topic, ""),
-               "address": myAddr, "lastTs": lastTs,
+               "address": myAddr, "lastTs": lastTs, "people": people,
                "active": (topic == gTopic), "needs": needs, "waiting": waiting, "settled": settled}
   $arr
 
