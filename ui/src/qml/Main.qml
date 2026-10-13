@@ -74,6 +74,9 @@ Item {
         // A room opened from the composer (a verb) is this member's own: it asks no one
         // to join it (below), and its scope panel offers no "Ask to join" (exo-dcc.30).
         roomSurface.founded = String(verb || "").length > 0;
+        // the room says it is opening until the module's room is this one (exo-ba0)
+        if (root.contentTopicOf(topic) !== root.contentTopicOf(root.roomTopic))
+            roomSurface.beginOpening(root.contentTopicOf(topic));
         root.backend.joinRoom(topic);
         // A person named in the composer (their 64-byte chat id, 128 hex chars) is invited
         // now, before the room says anything: the invite admits them (exo-dcc.29), so they
@@ -184,6 +187,18 @@ Item {
         try { return root.balancesJson ? JSON.parse(root.balancesJson) : []; }
         catch (e) { return []; }
     }
+    // asked and not yet answered (exo-ba0): the wallet says it is reading, rather than "no
+    // balances" while the chains are still being asked; an answer, or 15 s, ends it
+    property bool balancesLoading: false
+    function refreshBalances() {
+        if (!root.backend) return;
+        root.balancesLoading = true;
+        balancesGiveUp.restart();
+        root.backend.loadAccount();
+        root.backend.loadBalances();
+    }
+    onBalancesChanged: root.balancesLoading = false
+    Timer { id: balancesGiveUp; interval: 15000; onTriggered: root.balancesLoading = false }
 
     // Room state, aliased for the home fold.
     readonly property string roomTopic: backend ? backend.roomTopic : ""
@@ -325,7 +340,15 @@ Item {
         if (changed) { root.seen = s; seenPrefs.seenJson = JSON.stringify(s); }
         if (news.length > 0) MusterStyle.notify(news.join(" · "));
     }
-    onConversationsChanged: root.noteSeen()
+    // whether the module has answered which rooms there are (exo-ba0): its first answer,
+    // or — since an empty answer may equal the default and so change nothing — a moment
+    property bool roomsLoaded: false
+    Timer {
+        interval: 2500
+        running: root.backend !== null && !root.roomsLoaded
+        onTriggered: root.roomsLoaded = true
+    }
+    onConversationsChanged: { root.roomsLoaded = true; root.noteSeen(); }
     onRoomTopicChanged: root.noteSeen()
 
     // The home surface is a query over intents (F-18, exo-ed5): the module classes every
@@ -410,6 +433,7 @@ Item {
     }
     Component.onCompleted: {
         root.ready = root.backend !== null && logos.isViewModuleReady("muster_ui");
+        if (root.conversations.length > 0) root.roomsLoaded = true;
         root.seenLoad();
     }
 
@@ -458,7 +482,8 @@ Item {
             LogosText {
                 Layout.fillWidth: true
                 elide: Text.ElideRight
-                text: root.view === "room" ? (root.titleOf(root.roomTopic) || (root.roomTopic.length > 0 ? root.shortRoom(root.roomTopic) : qsTr("Join a room")))
+                text: root.view === "room" ? (roomSurface.opening ? (root.titleOf(roomSurface.openingTopic) || root.shortRoom(roomSurface.openingTopic))
+                                              : root.titleOf(root.roomTopic) || (root.roomTopic.length > 0 ? root.shortRoom(root.roomTopic) : qsTr("Join a room")))
                     : root.view === "home" || root.view === "compose" ? qsTr("Needs you")
                     : root.view === "dashboard" ? qsTr("Wallet")
                     : root.view === "lez" ? qsTr("Wallet")
@@ -561,6 +586,7 @@ Item {
         chatId: root.chatId
         contactCount: root.contactList.length
         roomCount: root.conversations.length
+        loaded: root.roomsLoaded
         onOpenContacts: { root.view = "contacts"; if (root.backend) root.backend.loadContacts(); }
         onManageAccounts: {
             if (typeof logos !== "undefined" && !!logos && typeof logos.request === "function")
@@ -643,7 +669,8 @@ Item {
     Room {
         id: roomSurface
         // the session title for this room (never its topic, which names nothing)
-        roomTitle: roomSurface.topic.length > 0 ? (root.titleOf(roomSurface.topic) || root.shortRoom(roomSurface.topic)) : ""
+        roomTitle: roomSurface.opening ? (root.titleOf(roomSurface.openingTopic) || root.shortRoom(roomSurface.openingTopic))
+                 : roomSurface.topic.length > 0 ? (root.titleOf(roomSurface.topic) || root.shortRoom(roomSurface.topic)) : ""
         // Leave (exo-dcc.28): the module forgets the room; back to Home, where it no
         // longer shows. Rename (exo-dcc.25): this member's own name for it.
         onLeaveRequested: function (topic) {
@@ -756,7 +783,7 @@ Item {
                     text: qsTr("Balances")
                     onClicked: {
                         root.view = "dashboard";
-                        if (root.backend) { root.backend.loadAccount(); root.backend.loadBalances(); }
+                        root.refreshBalances();
                     }
                 }
                 LogosTabButton {

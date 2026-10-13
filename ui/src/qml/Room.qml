@@ -169,7 +169,18 @@ Item {
     // What this instance knows the room as (Main's session-only title), shown instead of
     // the topic, which names nothing (exo-661.7 / exo-59c). Empty → the topic.
     property string roomTitle: ""
-    readonly property bool joined: room.topic.length > 0
+    // The room being opened (exo-ba0): set by Main when it asks the module to join, and
+    // cleared when the module's room is that room. Until then the room says it is opening —
+    // never the previous room's thread, and never the join form.
+    property string openingTopic: ""
+    readonly property bool opening: room.openingTopic.length > 0 && room.openingTopic !== room.topic
+    function beginOpening(t) { room.openingTopic = String(t || ""); openingGiveUp.restart(); }
+    onTopicChanged: if (room.topic === room.openingTopic) room.openingTopic = ""
+    Timer { id: openingGiveUp; interval: 45000; onTriggered: room.openingTopic = "" }
+    property bool openingSlow: false
+    onOpeningChanged: room.openingSlow = false
+    Timer { interval: 5000; running: room.opening; onTriggered: room.openingSlow = true }
+    readonly property bool joined: room.topic.length > 0 && !room.opening
 
     // Whether the proposal composer is open (the "+" in the message row), and which
     // effect type is being composed: "payment" (a transfer) or "statement" (text the
@@ -1548,6 +1559,39 @@ Item {
             RoomHeader { room: roomItem }
             RoomPinned { room: roomItem }
             RoomThread { room: roomItem }
+
+            // opening (exo-ba0): the module is joining; the first time it also starts the
+            // node, which takes longer, and the line says so after a few seconds
+            Item {
+                objectName: "roomOpening"
+                visible: room.opening
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Column {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 2 * Theme.spacing.xlarge, 420)
+                    spacing: Theme.spacing.small
+                    Loading { anchors.horizontalCenter: parent.horizontalCenter; running: room.opening }
+                    LogosText {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Opening the room…")
+                        color: Theme.palette.text
+                        font.pixelSize: MusterStyle.body
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    LogosText {
+                        objectName: "roomOpeningSlow"
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        visible: room.openingSlow
+                        text: qsTr("Connecting to the network. The first time takes a little longer.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: MusterStyle.caption
+                    }
+                }
+            }
 
             // someone asks to join: said where the conversation is, with Admit (U3)
             Repeater {

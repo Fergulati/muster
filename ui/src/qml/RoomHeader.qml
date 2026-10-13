@@ -50,7 +50,7 @@ ColumnLayout {
             objectName: "roomTitleText"
             visible: !renameRow.visible
             Layout.fillWidth: true
-            text: header.room.joined ? (header.room.roomTitle.length > 0 ? header.room.roomTitle : qsTr("Unnamed room"))
+            text: header.room.joined || header.room.opening ? (header.room.roomTitle.length > 0 ? header.room.roomTitle : qsTr("Unnamed room"))
                                      : qsTr("Join a room")
             color: Theme.palette.text
             font.pixelSize: MusterStyle.subtitle
@@ -280,7 +280,7 @@ ColumnLayout {
 
     // ── join (until a room is joined) ─────────────────────────────────────
     RowLayout {
-        visible: !header.room.joined
+        visible: !header.room.joined && !header.room.opening
         Layout.fillWidth: true
         Layout.leftMargin: Theme.spacing.xlarge
         Layout.rightMargin: Theme.spacing.xlarge

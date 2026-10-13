@@ -51,6 +51,9 @@ Item {
     property string chatId: ""
     property int contactCount: 0
     property int roomCount: 0
+    // whether the module has said which rooms there are (exo-ba0): until it has, Home says
+    // it is loading, rather than show a newcomer's checklist to someone with rooms
+    property bool loaded: true
     Prefs.Settings {
         id: firstRun
         category: "MusterUiFirstRun"
@@ -75,7 +78,7 @@ Item {
         return s;
     }
     readonly property bool checklistDone: home.steps.every(function (x) { return x.done || x.optional; })
-    readonly property bool checklistShown: !firstRun.hidden && !home.checklistDone
+    readonly property bool checklistShown: home.loaded && !firstRun.hidden && !home.checklistDone
     function runStep(key) {
         if (key === "share") {
             clip.text = home.chatId; clip.selectAll(); clip.copy();
@@ -164,7 +167,7 @@ Item {
             Surface {
                 id: checklistSurface
                 objectName: "homeChecklist"
-                visible: !firstRun.hidden && !home.checklistDone
+                visible: home.checklistShown
                 Layout.fillWidth: true
                 implicitHeight: checklistCol.implicitHeight + 2 * Theme.spacing.large
                 ColumnLayout {
@@ -395,11 +398,26 @@ Item {
                 }
             }
 
+            // Not yet known (exo-ba0): the rooms are on their way
+            RowLayout {
+                objectName: "homeLoading"
+                visible: !home.loaded && (home.actions || []).length === 0
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.spacing.large
+                spacing: Theme.spacing.medium
+                Loading { running: parent.visible }
+                LogosText {
+                    text: qsTr("Loading your rooms…")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.body
+                }
+            }
+
             // Nothing on yet — the invitation to start, standing in for the list.
             EmptyState {
                 objectName: "homeEmpty"
                 // the checklist says the same while it shows
-                visible: (home.actions || []).length === 0 && !home.checklistShown
+                visible: home.loaded && (home.actions || []).length === 0 && !home.checklistShown
                 Layout.fillWidth: true
                 text: qsTr("Nothing on yet. Start something with someone, or join a room with its code.")
             }
