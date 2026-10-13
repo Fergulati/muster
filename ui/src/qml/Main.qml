@@ -211,12 +211,36 @@ Item {
     }
     // A room's name: this member's own, from the module (it survives a relaunch), else
     // what this session labelled it; empty when it has none.
-    // A room with no name is told apart by the tail of its code ("Room 9cdc366149").
+    // A room with no name of its own is called after its people (exo-ef6): "Bob",
+    // "Bob and Carol", "Bob, Carol and 2 others", or "Just you" — never its code. The module
+    // names each member the one way they are named everywhere (a contact's name, or a
+    // short id). A room the list does not know yet reads "New room".
     function shortRoom(topic) {
-        var parts = root.contentTopicOf(topic).split("/");
-        var name = String(parts[3] || "");
-        var tail = name.split(".").pop();
-        return qsTr("Room %1").arg(tail.length > 10 ? tail.slice(-10) : tail);
+        var t = root.contentTopicOf(topic);
+        var convs = root.conversations;
+        for (var i = 0; i < convs.length; ++i) {
+            if (String(convs[i].topic || "") !== t) continue;
+            var ps = Array.isArray(convs[i].people) ? convs[i].people.map(String) : [];
+            if (ps.length === 0) return qsTr("Just you");
+            if (ps.length === 1) return ps[0];
+            if (ps.length === 2) return qsTr("%1 and %2").arg(ps[0]).arg(ps[1]);
+            if (ps.length === 3) return qsTr("%1, %2 and %3").arg(ps[0]).arg(ps[1]).arg(ps[2]);
+            return qsTr("%1, %2 and %3 others").arg(ps[0]).arg(ps[1]).arg(ps.length - 2);
+        }
+        return qsTr("New room");
+    }
+    readonly property var contactList: {
+        try { return JSON.parse(root.backend ? root.backend.contactsJson : "[]") || []; }
+        catch (e) { return []; }
+    }
+    // a contact's name for a chat id, or "" when they are not in the address book
+    function contactAlias(id) {
+        var h = String(id || "").replace(/^0x/i, "").toLowerCase();
+        var cs = root.contactList;
+        for (var i = 0; i < cs.length; ++i)
+            if (String(cs[i].identity || "").replace(/^0x/i, "").toLowerCase() === h)
+                return String(cs[i].alias || "");
+        return "";
     }
     function titleOf(topic) {
         var t = root.contentTopicOf(topic);
@@ -481,7 +505,14 @@ Item {
         }
         backend: root.backend
         onCreateRoom: function (verb, peer, topic, policy, draftJson) {
-            root.labelRoom(topic, String(verb || "room") + (peer ? " · with " + root.shortId(peer) : ""));
+            // A room is named for what it is for, and who with when they are a contact; a
+            // plain talk keeps no name, so it is called after its people as they arrive
+            // (exo-ef6). Never a hex id in a name that lasts.
+            var what = verb === "decide" ? qsTr("A decision") : verb === "pay" ? qsTr("A payment")
+                     : verb === "split" ? qsTr("Splitting a bill") : verb === "request" ? qsTr("A payment request") : "";
+            var who = root.contactAlias(peer);
+            if (what.length > 0)
+                root.labelRoom(topic, who.length > 0 ? qsTr("%1 with %2").arg(what).arg(who) : what);
             // the invite (and with it their admission) goes out inside enterRoom
             root.enterRoom(topic, verb, policy, draftJson, peer);
             // Should a join request from them still arrive (an inviter on an older Muster,
