@@ -82,7 +82,7 @@ Item {
         LogosText {
             visible: !feed.collapsed
             Layout.fillWidth: true
-            text: qsTr("How this room reached its state — folded from the shared log, as it happens.")
+            text: qsTr("How this room got here, step by step, from the record every member keeps.")
             color: Theme.palette.textTertiary
             font.pixelSize: MusterStyle.caption
             wrapMode: Text.WordWrap

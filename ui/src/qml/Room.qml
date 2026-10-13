@@ -703,7 +703,7 @@ Item {
              : kind === "lez-transfer" ? qsTr("Proposed a LEZ transfer")
              : kind === "lez-call" ? qsTr("Proposed a LEZ call")
              : kind === "lez-proposal" ? qsTr("Proposed an on-chain LEZ multisig proposal")
-             : kind === "policy" ? qsTr("Proposed a new policy for the room")
+             : kind === "policy" ? qsTr("Proposed a new way to agree")
              : kind === "contract-call" ? qsTr("Proposed a contract call")
              : kind === "delegatecall" ? qsTr("Proposed a DELEGATECALL")
              : "";
@@ -827,7 +827,7 @@ Item {
             // who proposed it, by their signed claim (exo-770); [] = unattributed
             proposedBy: (it && Array.isArray(it.proposedBy)) ? it.proposedBy : [],
             label: isSettleUp ? qsTr("Settle up") : isRequest ? qsTr("Request") : isSplit ? qsTr("Split")
-                 : isGovernance ? qsTr("Add policy")
+                 : isGovernance ? qsTr("A new way to agree")
                  : isLez ? qsTr("LEZ multisig")
                  : isInvoke ? qsTr("Action")
                  : isStatement ? qsTr("Statement") : qsTr("Payment"),
@@ -837,7 +837,7 @@ Item {
             // a statement the room ratifies, or a governance decision — the card shows
             // the text instead of amount → destination.
             statement: isGovernance
-                     ? qsTr("Grant the room the “%1” policy").arg(String(eff.kind || ""))
+                     ? qsTr("Let the room agree by “%1”").arg(String(eff.kind || ""))
                      : isLez ? room.lezSummary(eff, it)
                      : isStatement ? String(eff.text || "") : "",
             // a LEZ step the chain has not included yet: "vote" | "settle" (exo-3c9)

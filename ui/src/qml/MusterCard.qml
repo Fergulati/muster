@@ -82,8 +82,8 @@ Rectangle {
         if (who.length > 0) parts.push(who);
         // an approval's grade (exo-ef1): whether it commits to its inputs
         var grade = String((item && item.attestation) || "");
-        if (grade === "committed") parts.push(qsTr("committed — attested in muster"));
-        else if (grade === "unattested") parts.push(qsTr("unattested — pasted from outside muster"));
+        if (grade === "committed") parts.push(qsTr("signed in Muster, tied to where each input came from"));
+        else if (grade === "unattested") parts.push(qsTr("signed outside Muster and pasted in"));
         if (why.length > 0) parts.push(why);
         if (pos !== "") parts.push(qsTr("log #%1").arg(pos));
         return parts.join("  ·  ");
@@ -327,7 +327,7 @@ Rectangle {
         var r = cardRoot.readiness;
         if (!r) return "";
         if (r.error) return qsTr("could not check: %1").arg(String(r.error));
-        if (!r.declared) return qsTr("this policy has not declared what it needs — nothing is guessed");
+        if (!r.declared) return qsTr("this kind of proposal hasn't said what it needs, so nothing is guessed");
         if (r.ready) return qsTr("✓ you have everything this needs");
         var missing = 0;
         for (var i = 0; i < (r.items || []).length; ++i) if (r.items[i].status === "missing") ++missing;

@@ -1143,9 +1143,9 @@ ColumnLayout {
             var r = room.contributeResult || ({});
             var reason = String(r.reason || "");
             if (reason === "rejected")
-                return qsTr("⚠ Your approval didn't count — your key isn't a recognized "
-                          + "signer for this intent's policy (a Safe owner, or an "
-                          + "attester). Check the signing identity above.");
+                return qsTr("⚠ Your approval didn't count: this proposal doesn't recognize "
+                          + "your key (it needs a Safe owner, or an account the room "
+                          + "recognizes). Check which account signs, above.");
             if (reason === "not-joined")
                 return qsTr("⚠ Not in a room — join one first.");
             if (reason === "unknown-intent")
@@ -1162,9 +1162,8 @@ ColumnLayout {
                           + "can't be accounted for. If its log entry is still on the way, "
                           + "approving again in a moment will work; if not, it can't be signed.");
             if (reason === "attestation-mismatch")
-                return qsTr("⚠ Your approval wasn't published — the attestation your key made "
-                          + "doesn't verify as the signer the driver recovered, so every member "
-                          + "would reject it. Nothing was sent.");
+                return qsTr("⚠ Your approval wasn't sent: its signature didn't check out "
+                          + "against your key, so everyone would have rejected it.");
             return qsTr("⚠ Approval didn't count — %1").arg(reason);
         }
         text: MusterStyle.plain(raw)

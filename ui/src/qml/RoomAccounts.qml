@@ -493,7 +493,7 @@ Item {
 
             LogosText {
                 Layout.fillWidth: true
-                text: qsTr("One key the room holds t of n: to the chain, one signature and no policy.")
+                text: qsTr("One key the room holds together, t of n. The chain sees one signature, and nothing of who signed.")
                 color: Theme.palette.textTertiary
                 font.pixelSize: MusterStyle.caption
                 wrapMode: Text.WordWrap

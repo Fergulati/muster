@@ -884,7 +884,7 @@ ColumnLayout {
         text: {
             var parts = [];
             if (String((cardRoot.card && cardRoot.card.txhash) || "").length > 0)
-                parts.push(qsTr("✓ Re-derived on this device"));
+                parts.push(qsTr("✓ Checked on your device"));
             if (traced > 0)
                 parts.push(traced === 1 ? qsTr("1 input, traced to where it came from")
                                        : qsTr("%1 inputs, each traced to where it came from").arg(traced));
@@ -997,7 +997,7 @@ ColumnLayout {
                     objectName: "verifyHeader"
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: qsTr("✓ your client re-derived this — the exact bytes you'd sign")
+                    text: qsTr("✓ Checked on your device — this is exactly what you would sign")
                     color: Theme.palette.success
                     font.pixelSize: Theme.typography.secondaryText
                     font.weight: Theme.typography.weightMedium
@@ -1016,7 +1016,7 @@ ColumnLayout {
             Repeater {
                 model: cardRoot.verifyOpen
                     ? [{ id: "shown",      k: qsTr("shown"),      v: cardRoot.verifyShown() },
-                       { id: "re-derived", k: qsTr("re-derived"), v: String((cardRoot.card && cardRoot.card.txhash) || "") },
+                       { id: "re-derived", k: qsTr("checked"), v: String((cardRoot.card && cardRoot.card.txhash) || "") },
                        { id: "domain",     k: qsTr("domain"),     v: cardRoot.verifyDomain() }]
                     : []
 
@@ -1086,7 +1086,7 @@ ColumnLayout {
                 LogosText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: qsTr("How do I know this? — %1 in the lineage")
+                    text: qsTr("How do I know this? — where each of its %1 inputs came from")
                         .arg(cardRoot.card && cardRoot.card.provenance
                              ? cardRoot.card.provenance.length : 0)
                     color: Theme.palette.textSecondary

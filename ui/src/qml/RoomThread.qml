@@ -274,9 +274,9 @@ Rectangle {
                     LogosText {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: qsTr("Paste a signature produced elsewhere over the re-derived "
-                                 + "materialization. It counts only if it comes from a signer this "
-                                 + "intent's policy recognizes (a Safe owner, or a room member).")
+                        text: qsTr("Paste a signature made elsewhere over exactly what this proposal "
+                                 + "signs. It counts only if it comes from a signer this proposal "
+                                 + "recognizes (a Safe owner, or a room member).")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                     }
@@ -642,13 +642,13 @@ Rectangle {
                             if (o.error !== undefined) {
                                 var err = String(o.error);
                                 if (err === "not-invoke")
-                                    return qsTr("⚠ Not an action intent — nothing to run.");
+                                    return qsTr("⚠ This isn't a module action, so there is nothing to run.");
                                 if (err === "not-executable")
                                     return qsTr("⚠ Not ready to run — state is \"%1\".")
                                            .arg(String(o.state || ""));
                                 if (err === "not-allowed")
-                                    return qsTr("⚠ Blocked by the gate — %1.%2 is not on the invoke "
-                                             + "allowlist, or the target's capability policy denied it.")
+                                    return qsTr("⚠ Blocked: %1.%2 isn't on this device's list of module "
+                                             + "actions it may run, or that module refused.")
                                            .arg(String(o.module || "")).arg(String(o.method || ""));
                                 return qsTr("⚠ ") + err + (o.detail ? " — " + String(o.detail) : "");
                             }

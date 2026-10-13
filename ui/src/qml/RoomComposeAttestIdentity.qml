@@ -37,9 +37,8 @@ Rectangle {
         LogosText {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: qsTr("You attest with your secp256k1 authorization key — the "
-                     + "same key that signs Safe transactions, not your room "
-                     + "encryption identity.")
+            text: qsTr("You sign with your account key, the one that signs Safe "
+                     + "transactions, not your chat identity.")
             color: Theme.palette.textSecondary
             font.pixelSize: MusterStyle.caption
         }
@@ -57,11 +56,11 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: {
                 if (!room.roomAccount || room.roomAccount.isSigner === undefined)
-                    return qsTr("checking whether your key is a recognized attester…");
+                    return qsTr("checking whether the room recognizes your account…");
                 return room.roomAccount.isSigner
-                     ? qsTr("✓ a recognized attester (a Safe owner) — your attestation counts")
-                     : qsTr("⚠ not a recognized attester — your attestation won't count. "
-                          + "Recognized signers: %1.")
+                     ? qsTr("✓ the room recognizes this account (a Safe owner) — your approval counts")
+                     : qsTr("⚠ the room doesn't recognize this account, so your approval "
+                          + "won't count. It recognizes: %1.")
                        .arg(String(room.roomAccount.signerSet || "the Safe owners"));
             }
             color: (room.roomAccount && room.roomAccount.isSigner)

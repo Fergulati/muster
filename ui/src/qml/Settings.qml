@@ -326,7 +326,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: Theme.spacing.tiny
                         LogosText {
-                            text: qsTr("Ethereum chains  ·  from your device's chain settings (eth_rpc_module)")
+                            text: qsTr("Ethereum chains  ·  from your device's chain settings (the Ethereum RPC app)")
                             color: Theme.palette.textSecondary
                             font.family: MusterStyle.mono
                             font.pixelSize: MusterStyle.caption

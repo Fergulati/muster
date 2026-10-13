@@ -114,6 +114,29 @@ wanted |= set(re.findall(r'objectName",\s*value:\s*"([A-Za-z_]+)"', harness))
 for name in sorted(wanted):
     if name not in defined and not any(name.startswith(p) for p in prefixes):
         found[f"muster-ui-test.mjs · harness-name · {name} is no objectName in ui/src/qml"] += 1
+# Plain language on screen (exo-364): what a person reads is words, not our internals.
+# Every visible string (a qsTr literal, joined across `+`) is checked:
+#   - never a spec or invariant id, a long hex run, or an internal name (a module's lidl
+#     name, a coordinate_ method, an lp_ call): each is a finding wherever it appears;
+#   - a developer term (epoch, materialization, attestation, intent, driver, policy, …)
+#     is counted per file and term. The "how it works" layer (the room map, Learn, a
+#     card's Details) uses some on purpose, and they sit in the baseline; a new one
+#     anywhere, or one more in a file, fails, so jargon cannot creep back onto a surface.
+NEVER = re.compile(r"\b(?:FS?-\d+|U-\d+|R-\d+|ADR-\d+|exo-[0-9a-f]{3,}|[Ii]nvariant \d+)\b"
+                   r"|\b[0-9a-fA-F]{17,}\b|\b\w+_module\b|\bcoordinate_\w+|\blp_\w+")
+TERMS = re.compile(r"\b(epochs?|materiali[sz]ations?|ECIES|X25519|Ed25519|secp256k1|d?CBOR|reduce\(log\)"
+                   r"|fold(?:ed|s)?|attest(?:ed|ations?|ers?)?|sealed box|intents?|drivers?|polic(?:y|ies)"
+                   r"|payloads?|null ladder|rungs?|nonces?|re-deriv\w*|provenance|lineage|schemas?)\b", re.I)
+QSTR = re.compile(r'qsTr\(\s*("(?:[^"\\]|\\.)*"(?:\s*\+\s*"(?:[^"\\]|\\.)*")*)')
+for path in sorted(glob.glob("ui/src/qml/*.qml")):
+    name = os.path.basename(path)
+    src = open(path).read()
+    for m in QSTR.finditer(src):
+        text = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', m.group(1)))
+        for bad in NEVER.findall(text):
+            found[f"{name} · plain-language · never on screen: {bad}"] += 1
+        for t in TERMS.findall(text):
+            found[f"{name} · plain-language · developer term: {t.lower()}"] += 1
 base = json.load(open(baseline_path)) if os.path.exists(baseline_path) else {}
 if mode == "--update":
     json.dump(dict(sorted(found.items())), open(baseline_path, "w"), indent=1)

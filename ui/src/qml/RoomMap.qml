@@ -116,15 +116,15 @@ Rectangle {
     }
     readonly property var observerWords: ({
         "o:store-node": [qsTr("Store node"), qsTr("keeps every envelope"),
-            qsTr("Every entry reaches the room as a sealed envelope on one topic. The store node keeps them, so it sees when each arrived and which topic it belongs to. It holds no epoch key and cannot open one (FS-9).")],
+            qsTr("Every entry reaches the room as a sealed envelope on one topic. The store node keeps them, so it sees when each arrived and which topic it belongs to. It holds no room key and cannot open one.")],
         "o:rpc-provider": [qsTr("RPC provider"), qsTr("each sender's own endpoint"),
-            qsTr("The endpoint a member sends through sees that member's signed transaction before the mempool does, and the address it came from. Each member chooses their own (invariant 8).")],
+            qsTr("The endpoint a member sends through sees that member's signed transaction before the mempool does, and the address it came from. Each member chooses their own.")],
         "o:chain-observer": [qsTr("Chain observer"), qsTr("anyone reading the chain"),
             qsTr("Anyone reading the public ledger. It learns what the driver's manifest declares when the room settles, never before: nothing leaves at propose or approve.")],
         "o:target-module": [qsTr("Target module"), qsTr("the module a call reaches"),
             qsTr("The Logos module an action calls. It sees the call's arguments when the room executes it.")],
         "o:outside": [qsTr("Outside sources"), qsTr("what the room took in"),
-            qsTr("Reads the room took in: a chain's answer, a nonce, a rate, a creditor's own check of a payment. Each is recorded as an external read, so its origin is accountable. It is not proof the world agrees (F-10).")]
+            qsTr("Reads the room took in: a chain's answer, a nonce, a rate, a creditor's own check of a payment. Each is recorded as an external read, so its origin is accountable. It is not proof the world agrees.")]
     })
     function obsWord(id, i) { var w = map.observerWords[id]; return w ? w[i] : id.replace(/^o:/, ""); }
     readonly property var kindWords: ({
@@ -1463,7 +1463,7 @@ Rectangle {
             d.kicker = qsTr("MEMBER");
             d.title = map.memberName(n.id) + (self ? qsTr(" · this device") : "");
             d.lead = self ? qsTr("Your keys stay on this device. The room sees what you signed into it, and nothing else.")
-                          : qsTr("What the map says about this member is only what they put in the room (invariant 9).");
+                          : qsTr("What the map says about this member is only what they put in the room.");
             d.rows.push([qsTr("Joined"), Number(a.joined) >= 0 ? qsTr("epoch %1").arg(a.joined) : qsTr("not in the roster you hold")]);
             d.rows.push([qsTr("Identity"), map.shortId(hex), "mono"]);
             var did = 0, keys = [];
@@ -1582,7 +1582,7 @@ Rectangle {
             d.title = map.shortId(n.id.slice(2));
             var owner = "";
             for (i = 0; i < allEdges.length; i++) if (allEdges[i].kind === "bound" && allEdges[i].dst === n.id) owner = allEdges[i].src;
-            d.lead = owner.length > 0 ? qsTr("Bound to %1 by a signed binding the room checked (F-14).").arg(map.memberName(owner))
+            d.lead = owner.length > 0 ? qsTr("Tied to %1 by a statement this key signed, which the room checked.").arg(map.memberName(owner))
                                       : qsTr("No binding in the room ties this key to a member, so the map names no one.");
             d.guarantee = qsTr("The driver verified that each approval from this key recovers to a configured signer.");
             return d;
@@ -1597,7 +1597,7 @@ Rectangle {
             d.kicker = qsTr("SEALED");
             d.title = qsTr("Before you joined");
             d.lead = qsTr("Entries from epochs before your admission. Your client never held those epochs' keys, so it cannot open them, and this map cannot show them.");
-            d.guarantee = qsTr("Membership epochs are real: a joiner reads from its own admission on (invariant 7, F-16).");
+            d.guarantee = qsTr("Someone who joins reads from the moment they were let in, never what came before.");
             return d;
         }
         if (n.kind === "bytes") {

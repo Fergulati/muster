@@ -22,7 +22,7 @@ ColumnLayout {
     LogosText {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: qsTr("⚠ Schema unknown")
+        text: qsTr("⚠ Muster can't show this proposal")
         color: Theme.palette.warning
         font.family: Theme.typography.publicSans
         font.pixelSize: Theme.typography.primaryText
@@ -31,10 +31,9 @@ ColumnLayout {
     LogosText {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
-        text: qsTr("This activity declares “%1”, a schema this app does not recognize. "
-                 + "Nothing is rendered from it — an activity is shown only from a "
-                 + "declared, versioned schema, so it is never displayed as something "
-                 + "it is not.").arg(cardRoot.schemaId.length > 0 ? cardRoot.schemaId
+        text: qsTr("It says it is “%1”, a kind of proposal this version of Muster doesn't "
+                 + "know. Nothing is shown from it, so it is never shown as something it "
+                 + "isn't. A newer Muster may know it.").arg(cardRoot.schemaId.length > 0 ? cardRoot.schemaId
                                                                   : qsTr("an unknown effect"))
         color: Theme.palette.textSecondary
         font.pixelSize: MusterStyle.caption
