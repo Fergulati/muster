@@ -271,7 +271,7 @@ Item {
             else
                 idle.push({ topic: topic, title: title, action: c.active ? qsTr("Talking") : qsTr("Open"),
                             state: "idle",
-                            detail: c.lastTs ? qsTr("last active · %1").arg(c.lastTs) : qsTr("no proposals yet") });
+                            detail: c.lastTs ? qsTr("active %1").arg(MusterStyle.ago(c.lastTs)) : qsTr("no proposals yet") });
         }
         return needs.concat(waiting, settled, idle);
     }

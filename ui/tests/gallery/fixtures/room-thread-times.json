@@ -1,0 +1,82 @@
+{
+  "about": "The thread tells time in words: a divider at each day, a name and \"time ago\" once per run of lines, never raw seconds (exo-52d).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900",
+    "1024x700"
+  ],
+  "props": {
+    "messagesJson": [
+      {
+        "id": "0xm01",
+        "author": "0x4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866",
+        "ts": 1791483236,
+        "body": "Dinner on Friday? I found a place near the station.",
+        "alias": "Bob",
+        "self": false
+      },
+      {
+        "id": "0xm02",
+        "author": "0x4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866",
+        "ts": 1791483276,
+        "body": "They take bookings for six or more.",
+        "alias": "Bob",
+        "self": false
+      },
+      {
+        "id": "0xm03",
+        "author": "0x589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+        "ts": 1791483836,
+        "body": "Friday works. I'll book it and we can split the bill afterwards.",
+        "alias": "",
+        "self": true
+      },
+      {
+        "id": "0xm04",
+        "author": "0x589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+        "ts": 1791483856,
+        "body": "Six of us, then.",
+        "alias": "",
+        "self": true
+      },
+      {
+        "id": "0xm05",
+        "author": "0x4d613c133e2e7557b28b9a827ad7493cf8b137c160ad3f33ec9cc49b4b1eb58fc40ff65ca733a1d0bb541e716692f151bed3d8b6c7a608eb0928a446ad5a8866",
+        "ts": 1791572936,
+        "body": "Booked for 8pm. Proposing the payment now.",
+        "alias": "Bob",
+        "self": false
+      },
+      {
+        "id": "0xc72e96ee051bbf91a9382a87",
+        "author": "0x589ab01dfc6c60f2fb6f4f14136607d939882cf6b65e5aa37e11f79233705f584b351ba34d3be62e787b12cc146dfaf09b9c3df21ae438383aaede5f32cb107b",
+        "ts": 1791573236,
+        "body": "{\"kind\":\"intent-ref\",\"intentId\":\"0xf82713a97f076e35\"}",
+        "alias": "",
+        "self": true
+      }
+    ]
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "dayDivider",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "messageTime",
+        "text",
+        "!1791"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

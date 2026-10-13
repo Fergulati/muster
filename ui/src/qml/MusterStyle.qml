@@ -7,6 +7,53 @@ import Logos.Theme
 // what it lacks, and names the scale the redesign uses, so a view says `caption`, never a
 // pixel count. Reference build: ui/prototype/desktop-v3.html.
 QtObject {
+    id: style
+
+    // ── time, in words (exo-52d) ──────────────────────────────────────────
+    // A message, a room's last activity, a step on a card: "just now", "4 min ago",
+    // "14:05", "Yesterday 14:05", "Mon 14:05", "3 Oct". Never a raw count of seconds. `now`
+    // ticks every 30 s so a label ages on its own; the module's times are unix seconds
+    // (milliseconds are taken as they are).
+    property double now: Date.now()
+    readonly property Timer clock: Timer {
+        interval: 30000; running: true; repeat: true
+        onTriggered: style.now = Date.now()
+    }
+    function msOf(ts) { var n = Number(ts || 0); return n > 1e12 ? n : n * 1000; }
+    function dayKey(ts) {
+        var d = new Date(style.msOf(ts));
+        return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    }
+    function clockTime(ts) { return new Date(style.msOf(ts)).toLocaleTimeString(Qt.locale(), Locale.ShortFormat); }
+    function daysAgo(ts) {
+        var a = new Date(style.msOf(ts)), b = new Date(style.now);
+        a.setHours(0, 0, 0, 0); b.setHours(0, 0, 0, 0);
+        return Math.round((b.getTime() - a.getTime()) / 86400000);
+    }
+    // a day, for a divider: Today · Yesterday · Monday · 3 October · 3 October 2025
+    function dayLabel(ts) {
+        var n = style.daysAgo(ts), d = new Date(style.msOf(ts));
+        if (n <= 0) return qsTr("Today");
+        if (n === 1) return qsTr("Yesterday");
+        if (n < 7) return d.toLocaleDateString(Qt.locale(), "dddd");
+        if (d.getFullYear() === new Date(style.now).getFullYear()) return d.toLocaleDateString(Qt.locale(), "d MMMM");
+        return d.toLocaleDateString(Qt.locale(), "d MMMM yyyy");
+    }
+    // when, beside a message or a room: relative while fresh, then the clock and the day
+    function ago(ts) {
+        if (!ts) return "";
+        var s = (style.now - style.msOf(ts)) / 1000;
+        if (s < 45) return qsTr("just now");
+        if (s < 3600) return qsTr("%1 min ago").arg(Math.max(1, Math.round(s / 60)));
+        var n = style.daysAgo(ts);
+        if (n <= 0) return style.clockTime(ts);
+        if (n === 1) return qsTr("Yesterday %1").arg(style.clockTime(ts));
+        if (n < 7) return new Date(style.msOf(ts)).toLocaleDateString(Qt.locale(), "ddd") + " " + style.clockTime(ts);
+        return new Date(style.msOf(ts)).toLocaleDateString(Qt.locale(), "d MMM");
+    }
+    // the full date and time, for a tooltip
+    function fullTime(ts) { return new Date(style.msOf(ts)).toLocaleString(Qt.locale(), Locale.LongFormat); }
+
     // ── type ──────────────────────────────────────────────────────────────
     // Monospace for what is data: hashes, addresses, the room code, amounts in base units.
     // Bundled (DM Mono, SIL OFL 1.1, fonts/OFL.txt) so it reads the same on every host;
