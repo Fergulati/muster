@@ -1,0 +1,117 @@
+{
+  "about": "A sent line shows at once, \"Sending…\", and leaves the outbox when the room's log returns it; one the log never returns reads \"Not sent\" with Try again (exo-49d).",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "messageComposer",
+        "text",
+        "hello from the gallery"
+      ]
+    },
+    {
+      "click": "sendMessageButton"
+    },
+    {
+      "expect": {
+        "slot": "postMessage",
+        "args": [
+          "hello from the gallery"
+        ]
+      }
+    },
+    {
+      "expectProp": [
+        "messageSending",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "sending"
+    },
+    {
+      "props": {
+        "messagesJson": [
+          {
+            "id": "0x7ce82149c616dc7a2e58ac3e",
+            "author": "0xcd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d7563dcc927c1a986ecfa833b4e026a1fdacc174092a7d56f0644463af0e2e208",
+            "ts": 1791572372,
+            "body": "{\"kind\":\"intent-ref\",\"intentId\":\"0xa566cea2c7c46cff\"}",
+            "alias": "",
+            "self": true
+          },
+          {
+            "id": "0xgallery",
+            "author": "0xcd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d7563dcc927c1a986ecfa833b4e026a1fdacc174092a7d56f0644463af0e2e208",
+            "ts": 4102444800,
+            "body": "hello from the gallery",
+            "alias": "",
+            "self": true
+          }
+        ]
+      }
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "roomSurface",
+        "outbox",
+        []
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "outbox",
+        [
+          {
+            "key": "k1",
+            "body": "this one never arrived",
+            "at": 0,
+            "failed": true
+          }
+        ]
+      ]
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "messageNotSent",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "not-sent"
+    },
+    {
+      "click": "messageRetry"
+    },
+    {
+      "expect": {
+        "slot": "postMessage",
+        "args": [
+          "this one never arrived"
+        ]
+      }
+    },
+    {
+      "expectProp": [
+        "messageSending",
+        "visible",
+        true
+      ]
+    }
+  ]
+}

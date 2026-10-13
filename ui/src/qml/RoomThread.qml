@@ -27,7 +27,7 @@ Rectangle {
     Connections {
         target: threadRoot.room
         function onJumpRequested(intentId) {
-            var msgs = threadRoot.room.messages;
+            var msgs = threadRoot.room.threadItems;
             for (var i = 0; i < msgs.length; ++i) {
                 try {
                     var o = JSON.parse(msgs[i].body);
@@ -50,7 +50,7 @@ Rectangle {
         anchors.bottomMargin: Theme.spacing.medium
         clip: true
         spacing: Theme.spacing.small
-        model: room.messages
+        model: room.threadItems
         onCountChanged: positionViewAtEnd()
 
         delegate: Item {
@@ -98,7 +98,7 @@ Rectangle {
             readonly property bool isDupRef: {
                 if (!msg.isIntentRef) return false;
                 var id = String(msg.parsedCard.intentId || "");
-                var msgs = room.messages;
+                var msgs = room.threadItems;
                 for (var i = 0; i < msg.index && i < msgs.length; ++i) {
                     try {
                         var o = JSON.parse(msgs[i].body);
@@ -112,18 +112,19 @@ Rectangle {
 
             // Time in the thread (exo-52d): a divider at each new day, and a run of lines from
             // one person within five minutes under one header, as chat clients do.
-            readonly property var prev: msg.index > 0 && msg.index - 1 < room.messages.length
-                                        ? room.messages[msg.index - 1] : null
+            readonly property var prev: msg.index > 0 && msg.index - 1 < room.threadItems.length
+                                        ? room.threadItems[msg.index - 1] : null
             readonly property bool newDay: !!modelData.ts
                                            && (!msg.prev || !msg.prev.ts
                                                || MusterStyle.dayKey(msg.prev.ts) !== MusterStyle.dayKey(modelData.ts))
+            function who(a) { return String(a || "").replace(/^0x/, "").toLowerCase(); }
             function isChat(m) {
                 try { var o = JSON.parse(m.body); return !(o && (o.kind || o.type)); }
                 catch (e) { return true; }
             }
             readonly property bool continues: !msg.newDay && !!msg.prev && msg.parsedCard === null
                                               && msg.isChat(msg.prev)
-                                              && String(msg.prev.author || "") === String(modelData.author || "")
+                                              && msg.who(msg.prev.author) === msg.who(modelData.author)
                                               && MusterStyle.msOf(modelData.ts) - MusterStyle.msOf(msg.prev.ts) < 5 * 60 * 1000
 
             // reveal the signature field for THIS inline proposal.
@@ -747,9 +748,33 @@ Rectangle {
                     LogosText {
                         Layout.fillWidth: true
                         text: String(modelData.body || "")
-                        color: Theme.palette.text
+                        color: modelData.pending || modelData.failed ? Theme.palette.textSecondary : Theme.palette.text
                         font.pixelSize: MusterStyle.body
                         wrapMode: Text.Wrap     // at words; a word longer than the line breaks anywhere
+                    }
+                    // on its way (exo-49d): the room's log hasn't returned it yet
+                    RowLayout {
+                        visible: !!modelData.pending || !!modelData.failed
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            objectName: modelData.failed ? "messageNotSent" : modelData.pending ? "messageSending" : ""
+                            text: modelData.failed ? qsTr("Not sent") : qsTr("Sending…")
+                            color: modelData.failed ? MusterStyle.warning : Theme.palette.textTertiary
+                            font.pixelSize: MusterStyle.caption
+                        }
+                        LogosText {
+                            id: retryLink
+                            objectName: modelData.failed ? "messageRetry" : ""
+                            signal clicked()
+                            visible: !!modelData.failed
+                            text: qsTr("Try again")
+                            color: Theme.palette.primary
+                            font.pixelSize: MusterStyle.caption
+                            font.underline: retryHover.hovered
+                            onClicked: room.retrySend(String(modelData.outboxKey || ""))
+                            HoverHandler { id: retryHover; cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: retryLink.clicked() }
+                        }
                     }
                 }
             }

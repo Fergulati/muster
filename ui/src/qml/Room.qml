@@ -204,6 +204,63 @@ Item {
         try { return JSON.parse(backend ? backend.messagesJson : "[]"); }
         catch (e) { return []; }
     }
+    // What I sent that the room's log has not shown back yet (exo-49d): the line appears in
+    // the thread at once, "sending…", and leaves the outbox when the log returns it. Still
+    // missing after a while, it reads "Not sent" with a retry. Never a second record: the
+    // log is the thread; this is only the wait before it catches up.
+    property var outbox: []        // [{key, body, at, failed}]
+    function sendChat(body) {
+        var b = String(body || "");
+        if (!room.backend || b.length === 0) return;
+        room.outbox = room.outbox.concat([{ key: String(Date.now()) + "-" + room.outbox.length,
+                                            body: b, at: Date.now(), failed: false }]);
+        room.backend.postMessage(b);
+    }
+    function retrySend(key) {
+        var keep = [], body = "";
+        for (var i = 0; i < room.outbox.length; ++i)
+            if (room.outbox[i].key === key) body = room.outbox[i].body; else keep.push(room.outbox[i]);
+        room.outbox = keep;
+        room.sendChat(body);
+    }
+    // each outbox line is matched to one of my own messages with the same text, sent no
+    // earlier than a minute before it (the log's clock is in seconds)
+    function reconcileOutbox() {
+        if (room.outbox.length === 0) return;
+        var used = {}, keep = [], changed = false;
+        for (var i = 0; i < room.outbox.length; ++i) {
+            var o = room.outbox[i], hit = false;
+            for (var j = 0; j < room.messages.length && !hit; ++j) {
+                var m = room.messages[j];
+                if (used[j] || !m.self || String(m.body) !== o.body) continue;
+                if (MusterStyle.msOf(m.ts) < o.at - 60000) continue;
+                used[j] = true; hit = true;
+            }
+            if (hit) { changed = true; continue; }
+            if (!o.failed && Date.now() - o.at > 30000) {
+                o = { key: o.key, body: o.body, at: o.at, failed: true }; changed = true;
+            }
+            keep.push(o);
+        }
+        if (changed) room.outbox = keep;
+    }
+    onMessagesChanged: room.reconcileOutbox()
+    Timer {
+        interval: 5000; repeat: true
+        running: room.outbox.length > 0
+        onTriggered: room.reconcileOutbox()
+    }
+    // the thread as drawn: the log, then what is on its way
+    readonly property var threadItems: {
+        var out = room.messages.slice();
+        for (var i = 0; i < room.outbox.length; ++i) {
+            var o = room.outbox[i];
+            out.push({ id: "outbox:" + o.key, outboxKey: o.key, author: room.myIdentity, self: true,
+                       ts: Math.floor(o.at / 1000), body: o.body, alias: "",
+                       pending: !o.failed, failed: o.failed });
+        }
+        return out;
+    }
     readonly property var members: {
         try { return JSON.parse(backend ? backend.membersJson : "[]"); }
         catch (e) { return []; }

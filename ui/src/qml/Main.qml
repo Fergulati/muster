@@ -215,12 +215,28 @@ Item {
     // "Bob and Carol", "Bob, Carol and 2 others", or "Just you" — never its code. The module
     // names each member the one way they are named everywhere (a contact's name, or a
     // short id). A room the list does not know yet reads "New room".
+    // the open room's other members by name (alias, else a short id), from its roster
+    function othersInRoom() {
+        var ms = [];
+        try { ms = JSON.parse(root.backend ? root.backend.membersJson : "[]"); } catch (e) { ms = []; }
+        var out = [];
+        for (var i = 0; i < ms.length; ++i) {
+            if (!ms[i] || ms[i].self) continue;
+            var a = String(ms[i].alias || "");
+            out.push(a.length > 0 ? a : String(ms[i].identity || "").replace(/^0x/, "").slice(0, 6) + "…");
+        }
+        return out;
+    }
     function shortRoom(topic) {
         var t = root.contentTopicOf(topic);
         var convs = root.conversations;
         for (var i = 0; i < convs.length; ++i) {
             if (String(convs[i].topic || "") !== t) continue;
-            var ps = Array.isArray(convs[i].people) ? convs[i].people.map(String) : [];
+            // `people` is the module's; an older module has none, and then the open room
+            // is named from its roster rather than called "Just you" with others in it
+            var ps = Array.isArray(convs[i].people) ? convs[i].people.map(String)
+                   : t === root.contentTopicOf(root.roomTopic) ? root.othersInRoom() : null;
+            if (ps === null) return qsTr("A room");
             if (ps.length === 0) return qsTr("Just you");
             if (ps.length === 1) return ps[0];
             if (ps.length === 2) return qsTr("%1 and %2").arg(ps[0]).arg(ps[1]);

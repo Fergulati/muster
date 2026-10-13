@@ -585,6 +585,17 @@ Rectangle {
         && cardRoot.myTransfer !== null
     readonly property bool needsMe: canApprove || canPayShare || canPaySettle
 
+    // What I just clicked, until the room's state shows it (exo-49d): the button gives way
+    // to "Sending your approval…" at once, rather than sitting there inviting a second
+    // click. It clears when the action no longer applies (the log caught up) or after 30 s,
+    // when the button comes back; a refusal is reported by the room's own notice.
+    property string sending: ""            // "approve" | "pay" | "deny" | ""
+    function markSending(what) { cardRoot.sending = what; sendingClear.restart(); }
+    Timer { id: sendingClear; interval: 30000; onTriggered: cardRoot.sending = "" }
+    onCanApproveChanged: if (!cardRoot.canApprove && (cardRoot.sending === "approve" || cardRoot.sending === "deny")) cardRoot.sending = ""
+    onCanPayShareChanged: if (!cardRoot.canPayShare && cardRoot.sending === "pay") cardRoot.sending = ""
+    onCanPaySettleChanged: if (!cardRoot.canPaySettle && cardRoot.sending === "pay") cardRoot.sending = ""
+
     // The status in words (exo-ce0): what happens next, and who it waits on — "Needs you",
     // "Waiting for Bob", "Ready to settle", "Sent to the chain", "Paid 1 of 2", "Paid".
     // `stage` is the intent's lifecycle state; `state` the card's coarser one.
@@ -615,6 +626,9 @@ Rectangle {
         var st = cardRoot.stage;
         if (cardRoot.isDeclined || st === "declined") return qsTr("Declined");
         if (st === "expired" || cardRoot.splitExpired) return qsTr("Expired");
+        if (cardRoot.sending === "approve") return qsTr("Sending your approval…");
+        if (cardRoot.sending === "deny") return qsTr("Sending…");
+        if (cardRoot.sending === "pay") return qsTr("Sending your payment…");
         if (cardRoot.canApprove) return qsTr("Needs you");
         if (cardRoot.canPayShare || cardRoot.canPaySettle) return qsTr("Your turn to pay");
         var parts = cardRoot.isSplit || cardRoot.isSettleUp;
@@ -633,6 +647,7 @@ Rectangle {
     readonly property string stateTone: {
         var st = cardRoot.stage;
         if (cardRoot.isDeclined || st === "declined" || st === "expired" || cardRoot.splitExpired) return "refused";
+        if (cardRoot.sending.length > 0) return "info";
         if (cardRoot.needsMe) return "needs";
         if (st === "final" || st === "paid") return "settled";
         if (st === "executable" || st === "ready" || st === "submitted" || st === "settling") return "info";
@@ -866,12 +881,12 @@ Rectangle {
             ActionButton {
                 variant: LogosButton.Variant.Primary
                 objectName: "cardApprove"
-                visible: cardRoot.canApprove
+                visible: cardRoot.canApprove && cardRoot.sending === ""
                 text: cardRoot.isSettleUp ? qsTr("Agree to settle up")
                     : !cardRoot.isSplit ? qsTr("Approve")
                     : cardRoot.iAmDebtor ? qsTr("Agree to my share")
                     : qsTr("Agree — I paid, and %1 is mine").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
-                onClicked: cardRoot.approve()
+                onClicked: { cardRoot.markSending("approve"); cardRoot.approve(); }
             }
 
             // A settle-up (exo-3c6): once every party agreed, each pays their own net payments —
@@ -879,13 +894,13 @@ Rectangle {
             ActionButton {
                 variant: LogosButton.Variant.Primary
                 objectName: "cardPaySettle"
-                visible: cardRoot.canPaySettle
+                visible: cardRoot.canPaySettle && cardRoot.sending === ""
                 text: cardRoot.myTransfer
                       ? qsTr("Pay %1 %2 to %3").arg(cardRoot.eth(cardRoot.myTransfer.amount)).arg(cardRoot.unit)
                             .arg(String(cardRoot.myTransfer.toName || "").length > 0 ? cardRoot.myTransfer.toName
                                  : String(cardRoot.myTransfer.to).slice(0, 10) + "…")
                       : ""
-                onClicked: cardRoot.settlePart()
+                onClicked: { cardRoot.markSending("pay"); cardRoot.settlePart(); }
             }
 
             // A split (exo-a90): once everyone named has agreed, each pays their OWN share from
@@ -894,10 +909,10 @@ Rectangle {
             ActionButton {
                 variant: LogosButton.Variant.Primary
                 objectName: "cardPayShare"
-                visible: cardRoot.canPayShare
+                visible: cardRoot.canPayShare && cardRoot.sending === ""
                 text: cardRoot.myPart ? qsTr("Pay my share — %1 %2").arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit)
                                       : qsTr("Pay my share")
-                onClicked: cardRoot.settlePart()
+                onClicked: { cardRoot.markSending("pay"); cardRoot.settlePart(); }
             }
 
             ActionButton {
@@ -920,8 +935,9 @@ Rectangle {
                     && !cardRoot.ready
                     && !cardRoot.isDeclined
                     && (!cardRoot.isSplit || cardRoot.iAmDebtor || cardRoot.iAmCreditor)
+                    && cardRoot.sending === ""
                 text: qsTr("Deny")
-                onClicked: cardRoot.deny()
+                onClicked: { cardRoot.markSending("deny"); cardRoot.deny(); }
             }
 
             // "Who sees this?" (exo-720.10): this proposal's flow, in the room's Privacy tab
