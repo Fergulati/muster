@@ -1,0 +1,23 @@
+{
+  "about": "The card's status in words (exo-ce0): \"Paid\".",
+  "snapshot": "data/split-bob-final.json",
+  "props": {},
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "cardStatePill",
+        "text",
+        "Paid"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

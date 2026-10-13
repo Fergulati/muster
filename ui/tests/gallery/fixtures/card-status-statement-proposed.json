@@ -1,0 +1,23 @@
+{
+  "about": "The card's status in words (exo-ce0): \"Needs you\".",
+  "snapshot": "data/statement-proposed.json",
+  "props": {},
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "cardStatePill",
+        "text",
+        "Needs you"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

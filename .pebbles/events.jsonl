@@ -2495,3 +2495,6 @@
 {"type":"close","timestamp":"2026-10-13T15:46:26.386671615Z","issue_id":"exo-720.15.2","payload":{}}
 {"type":"close","timestamp":"2026-10-13T15:49:56.921866589Z","issue_id":"exo-720.15.3","payload":{}}
 {"type":"close","timestamp":"2026-10-13T15:49:56.921866589Z","issue_id":"exo-720.15.4","payload":{}}
+{"type":"close","timestamp":"2026-10-13T15:52:59.541231583Z","issue_id":"exo-720.15.7","payload":{}}
+{"type":"close","timestamp":"2026-10-13T15:52:59.541231583Z","issue_id":"exo-720.15.8","payload":{}}
+{"type":"close","timestamp":"2026-10-13T15:55:15.761495803Z","issue_id":"exo-720.15.5","payload":{}}

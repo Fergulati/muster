@@ -130,10 +130,11 @@ Item {
              : what === "approve" ? qsTr("Needs your approval") : what === "submit" ? qsTr("Ready to settle")
              : qsTr("Waiting on you");
     }
+    // the pinned bar's word for a proposal that does not wait on you (exo-ce0)
     function stateWord(st) {
-        return st === "proposed" ? qsTr("Proposed") : st === "collecting" ? qsTr("Collecting")
-             : st === "executable" ? qsTr("Ready") : st === "submitted" ? qsTr("Submitted")
-             : st === "settling" ? qsTr("Settling") : st === "final" ? qsTr("Final") : String(st || "");
+        return st === "proposed" || st === "collecting" ? qsTr("Waiting on others")
+             : st === "executable" ? qsTr("Agreed") : st === "submitted" ? qsTr("Sent to the chain")
+             : st === "settling" ? qsTr("Settling") : st === "final" ? qsTr("Done") : String(st || "");
     }
     // The pinned proposal (U-3): what waits on you first, else the latest still under way.
     readonly property var liveProposal: {
@@ -875,6 +876,7 @@ Item {
             committed: Number((it && it.committed) || 0),
             unattested: Number((it && it.unattested) || 0),
             state: cardState,
+            stage: st,                       // the lifecycle state, for the status in words (exo-ce0)
             // the verify view: the re-derived safeTxHash and the domain it binds to
             txhash: (it && it.txhash) ? String(it.txhash) : "",
             chainId: (it && it.chainId !== undefined) ? Number(it.chainId) : 0,

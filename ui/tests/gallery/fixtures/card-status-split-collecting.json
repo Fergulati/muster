@@ -1,0 +1,23 @@
+{
+  "about": "The card's status in words (exo-ce0): \"Waiting for Bob\".",
+  "snapshot": "data/split-alice-collecting.json",
+  "props": {},
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "cardStatePill",
+        "text",
+        "Waiting for Bob"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "about": "The card's status in words (exo-ce0): \"Your turn to pay\".",
+  "snapshot": "data/split-bob-agreed.json",
+  "props": {},
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "cardStatePill",
+        "text",
+        "Your turn to pay"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

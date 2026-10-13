@@ -562,18 +562,81 @@ Rectangle {
         if (String(c.action || "").length > 0) return "code";
         return "coin";
     }
+    // What a person can do on this card now: the primary actions' own rules, in one place,
+    // so the status pill and the buttons never disagree.
+    readonly property bool canApprove: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+        && !(cardRoot.card && cardRoot.card.approvedByMe)
+        && !cardRoot.ready
+        // a decline is final (exo-720): who declined does not approve, and a
+        // proposal too many declined is closed
+        && !cardRoot.declinedByMe && !cardRoot.isDeclined
+        // a split: only who it names agrees — each debtor, and the creditor to payTo
+        // being theirs (exo-770), never to an address this client does not hold
+        && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && (cardRoot.payToMine || cardRoot.payToMineUnknown)))
+        && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
+        && !cardRoot.vouchedNotMine    // never vouch for an address this client does not hold
+        && !cardRoot.splitExpired      // past its expiry an agreement is refused (inv 2)
+    readonly property bool canPayShare: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor && !cardRoot.isXmr
+        && cardRoot.ready && !cardRoot.paid && !cardRoot.splitExpired
+        && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
+        && !cardRoot.myPart.covered
+    readonly property bool canPaySettle: cardRoot.kind === "intent-propose" && cardRoot.isSettleUp && cardRoot.ready
+        && !cardRoot.settleUp.expired
+        && cardRoot.myTransfer !== null
+    readonly property bool needsMe: canApprove || canPayShare || canPaySettle
+
+    // The status in words (exo-ce0): what happens next, and who it waits on — "Needs you",
+    // "Waiting for Bob", "Ready to settle", "Sent to the chain", "Paid 1 of 2", "Paid".
+    // `stage` is the intent's lifecycle state; `state` the card's coarser one.
+    readonly property string stage: String((cardRoot.card && (cardRoot.card.stage || cardRoot.card.state)) || "")
+    readonly property bool settlesOnChain: !!(cardRoot.card && cardRoot.card.profile
+                                              && String(cardRoot.card.profile.settlement || "none") !== "none")
+    // who a proposal still waits on to agree, by name where the card names them (a split's parties)
+    function waitingFor() {
+        var left = Math.max(0, cardRoot.threshold - cardRoot.approvals);
+        if (cardRoot.isSplit) {
+            var ap = (cardRoot.card && Array.isArray(cardRoot.card.approvers)) ? cardRoot.card.approvers : [];
+            var names = [];
+            for (var i = 0; i < cardRoot.parts.length; ++i) {
+                var p = cardRoot.parts[i], agreed = false;
+                for (var j = 0; j < ap.length; ++j) if (String(ap[j].who) === String(p.part)) agreed = true;
+                if (!agreed) names.push(p.mine ? qsTr("you") : String(p.name || "").length > 0 ? String(p.name) : String(p.who || "").slice(0, 8) + "…");
+            }
+            if (!cardRoot.creditorAgreed && cardRoot.split) names.push(cardRoot.iAmCreditor ? qsTr("you") : cardRoot.creditorName);
+            if (names.length === 1) return qsTr("Waiting for %1").arg(names[0]);
+            if (names.length === 2) return qsTr("Waiting for %1 and %2").arg(names[0]).arg(names[1]);
+            if (names.length > 2) return qsTr("Waiting for %1 people").arg(names.length);
+        }
+        if (cardRoot.rounds > 1 && cardRoot.roundNo > 1)
+            return qsTr("Round %1 of %2").arg(cardRoot.roundNo).arg(cardRoot.rounds);
+        return left === 1 ? qsTr("Waiting for 1 more") : left > 1 ? qsTr("Waiting for %1 more").arg(left) : qsTr("Waiting");
+    }
     readonly property string stateWord: {
-        var st = String((cardRoot.card && cardRoot.card.state) || "");
-        return st === "proposed" ? qsTr("Proposed") : st === "collecting" ? qsTr("Collecting")
-             : st === "executable" ? qsTr("Ready") : st === "submitted" ? qsTr("Submitted")
-             : st === "settling" ? qsTr("Settling") : st === "final" ? qsTr("Final")
-             : st === "declined" ? qsTr("Declined") : st === "expired" ? qsTr("Expired")
-             : st === "ready" ? qsTr("Ready") : st.length > 0 ? st.charAt(0).toUpperCase() + st.slice(1) : "";
+        var st = cardRoot.stage;
+        if (cardRoot.isDeclined || st === "declined") return qsTr("Declined");
+        if (st === "expired" || cardRoot.splitExpired) return qsTr("Expired");
+        if (cardRoot.canApprove) return qsTr("Needs you");
+        if (cardRoot.canPayShare || cardRoot.canPaySettle) return qsTr("Your turn to pay");
+        var parts = cardRoot.isSplit || cardRoot.isSettleUp;
+        if (st === "proposed" || st === "collecting") return cardRoot.waitingFor();
+        if (st === "executable" || st === "ready") return parts ? qsTr("Agreed · paying") : cardRoot.settlesOnChain ? qsTr("Ready to settle") : qsTr("Agreed");
+        if (st === "submitted") return parts ? qsTr("Paying") : qsTr("Sent to the chain");
+        if (st === "settling") {
+            if (!parts) return qsTr("Settling");
+            var n = 0;
+            for (var i = 0; i < cardRoot.parts.length; ++i) if (cardRoot.parts[i].confirmed) ++n;
+            return qsTr("Paid %1 of %2").arg(n).arg(cardRoot.parts.length);
+        }
+        if (st === "final" || st === "paid") return parts ? qsTr("Paid") : cardRoot.settlesOnChain ? qsTr("Settled") : qsTr("Agreed");
+        return st.length > 0 ? st.charAt(0).toUpperCase() + st.slice(1) : "";
     }
     readonly property string stateTone: {
-        var st = String((cardRoot.card && cardRoot.card.state) || "");
-        return st === "final" ? "settled" : st === "submitted" || st === "settling" ? "info"
-             : st === "declined" || st === "expired" ? "refused" : "waiting";
+        var st = cardRoot.stage;
+        if (cardRoot.isDeclined || st === "declined" || st === "expired" || cardRoot.splitExpired) return "refused";
+        if (cardRoot.needsMe) return "needs";
+        if (st === "final" || st === "paid") return "settled";
+        if (st === "executable" || st === "ready" || st === "submitted" || st === "settling") return "info";
+        return "waiting";
     }
 
     // The kinds this component knows how to draw. Anything else is not ours to
@@ -803,18 +866,7 @@ Rectangle {
             ActionButton {
                 variant: LogosButton.Variant.Primary
                 objectName: "cardApprove"
-                visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
-                    && !(cardRoot.card && cardRoot.card.approvedByMe)
-                    && !cardRoot.ready
-                    // a decline is final (exo-720): who declined does not approve, and a
-                    // proposal too many declined is closed
-                    && !cardRoot.declinedByMe && !cardRoot.isDeclined
-                    // a split: only who it names agrees — each debtor, and the creditor to payTo
-                    // being theirs (exo-770), never to an address this client does not hold
-                    && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && (cardRoot.payToMine || cardRoot.payToMineUnknown)))
-                    && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
-                    && !cardRoot.vouchedNotMine    // never vouch for an address this client does not hold
-                    && !cardRoot.splitExpired      // past its expiry an agreement is refused (inv 2)
+                visible: cardRoot.canApprove
                 text: cardRoot.isSettleUp ? qsTr("Agree to settle up")
                     : !cardRoot.isSplit ? qsTr("Approve")
                     : cardRoot.iAmDebtor ? qsTr("Agree to my share")
@@ -827,9 +879,7 @@ Rectangle {
             ActionButton {
                 variant: LogosButton.Variant.Primary
                 objectName: "cardPaySettle"
-                visible: cardRoot.kind === "intent-propose" && cardRoot.isSettleUp && cardRoot.ready
-                    && !cardRoot.settleUp.expired
-                    && cardRoot.myTransfer !== null
+                visible: cardRoot.canPaySettle
                 text: cardRoot.myTransfer
                       ? qsTr("Pay %1 %2 to %3").arg(cardRoot.eth(cardRoot.myTransfer.amount)).arg(cardRoot.unit)
                             .arg(String(cardRoot.myTransfer.toName || "").length > 0 ? cardRoot.myTransfer.toName
@@ -844,10 +894,7 @@ Rectangle {
             ActionButton {
                 variant: LogosButton.Variant.Primary
                 objectName: "cardPayShare"
-                visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor && !cardRoot.isXmr
-                    && cardRoot.ready && !cardRoot.paid && !cardRoot.splitExpired
-                    && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
-                    && !cardRoot.myPart.covered
+                visible: cardRoot.canPayShare
                 text: cardRoot.myPart ? qsTr("Pay my share — %1 %2").arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit)
                                       : qsTr("Pay my share")
                 onClicked: cardRoot.settlePart()
