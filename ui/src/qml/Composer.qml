@@ -87,17 +87,17 @@ Item {
     // not a payments app: money is one of the things you can do together, not the frame.
     readonly property var verbs: [
         { id: "decide", proposal: "statement", name: qsTr("Decide something together"),
-          note: qsTr("The room agrees on something — a k-of-n group sign-off. No chain, nothing on a public ledger; just the people who agreed.") },
+          note: qsTr("The room agrees on something. Nothing goes on a chain.") },
         { id: "pay",    proposal: "payment",   name: qsTr("Send a payment"),
-          note: qsTr("Money moves from a shared account, coordinated by the room. Each person's address stays in the room — the transaction is signed off together.") },
+          note: qsTr("Money leaves a shared account once enough of you sign off.") },
         { id: "split",  proposal: "split",     name: qsTr("Split a bill"),
-          note: qsTr("You paid for something shared. Everyone named agrees to their own share, then each pays you back from their own wallet. No shared account — the room holds the agreement, and nothing makes anyone pay.") },
+          note: qsTr("You paid; each person pays back their own share from their own wallet.") },
         // a payment request (exo-dcc.5): a split with one person who pays and you not in
         // it — in XMR by default (ADR-018), changeable in the room like any split
         { id: "request", proposal: "split",    prefer: "monero-split", name: qsTr("Request a payment"),
-          note: qsTr("Ask one person to pay you. They agree, then pay from any wallet of theirs; your own wallet confirms it. In XMR by default: your Monero wallet makes a new address for the request.") },
+          note: qsTr("Ask one person to pay you, in XMR by default. Your own wallet confirms it.") },
         { id: "talk",   proposal: "statement", name: qsTr("Just talk"),
-          note: qsTr("A private conversation. Only the people in the room can read it — the room is the boundary.") }
+          note: qsTr("A private conversation, readable only by the people in it.") }
     ]
 
     // The driver the room runs on follows from the chosen action, never a separate
@@ -317,12 +317,17 @@ Item {
                     }
                 }
 
-                LogosText {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: qsTr("Only these people can read the room. Add someone later and they see the thread from that point forward.")
-                    color: Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.secondaryText
-                    wrapMode: Text.WordWrap
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        Layout.fillWidth: true
+                        text: qsTr("Only these people can read the room. Someone added later reads from then on.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.secondaryText
+                        wrapMode: Text.WordWrap
+                    }
+                    WhyLink { objectName: "composerWhyRoom"; step: "open-room"; Layout.alignment: Qt.AlignTop }
                 }
             }
 
@@ -335,22 +340,33 @@ Item {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
 
-                LogosText {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: composer.pickedPolicy === "safe"
-                          ? qsTr("This settles on a shared Safe — signed off by the room, on-chain. You can change how the room approves once you're in it.")
-                          : composer.pickedVerb === "request"
-                          ? (composer.pickedPolicy === "monero-split"
-                             ? qsTr("They pay from any Monero wallet (Cake, Feather or Basecamp's Monero Wallet) with a link the room gives them; your own Monero wallet confirms it. Muster never sends Monero. You can pick another chain in the room.")
-                             : qsTr("They pay from their own wallet, on the chain; the room holds only the agreement. Pick where it settles once you're in the room."))
-                          : String(composer.pickedPolicy).endsWith("-split")
-                          ? qsTr("Each person pays their own share from their own wallet, on the chain; the room holds only the agreement. Once you're in it, pick where it settles: Ethereum, Bitcoin, Monero, or privately on the LEZ.")
-                          : composer.pickedVerb === "talk"
-                          ? qsTr("Just the conversation: nothing to sign or settle. You can propose something from the room at any time.")
-                          : qsTr("This is a group endorsement — the room signs off, nothing touches a chain. You can change how the room approves once you're in it.")
-                    color: Theme.palette.textTertiary
-                    font.pixelSize: Theme.typography.secondaryText
-                    wrapMode: Text.WordWrap
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        Layout.fillWidth: true
+                        text: composer.pickedPolicy === "safe"
+                              ? qsTr("Settles on a shared Safe once the room signs off.")
+                              : composer.pickedVerb === "request"
+                              ? (composer.pickedPolicy === "monero-split"
+                                 ? qsTr("They pay with a link, from any Monero wallet; yours confirms it. Muster never sends Monero.")
+                                 : qsTr("They pay from their own wallet; the room holds only the agreement."))
+                              : String(composer.pickedPolicy).endsWith("-split")
+                              ? qsTr("Each pays their own share from their own wallet. Pick the chain in the room.")
+                              : composer.pickedVerb === "talk"
+                              ? qsTr("Just the conversation: nothing to sign or settle.")
+                              : qsTr("The room signs off; nothing touches a chain.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: Theme.typography.secondaryText
+                        wrapMode: Text.WordWrap
+                    }
+                    WhyLink {
+                        objectName: "composerWhyHow"
+                        visible: composer.pickedVerb !== "talk"
+                        step: composer.pickedPolicy === "safe" ? "submit"
+                            : String(composer.pickedPolicy).endsWith("-split") ? "settle" : "collect"
+                        Layout.alignment: Qt.AlignTop
+                    }
                 }
             }
 

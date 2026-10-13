@@ -9,6 +9,13 @@ import Logos.Theme
 QtObject {
     id: style
 
+    // ── "Why?" (exo-355a) ─────────────────────────────────────────────────
+    // A surface says one line and offers "Why?"; the reasons live in Learn, at the
+    // lifecycle step the line is about (ClaimsRegistry's step ids). Any view calls
+    // learn(step); Main opens Learn there.
+    signal learnRequested(string step)
+    function learn(step) { style.learnRequested(String(step || "")); }
+
     // ── time, in words (exo-52d) ──────────────────────────────────────────
     // A message, a room's last activity, a step on a card: "just now", "4 min ago",
     // "14:05", "Yesterday 14:05", "Mon 14:05", "3 Oct". Never a raw count of seconds. `now`

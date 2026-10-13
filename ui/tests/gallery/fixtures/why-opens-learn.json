@@ -1,0 +1,85 @@
+{
+  "about": "\"Why?\" beside a one-line explanation opens Learn at the step the line is about (exo-355a): Room details \u203a How this room is protected \u2192 Learn, scrolled to Open the room.",
+  "snapshot": "data/split-alice-collecting.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsTab",
+        "people"
+      ]
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "roomWhyProtected",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "room"
+    },
+    {
+      "click": "roomWhyProtected"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "learnView",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "learnView",
+        "focusStep",
+        "open-room"
+      ]
+    },
+    {
+      "shot": "learn"
+    },
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "detailsOpen",
+        false
+      ]
+    },
+    {
+      "click": "cardWhyProof"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "learnView",
+        "focusStep",
+        "propose"
+      ]
+    },
+    {
+      "shot": "learn-propose"
+    }
+  ]
+}

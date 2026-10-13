@@ -333,6 +333,14 @@ Item {
                 root.ready = isReady && root.backend !== null;
         }
     }
+    // A "Why?" anywhere opens Learn at the step it is about (exo-355a).
+    Connections {
+        target: MusterStyle
+        function onLearnRequested(step) {
+            root.view = "walkthrough";
+            learnView.showStep(step);
+        }
+    }
     Component.onCompleted: {
         root.ready = root.backend !== null && logos.isViewModuleReady("muster_ui");
     }
@@ -584,6 +592,8 @@ Item {
 
     // The teaching surface (ADR-012 claims registry).
     Walkthrough {
+        id: learnView
+        objectName: "learnView"
         anchors.top: contentArea.top
         anchors.left: contentArea.left
         anchors.right: parent.right

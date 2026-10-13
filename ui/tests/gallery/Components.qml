@@ -107,6 +107,11 @@ Rectangle {
                 text: "Nothing waits on you. Start something with someone."
                 ActionButton { text: "Start something"; variant: LogosButton.Variant.Primary }
             }
+            RowLayout {
+                spacing: Theme.spacing.small
+                LogosText { text: "Only the people in the room can read it."; color: Theme.palette.textTertiary; font.pixelSize: MusterStyle.caption }
+                WhyLink { step: "open-room" }
+            }
             Toast { id: toast; Component.onCompleted: { toast.duration = 600000; toast.show("Agreed — your room key signed it") } }
         }
         Item { Layout.fillHeight: true }

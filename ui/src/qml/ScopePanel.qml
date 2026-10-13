@@ -97,14 +97,19 @@ Item {
                 spacing: Theme.spacing.small
                 visible: scope.securityAxes.length > 0
 
-                LogosText {
+                RowLayout {
                     Layout.fillWidth: true
-                    text: qsTr("How this room is protected")
-                    color: Theme.palette.text
-                    font.family: Theme.typography.publicSans
-                    font.pixelSize: Theme.typography.subtitleText
-                    font.weight: Theme.typography.weightBold
-                    elide: Text.ElideRight
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        Layout.fillWidth: true
+                        text: qsTr("How this room is protected")
+                        color: Theme.palette.text
+                        font.family: Theme.typography.publicSans
+                        font.pixelSize: Theme.typography.subtitleText
+                        font.weight: Theme.typography.weightBold
+                        elide: Text.ElideRight
+                    }
+                    WhyLink { objectName: "roomWhyProtected"; step: "open-room" }
                 }
 
                 Repeater {
@@ -292,15 +297,12 @@ Item {
             // so, and that a member here will admit you, rather than leave you guessing.
             // A founder alone is told who can come in instead.
             LogosText {
-                visible: scope.roster.length <= 1
+                visible: scope.roster.length <= 1 && (scope.founder || scope.joinStatus.length === 0)
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: scope.founder
-                      ? qsTr("Only you are here so far. Someone you invite arrives a member; "
-                           + "anyone else who asks shows up here for you to admit.")
-                      : qsTr("Only you are here so far. If someone already has this room open, "
-                           + "they'll see your request and can let you in — you don't need to "
-                           + "do anything else. (Asking again above re-sends the request.)")
+                      ? qsTr("Only you so far. Anyone who asks to join appears here for you to let in.")
+                      : qsTr("Only you so far. Someone already here will see your request and can let you in.")
                 color: Theme.palette.textTertiary
                 font.pixelSize: MusterStyle.caption
             }
@@ -312,10 +314,9 @@ Item {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
                 text: scope.joinStatus === "waiting-for-room-key"
-                      ? qsTr("Waiting for someone in the room to announce its join key — your ask is "
-                           + "sealed to it, so only members can read who is asking. Asking again in a moment.")
+                      ? qsTr("Waiting for someone in the room to come online. Asking again in a moment.")
                       : scope.joinStatus === "ok"
-                        ? qsTr("Your ask is sealed and sent — a member here can admit you.")
+                        ? qsTr("Asked. Someone here can let you in.")
                       : scope.joinStatus === "invited"
                         ? qsTr("You were invited, so you're already let in: the room's key is on its way. Nothing was sent.")
                       : scope.joinStatus === "already-a-member"
@@ -407,6 +408,8 @@ Item {
             // (F-16). Said once, here, for inviting and admitting alike.
             LogosText {
                 Layout.fillWidth: true
+                // said once: "Who can read it" above already says it when the room reports
+                visible: scope.securityAxes.length === 0
                 text: qsTr("Adding someone re-keys the room forward — they read from here on, never the messages before.")
                 color: Theme.palette.textTertiary
                 font.pixelSize: Theme.typography.secondaryText

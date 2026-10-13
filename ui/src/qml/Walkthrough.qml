@@ -25,6 +25,25 @@ Item {
 
     ClaimsRegistry { id: registry }
 
+    // Opened from a "Why?" (exo-355a): scroll to that step and mark it, so the reader
+    // lands on the reasons for the line they were reading, not at the top of the page.
+    property string focusStep: ""
+    function showStep(step) {
+        walkthrough.focusStep = String(step || "");
+        Qt.callLater(walkthrough.scrollToFocus);
+    }
+    function scrollToFocus() {
+        for (var i = 0; i < stepRepeater.count; ++i) {
+            var d = stepRepeater.itemAt(i);
+            if (d && d.objectName === "learnStep_" + walkthrough.focusStep) {
+                var top = stack.y + d.y - Theme.spacing.large;
+                flick.contentY = Math.max(0, Math.min(top, flick.contentHeight - flick.height));
+                return;
+            }
+        }
+        flick.contentY = 0;
+    }
+
     function kindLabel(kind) {
         if (kind === "protects")
             return qsTr("PROTECTS");
@@ -100,16 +119,21 @@ Item {
 
             // ── one block per lifecycle step ──────────────────────────────────
             Repeater {
+                id: stepRepeater
                 model: registry.steps
 
                 delegate: ColumnLayout {
+                    id: stepBlock
+                    readonly property string stepId: modelData.id
+                    readonly property bool focused: stepBlock.stepId === walkthrough.focusStep
+                    objectName: "learnStep_" + stepBlock.stepId
                     Layout.fillWidth: true
                     spacing: Theme.spacing.small
 
                     LogosText {
                         Layout.fillWidth: true
                         text: modelData.title
-                        color: Theme.palette.text
+                        color: stepBlock.focused ? Theme.palette.primary : Theme.palette.text
                         font.family: Theme.typography.publicSans
                         font.pixelSize: Theme.typography.primaryText
                         font.weight: Theme.typography.weightBold

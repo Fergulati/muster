@@ -873,28 +873,34 @@ ColumnLayout {
     // Compact (exo-720.10, U-5): what the verify and provenance boxes below prove, in one
     // line — the re-derived match (invariant 1) and the inputs traced (invariant 10). A tap
     // opens Details, where both boxes are.
-    LogosText {
-        objectName: "cardProofLine"
-        readonly property int traced: (cardRoot.card && Array.isArray(cardRoot.card.provenance))
-                                      ? cardRoot.card.provenance.length : 0
-        visible: !cardRoot.detailsOpen && text.length > 0
+    RowLayout {
+        visible: !cardRoot.detailsOpen && proofLine.text.length > 0
         Layout.fillWidth: true
         Layout.topMargin: 2
-        wrapMode: Text.WordWrap
-        text: {
-            var parts = [];
-            if (String((cardRoot.card && cardRoot.card.txhash) || "").length > 0)
-                parts.push(qsTr("✓ Checked on your device"));
-            if (traced > 0)
-                parts.push(traced === 1 ? qsTr("1 input, traced to where it came from")
-                                       : qsTr("%1 inputs, each traced to where it came from").arg(traced));
-            return parts.join("  ·  ");
+        spacing: Theme.spacing.small
+        LogosText {
+            id: proofLine
+            objectName: "cardProofLine"
+            readonly property int traced: (cardRoot.card && Array.isArray(cardRoot.card.provenance))
+                                          ? cardRoot.card.provenance.length : 0
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: {
+                var parts = [];
+                if (String((cardRoot.card && cardRoot.card.txhash) || "").length > 0)
+                    parts.push(qsTr("✓ Checked on your device"));
+                if (traced > 0)
+                    parts.push(traced === 1 ? qsTr("1 input, traced to where it came from")
+                                           : qsTr("%1 inputs, each traced to where it came from").arg(traced));
+                return parts.join("  ·  ");
+            }
+            color: String((cardRoot.card && cardRoot.card.txhash) || "").length > 0 ? MusterStyle.settled
+                                                                                     : Theme.palette.textTertiary
+            font.pixelSize: MusterStyle.caption
+            TapHandler { onTapped: cardRoot.detailsOpen = true }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
-        color: String((cardRoot.card && cardRoot.card.txhash) || "").length > 0 ? MusterStyle.settled
-                                                                                 : Theme.palette.textTertiary
-        font.pixelSize: MusterStyle.caption
-        TapHandler { onTapped: cardRoot.detailsOpen = true }
-        HoverHandler { cursorShape: Qt.PointingHandCursor }
+        WhyLink { objectName: "cardWhyProof"; step: "propose"; Layout.alignment: Qt.AlignTop }
     }
 
     // Where the rule lives — the FAMILY's own answer (exo-a50.1.6), never a fixed
