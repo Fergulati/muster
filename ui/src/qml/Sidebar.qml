@@ -189,6 +189,7 @@ Rectangle {
                         detail: side.roomDetail(modelData)
                         detailHot: !!(modelData.needs && modelData.needs.length > 0)
                         needs: detailHot
+                        unread: side.app.isUnread(modelData)
                         avatarId: topic
                         rail: side.rail
                         current: side.app.view === "room" && active
@@ -223,7 +224,7 @@ Rectangle {
                 onClicked: {
                     side.go("dashboard");
                     // re-read on entry, so the card recovers if the read at startup came too early
-                    if (side.app.backend) { side.app.backend.loadAccount(); side.app.backend.loadBalances(); }
+                    side.app.refreshBalances();
                 }
             }
             SidebarRow {

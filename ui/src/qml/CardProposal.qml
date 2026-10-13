@@ -45,7 +45,7 @@ ColumnLayout {
         }
         color: Theme.palette.text
         font.family: Theme.typography.publicSans
-        font.pixelSize: Theme.typography.primaryText
+        font.pixelSize: MusterStyle.cardBody
         font.weight: Theme.typography.weightBold
     }
 
@@ -129,7 +129,7 @@ ColumnLayout {
                        .arg(String(cardRoot.settleUp.chainLabel || cardRoot.settleUp.chain || ""));
             }
             color: Theme.palette.textSecondary
-            font.pixelSize: Theme.typography.secondaryText
+            font.pixelSize: MusterStyle.cardCaption
         }
         Repeater {
             model: (cardRoot.settleUp && cardRoot.settleUp.across) ? (cardRoot.settleUp.rates || []) : []
@@ -149,7 +149,7 @@ ColumnLayout {
                             .arg(String(modelData.source || ""))
                 color: Theme.palette.text
                 font.family: MusterStyle.mono
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
         }
         LogosText {
@@ -158,7 +158,7 @@ ColumnLayout {
             wrapMode: Text.WordWrap
             text: qsTr("Agreeing means trusting these rates: check them first. Each share is converted at its rate, rounded down; nothing in muster makes a rate fair.")
             color: Theme.palette.warning
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
         Repeater {
             model: cardRoot.settleUp ? (cardRoot.settleUp.transfers || []) : []
@@ -172,13 +172,13 @@ ColumnLayout {
                     text: (String(modelData.fromName || "") || String(modelData.from).slice(0, 10) + "…") + "  →  "
                           + (String(modelData.toName || "") || String(modelData.to).slice(0, 10) + "…")
                     color: Theme.palette.text
-                    font.pixelSize: Theme.typography.secondaryText
+                    font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
                     text: qsTr("%1 %2").arg(cardRoot.eth(modelData.amount)).arg(cardRoot.unit)
                     color: Theme.palette.textSecondary
                     font.family: MusterStyle.mono
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
                     Layout.fillWidth: true
@@ -187,7 +187,7 @@ ColumnLayout {
                           : modelData.paying ? qsTr("paying…") : cardRoot.settleUp.expired ? qsTr("expired")
                           : cardRoot.ready ? qsTr("to pay") : qsTr("once everyone agrees")
                     color: modelData.confirmed ? Theme.palette.success : Theme.palette.textTertiary
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                 }
             }
         }
@@ -209,7 +209,7 @@ ColumnLayout {
                             .arg(String(modelData.toName || "") || String(modelData.to).slice(0, 10) + "…")
                             .arg(String(modelData.payTo))
                 color: modelData.toMe && !modelData.payToMine ? Theme.palette.warning : Theme.palette.textTertiary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
         }
         LogosText {
@@ -219,7 +219,7 @@ ColumnLayout {
                   ? qsTr("Each member's balance across these splits is kept exactly, at these rates. Once agreed, the covered shares are paid only through this; once its payments are received, each creditor marks the shares it covered received, on whatever chain they were.")
                   : qsTr("Each member's balance across these splits is kept exactly; each person is paid where their own split said. Once agreed, the covered shares are paid only through this; once its payments are received, each creditor marks the shares it covered received.")
             color: Theme.palette.textTertiary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
         // expired before anyone paid (exo-a90.16): it pays nothing more, and after a
         // day's grace — for a payment sent just before the expiry — it covers nothing
@@ -234,7 +234,7 @@ ColumnLayout {
                   : qsTr("Expired before anyone paid. Its shares are released %1, in case a payment sent just before the expiry is still to be reported.")
                         .arg(new Date(Number(cardRoot.settleUp.releasesAt) * 1000).toLocaleString(Qt.locale(), Locale.ShortFormat))
             color: Theme.palette.warning
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
     }
 
@@ -277,13 +277,13 @@ ColumnLayout {
                     text: String(modelData.name || "").length > 0 ? String(modelData.name)
                           : String(modelData.who || "").slice(0, 10) + "…"
                     color: Theme.palette.text
-                    font.pixelSize: Theme.typography.secondaryText
+                    font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
                     text: qsTr("%1 %2").arg(cardRoot.eth(modelData.amount)).arg(cardRoot.unit)
                     color: Theme.palette.textSecondary
                     font.family: MusterStyle.mono
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
                     Layout.fillWidth: true
@@ -291,7 +291,7 @@ ColumnLayout {
                     text: cardRoot.partState(modelData)
                     color: modelData.confirmed ? Theme.palette.success
                          : modelData.settled ? Theme.palette.textSecondary : Theme.palette.textTertiary
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                 }
                 // the creditor's word: a share paid in cash, or anywhere muster cannot see
                 ActionButton {
@@ -323,7 +323,7 @@ ColumnLayout {
                         .arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
                   : ""
             color: Theme.palette.textTertiary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // a bill in fiat (exo-3a4): the quote everyone agreeing is trusting — named, sourced,
@@ -348,7 +348,7 @@ ColumnLayout {
                        .arg(String(q.source)).arg(when);
             }
             color: Theme.palette.warning
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // a split paid in a token: which token, by address — its symbol is its own claim
@@ -360,7 +360,7 @@ ColumnLayout {
             text: qsTr("Paid in %1 — the token at %2 (a token names itself; the address is what counts).")
                       .arg(cardRoot.unit).arg(cardRoot.token.slice(0, 10) + "…" + cardRoot.token.slice(-6))
             color: Theme.palette.textTertiary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // on someone's behalf (exo-770): who proposed it, and whether the creditor has
@@ -382,7 +382,7 @@ ColumnLayout {
                   : qsTr("Proposed by %1 on %2's behalf. Nobody pays until %2 agrees the address is theirs.")
                         .arg(cardRoot.onBehalfBy).arg(cardRoot.creditorName)
             color: cardRoot.creditorAgreed ? Theme.palette.textSecondary : Theme.palette.warning
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
         // the creditor's own client: a payTo it does not hold is never agreed to
         LogosText {
@@ -393,7 +393,7 @@ ColumnLayout {
             text: qsTr("⚠ %1 is not an address this client holds, so muster will not agree for you: payments would go to whoever holds it. Share your own address and ask for the split again.")
                       .arg(cardRoot.shortPayTo(String(cardRoot.split ? cardRoot.split.payTo || "" : "")))
             color: Theme.palette.warning
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         LogosText {
@@ -407,7 +407,7 @@ ColumnLayout {
                         .arg(cardRoot.split && cardRoot.split.private ? qsTr(", on the private rail") : "")
                   : ""
             color: Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // ── a Monero request (exo-dcc.5): MY share's link, from the module's
@@ -442,7 +442,7 @@ ColumnLayout {
                 }
                 color: !xmrPayBox.pay.ok && String(xmrPayBox.pay.why || "").indexOf("not-agreed") !== 0
                        ? Theme.palette.warning : Theme.palette.textSecondary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
 
             // the link as a QR code, for a wallet on a phone
@@ -465,7 +465,7 @@ ColumnLayout {
                 color: Theme.palette.text
                 selectionColor: Theme.palette.primary
                 font.family: MusterStyle.mono
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
             RowLayout {
                 visible: xmrPayBox.linkShown
@@ -531,7 +531,7 @@ ColumnLayout {
                            ? steps + "\n" + n : steps;
                 }
                 color: Theme.palette.textTertiary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
 
             // "I paid": the debtor's claim, with the transaction id if they give one
@@ -564,7 +564,7 @@ ColumnLayout {
                             .arg(cardRoot.creditorName).arg(cardRoot.xmrDepth)
                 color: String(xmrTx.text || "").trim().length > 0 && !/^[0-9a-fA-F]{64}$/.test(String(xmrTx.text || "").trim())
                        ? Theme.palette.warning : Theme.palette.textTertiary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
         }
 
@@ -588,7 +588,7 @@ ColumnLayout {
                       : qsTr("⚠ Your Monero wallet can't confirm payments now: %1").arg(cardRoot.xmrDetail(xmrWalletBox.w.detail, xmrWalletBox.w.code))
                 color: xmrWalletBox.w.ready ? Theme.palette.textSecondary
                      : String(xmrWalletBox.w.request || "").length > 0 ? Theme.palette.warning : Theme.palette.textTertiary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
             // which wallet Monero Wallet opens (exo-dcc.20): the one the module names;
             // several that could be it, one button each; none at all, set one up there
@@ -608,7 +608,7 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
                 text: qsTr("Which wallet is this request's? Open it in Monero Wallet:")
                 color: Theme.palette.textSecondary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
             Flow {
                 visible: xmrWalletBox.asks && xmrWalletBox.choices.length > 1
@@ -632,7 +632,7 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
                 text: cardRoot.moneroWalletNote
                 color: Theme.palette.textSecondary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
         }
     }
@@ -651,7 +651,7 @@ ColumnLayout {
         }
         color: Theme.palette.textSecondary
         font.family: MusterStyle.mono
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
         wrapMode: Text.WrapAnywhere
     }
     LogosText {
@@ -661,7 +661,7 @@ ColumnLayout {
         text: qsTr("DELEGATECALL: this runs %1's code as the Safe itself. It can change the Safe's owners, threshold and modules. Muster signs it only if you have allowlisted that target.")
               .arg(String((cardRoot.card && cardRoot.card.to) || ""))
         color: Theme.palette.error
-        font.pixelSize: Theme.typography.secondaryText
+        font.pixelSize: MusterStyle.cardCaption
         font.weight: Theme.typography.weightMedium
         wrapMode: Text.WordWrap
     }
@@ -678,7 +678,7 @@ ColumnLayout {
             id: effectTrace
             text: qsTr("⌕ trace this")
             color: Theme.palette.textTertiary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
         MouseArea {
             anchors.fill: parent
@@ -688,14 +688,22 @@ ColumnLayout {
     }
 
     // which rail the room is being asked to agree to
+    // a LEZ rail in words; any other value is the driver's kind, said elsewhere already
     LogosText {
+        readonly property string railWords: {
+            var r = String((cardRoot.card && cardRoot.card.rail) || "");
+            return r === "public" ? qsTr("Public: both ends and the amount are visible on the zone")
+                 : r === "shield" ? qsTr("Into a private account: who receives is hidden")
+                 : r === "deshield" ? qsTr("Out of a private account: who pays is hidden")
+                 : r === "private" ? qsTr("Private: both ends and the amount are hidden")
+                 : "";
+        }
         Layout.fillWidth: true
-        visible: cardRoot.detailsOpen && !!(cardRoot.card && cardRoot.card.rail)
+        visible: cardRoot.detailsOpen && railWords.length > 0
         wrapMode: Text.WordWrap
-        text: String((cardRoot.card && cardRoot.card.rail) || "")
+        text: railWords
         color: Theme.palette.textSecondary
-        font.family: MusterStyle.mono
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
     }
 
     // ── status rail: proposed → collecting → ready → paid ──────────
@@ -735,7 +743,7 @@ ColumnLayout {
                     text: step.modelData.t
                     color: step.lit ? Theme.palette.textSecondary
                                     : Theme.palette.textTertiary
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                 }
 
                 Item { Layout.preferredWidth: Theme.spacing.small }
@@ -755,7 +763,7 @@ ColumnLayout {
               ? qsTr("⏳ Executing on chain — final once a block includes it.")
               : qsTr("⏳ Your vote is on its way to the chain — it counts once a block includes it.")
         color: Theme.palette.textSecondary
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
     }
 
     // ── approval slots ─────────────────────────────────────────────
@@ -792,13 +800,21 @@ ColumnLayout {
                 border.width: slot.pasted ? 2 : (slot.filled ? 0 : 1)
                 border.color: slot.pasted ? Theme.palette.warning : Theme.palette.borderSubtle
 
+                // who, as the same face they have in the roster: their colour, your name's letter
+                Avatar {
+                    anchors.centerIn: parent
+                    visible: slot.filled && !slot.pasted && slot.who !== null
+                    size: 22
+                    identity: slot.who ? String(slot.who.who || "") : ""
+                    name: slot.who ? (slot.who.mine ? qsTr("you") : String(slot.who.name || "")) : ""
+                }
                 LogosText {
                     anchors.centerIn: parent
-                    visible: slot.filled
+                    visible: slot.filled && (slot.pasted || slot.who === null)
                     text: slot.who && slot.who.initials
-                        ? String(slot.who.initials) : ""
+                        ? String(slot.who.initials).charAt(0) : ""
                     color: slot.pasted ? Theme.palette.warning : Theme.palette.background
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                     font.weight: Theme.typography.weightMedium
                 }
             }
@@ -811,7 +827,7 @@ ColumnLayout {
                 ? qsTr("%1 of %2").arg(cardRoot.approvals).arg(cardRoot.threshold)
                 : ""
             color: Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
             font.weight: Theme.typography.weightMedium
         }
     }
@@ -830,7 +846,7 @@ ColumnLayout {
                   var w = String(a.who || "");
                   return w.length > 12 ? w.slice(0, 6) + "…" + w.slice(-4) : w; }).join(", "))
         color: Theme.palette.textSecondary
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
     }
 
     // Committed vs unattested, in words — only when something was pasted in, so a
@@ -846,7 +862,7 @@ ColumnLayout {
                 : "")
             + qsTr("%n signed outside muster and pasted in (ringed) — counted, but committed to nothing beyond the transaction itself.", "", cardRoot.unattested)
         color: Theme.palette.warning
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
     }
 
     // trace these: each filled slot is a driver-contribution the driver
@@ -861,7 +877,7 @@ ColumnLayout {
             id: approvalsTrace
             text: qsTr("⌕ trace the approvals")
             color: Theme.palette.textTertiary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
         MouseArea {
             anchors.fill: parent
@@ -873,28 +889,34 @@ ColumnLayout {
     // Compact (exo-720.10, U-5): what the verify and provenance boxes below prove, in one
     // line — the re-derived match (invariant 1) and the inputs traced (invariant 10). A tap
     // opens Details, where both boxes are.
-    LogosText {
-        objectName: "cardProofLine"
-        readonly property int traced: (cardRoot.card && Array.isArray(cardRoot.card.provenance))
-                                      ? cardRoot.card.provenance.length : 0
-        visible: !cardRoot.detailsOpen && text.length > 0
+    RowLayout {
+        visible: !cardRoot.detailsOpen && proofLine.text.length > 0
         Layout.fillWidth: true
         Layout.topMargin: 2
-        wrapMode: Text.WordWrap
-        text: {
-            var parts = [];
-            if (String((cardRoot.card && cardRoot.card.txhash) || "").length > 0)
-                parts.push(qsTr("✓ Checked on your device"));
-            if (traced > 0)
-                parts.push(traced === 1 ? qsTr("1 input, traced to where it came from")
-                                       : qsTr("%1 inputs, each traced to where it came from").arg(traced));
-            return parts.join("  ·  ");
+        spacing: Theme.spacing.small
+        LogosText {
+            id: proofLine
+            objectName: "cardProofLine"
+            readonly property int traced: (cardRoot.card && Array.isArray(cardRoot.card.provenance))
+                                          ? cardRoot.card.provenance.length : 0
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            text: {
+                var parts = [];
+                if (String((cardRoot.card && cardRoot.card.txhash) || "").length > 0)
+                    parts.push(qsTr("✓ Checked on your device"));
+                if (traced > 0)
+                    parts.push(traced === 1 ? qsTr("1 input, traced to where it came from")
+                                           : qsTr("%1 inputs, each traced to where it came from").arg(traced));
+                return parts.join("  ·  ");
+            }
+            color: String((cardRoot.card && cardRoot.card.txhash) || "").length > 0 ? MusterStyle.settled
+                                                                                     : Theme.palette.textTertiary
+            font.pixelSize: MusterStyle.cardCaption
+            TapHandler { onTapped: cardRoot.detailsOpen = true }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
         }
-        color: String((cardRoot.card && cardRoot.card.txhash) || "").length > 0 ? MusterStyle.settled
-                                                                                 : Theme.palette.textTertiary
-        font.pixelSize: MusterStyle.caption
-        TapHandler { onTapped: cardRoot.detailsOpen = true }
-        HoverHandler { cursorShape: Qt.PointingHandCursor }
+        WhyLink { objectName: "cardWhyProof"; step: "propose"; Layout.alignment: Qt.AlignTop }
     }
 
     // Where the rule lives — the FAMILY's own answer (exo-a50.1.6), never a fixed
@@ -907,7 +929,7 @@ ColumnLayout {
         visible: cardRoot.detailsOpen && text.length > 0
         text: cardRoot.rowText("where")
         color: Theme.palette.textTertiary
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
     }
 
     // ── how this account works: the fixed rows (exo-a50.1.6) ─────────
@@ -922,7 +944,7 @@ ColumnLayout {
             objectName: "cardRowsToggle"
             text: (cardRoot.rowsOpen ? "▾ " : "▸ ") + qsTr("How this account works")
             color: Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
             font.weight: Theme.typography.weightMedium
             MouseArea {
                 anchors.fill: parent
@@ -943,14 +965,14 @@ ColumnLayout {
                     color: modelData.credibility === "exposed" ? Theme.palette.error
                          : modelData.credibility === "motivational" ? Theme.palette.warning
                          : Theme.palette.textTertiary
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                 }
                 LogosText {
                     Layout.fillWidth: true
                     text: String(modelData.text || "")
                           + (modelData.party ? "  (" + qsTr("relies on / seen by: %1").arg(String(modelData.party)) + ")" : "")
                     color: Theme.palette.text
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                     wrapMode: Text.WordWrap
                 }
             }
@@ -999,14 +1021,14 @@ ColumnLayout {
                     wrapMode: Text.WordWrap
                     text: qsTr("✓ Checked on your device — this is exactly what you would sign")
                     color: Theme.palette.success
-                    font.pixelSize: Theme.typography.secondaryText
+                    font.pixelSize: MusterStyle.cardCaption
                     font.weight: Theme.typography.weightMedium
                 }
 
                 LogosText {
                     text: cardRoot.verifyOpen ? "−" : "+"
                     color: Theme.palette.success
-                    font.pixelSize: Theme.typography.secondaryText
+                    font.pixelSize: MusterStyle.cardCaption
                 }
             }
 
@@ -1030,7 +1052,7 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignTop
                         text: modelData.k
                         color: Theme.palette.textTertiary
-                        font.pixelSize: MusterStyle.caption
+                        font.pixelSize: MusterStyle.cardCaption
                     }
 
                     SelectableText {
@@ -1039,7 +1061,7 @@ ColumnLayout {
                         text: modelData.v
                         color: Theme.palette.textSecondary
                         font.family: MusterStyle.mono
-                        font.pixelSize: Theme.typography.secondaryText
+                        font.pixelSize: MusterStyle.cardCaption
                     }
                 }
             }
@@ -1090,14 +1112,14 @@ ColumnLayout {
                         .arg(cardRoot.card && cardRoot.card.provenance
                              ? cardRoot.card.provenance.length : 0)
                     color: Theme.palette.textSecondary
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                     font.weight: Theme.typography.weightMedium
                 }
 
                 LogosText {
                     text: cardRoot.provOpen ? "−" : "+"
                     color: Theme.palette.textSecondary
-                    font.pixelSize: Theme.typography.secondaryText
+                    font.pixelSize: MusterStyle.cardCaption
                 }
             }
 
@@ -1110,7 +1132,7 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
                 text: qsTr("by %1").arg(who)
                 color: Theme.palette.textTertiary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
 
             // intro — only when open.
@@ -1122,7 +1144,7 @@ ColumnLayout {
                          + "unaccountable — an input the client couldn't trace would "
                          + "have been refused before signing.")
                 color: Theme.palette.textTertiary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
 
             // one entry per input in the lineage.
@@ -1171,7 +1193,7 @@ ColumnLayout {
                             }
                             color: Theme.palette.text
                             font.family: MusterStyle.mono
-                            font.pixelSize: MusterStyle.caption
+                            font.pixelSize: MusterStyle.cardCaption
                             font.weight: Theme.typography.weightMedium
                         }
 
@@ -1182,7 +1204,7 @@ ColumnLayout {
                             text: cardRoot.provTrust(modelData)
                             color: Theme.palette.textTertiary
                             font.family: MusterStyle.mono
-                            font.pixelSize: MusterStyle.caption
+                            font.pixelSize: MusterStyle.cardCaption
                         }
                     }
                 }

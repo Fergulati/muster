@@ -9,6 +9,42 @@ import Logos.Theme
 QtObject {
     id: style
 
+    // ── news, said once (exo-773) ─────────────────────────────────────────
+    // "Bob approved", "Bob joined": a short toast Main shows and lets go. For what other
+    // people did; what I did is on the card already.
+    signal notified(string text)
+    function notify(t) { if (String(t || "").length > 0) style.notified(String(t)); }
+
+    // ── a contact link (exo-899) ──────────────────────────────────────────
+    // "muster:contact/<chat id>?name=Alice": the chat id (128 hex, the 64-byte identity an
+    // invite is sealed to) with the name its owner suggests. It names nothing else and is
+    // read only by whoever it is given to. Anywhere a chat id is pasted, a link does too.
+    function contactLink(id, name) {
+        var h = String(id || "").replace(/^0x/i, "").toLowerCase();
+        if (h.length === 0) return "";
+        var n = String(name || "").trim();
+        return "muster:contact/" + h + (n.length > 0 ? "?name=" + encodeURIComponent(n) : "");
+    }
+    // {id, name} from a link or a bare chat id (0x optional), else null
+    function parseContact(text) {
+        var t = String(text || "").trim();
+        var m = /^muster:contact\/(?:0x)?([0-9a-fA-F]{128})(?:\?name=([^&\s]*))?$/.exec(t);
+        if (m) {
+            var n = "";
+            try { n = decodeURIComponent(m[2] || ""); } catch (e) { n = ""; }
+            return { id: m[1].toLowerCase(), name: n.trim() };
+        }
+        m = /^(?:0x)?([0-9a-fA-F]{128})$/.exec(t);
+        return m ? { id: m[1].toLowerCase(), name: "" } : null;
+    }
+
+    // ── "Why?" (exo-355a) ─────────────────────────────────────────────────
+    // A surface says one line and offers "Why?"; the reasons live in Learn, at the
+    // lifecycle step the line is about (ClaimsRegistry's step ids). Any view calls
+    // learn(step); Main opens Learn there.
+    signal learnRequested(string step)
+    function learn(step) { style.learnRequested(String(step || "")); }
+
     // ── time, in words (exo-52d) ──────────────────────────────────────────
     // A message, a room's last activity, a step on a card: "just now", "4 min ago",
     // "14:05", "Yesterday 14:05", "Mon 14:05", "3 Oct". Never a raw count of seconds. `now`
@@ -69,6 +105,9 @@ QtObject {
     readonly property int body: Theme.typography.primaryText        // 14: what people read
     readonly property int caption: Theme.typography.secondaryText   // 12: what explains it
     readonly property int badge: 11                                 // counts and status pills
+    // a card is read closely, so its text is a step up from the page's (exo-01f)
+    readonly property int cardBody: body + 1                         // 15
+    readonly property int cardCaption: caption + 1                   // 13
 
     // ── colour: the theme's, with the tints a status needs ────────────────
     function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a); }
@@ -103,9 +142,15 @@ QtObject {
     readonly property var avatarColors: [Theme.colors.orange300, Theme.colors.yellow400, Theme.colors.green400,
                                          Theme.colors.blue400, Theme.colors.cyan400, Theme.colors.red400,
                                          Theme.colors.peach100, Theme.colors.green700]
+    // one person, one key: a member's id appears as 128 hex (the roster), "ed:" + its first
+    // 64 (an approver) or with 0x; all of them read as the same person, so the same colour
+    function personKey(id) {
+        var s = String(id || "").toLowerCase().replace(/^0x/, "").replace(/^ed:/, "");
+        return /^[0-9a-f]{64,}$/.test(s) ? s.slice(0, 64) : s;
+    }
     function colorFor(id) {
         // FNV-1a, then a final avalanche, so ids that differ in one character spread out
-        var s = String(id || "").toLowerCase().replace(/^0x/, ""), h = 0x811c9dc5;
+        var s = style.personKey(id), h = 0x811c9dc5;
         for (var i = 0; i < s.length; ++i) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
         h ^= h >>> 16; h = Math.imul(h, 0x45d9f3b); h ^= h >>> 16;
         return avatarColors[(h >>> 0) % avatarColors.length];

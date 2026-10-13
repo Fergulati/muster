@@ -19,6 +19,7 @@ Rectangle {
     property bool avatarIsRoom: true      // a room's rounded square; false for a person's circle
     property int count: 0
     property bool needs: false            // the "waits on you" dot
+    property bool unread: false           // active since you last looked (exo-773): bold, a quiet dot
     property bool current: false
     property bool rail: false
     signal clicked()
@@ -64,12 +65,12 @@ Rectangle {
             }
             // in the rail, the count and the dot ride on the icon's corner
             Rectangle {
-                visible: row.rail && (row.needs || row.count > 0)
+                visible: row.rail && (row.needs || row.unread || row.count > 0)
                 x: parent.width - width / 2 - 2; y: -3
                 width: row.count > 0 ? Math.max(16, railCount.implicitWidth + 8) : 9
                 height: row.count > 0 ? 16 : 9
                 radius: height / 2
-                color: MusterStyle.needs
+                color: row.needs || row.count > 0 ? MusterStyle.needs : Theme.palette.textSecondary
                 border.width: 2
                 border.color: Theme.palette.backgroundTertiary
                 LogosText {
@@ -91,9 +92,9 @@ Rectangle {
                 Layout.fillWidth: true
                 text: row.label
                 elide: Text.ElideRight
-                color: row.current || row.needs ? Theme.palette.text : Theme.palette.textSecondary
+                color: row.current || row.needs || row.unread ? Theme.palette.text : Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.body
-                font.weight: row.needs ? Theme.typography.weightBold : Theme.typography.weightMedium
+                font.weight: row.needs || row.unread ? Theme.typography.weightBold : Theme.typography.weightMedium
             }
             LogosText {
                 visible: row.detail.length > 0
@@ -120,9 +121,10 @@ Rectangle {
             }
         }
         Rectangle {
-            visible: !row.rail && row.needs && row.count === 0
+            objectName: row.unread && !row.needs ? "unreadDot" : ""
+            visible: !row.rail && (row.needs || row.unread) && row.count === 0
             implicitWidth: 8; implicitHeight: 8; radius: 4
-            color: MusterStyle.needs
+            color: row.needs ? MusterStyle.needs : Theme.palette.textSecondary
         }
     }
     HoverHandler { id: hover; cursorShape: Qt.PointingHandCursor }

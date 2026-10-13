@@ -599,9 +599,20 @@ Item {
                     }
                 }
 
+                RowLayout {
+                    objectName: "balancesLoading"
+                    visible: root.balancesLoading && root.balances.length === 0
+                    spacing: Theme.spacing.small
+                    Loading { running: parent.visible }
+                    LogosText {
+                        text: qsTr("Reading your balances…")
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: MusterStyle.caption
+                    }
+                }
                 LogosText {
-                    visible: root.balances.length === 0
-                    text: qsTr("no balances yet")
+                    visible: !root.balancesLoading && root.balances.length === 0
+                    text: qsTr("No balances yet")
                     color: Theme.palette.textTertiary
                     font.pixelSize: MusterStyle.caption
                 }
@@ -609,8 +620,9 @@ Item {
                 ActionButton {
                     Layout.fillWidth: true
                     variant: LogosButton.Variant.Primary
-                    text: qsTr("Refresh balances")
-                    onClicked: root.backend.loadBalances()
+                    text: root.balancesLoading ? qsTr("Reading…") : qsTr("Refresh balances")
+                    enabled: !root.balancesLoading
+                    onClicked: root.refreshBalances()
                 }
             }
         }

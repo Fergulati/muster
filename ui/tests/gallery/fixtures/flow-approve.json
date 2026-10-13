@@ -1,5 +1,5 @@
 {
-  "about": "Approve on a card asks the module to contribute to that intent.",
+  "about": "Approve on a card asks the module to contribute to that intent, and the card says so at once: the button gives way to \"Sending your approval…\" until the room shows it (exo-49d).",
   "snapshot": "data/statement-proposed.json",
   "sizes": [
     "1440x900"
@@ -18,6 +18,23 @@
           "0xf82713a97f076e35"
         ]
       }
+    },
+    {
+      "expectProp": [
+        "cardApprove",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "cardStatePill",
+        "text",
+        "Sending your approval…"
+      ]
+    },
+    {
+      "shot": "sending"
     },
     {
       "dumpCalls": true

@@ -25,7 +25,7 @@ ColumnLayout {
         text: qsTr("⚠ Muster can't show this proposal")
         color: Theme.palette.warning
         font.family: Theme.typography.publicSans
-        font.pixelSize: Theme.typography.primaryText
+        font.pixelSize: MusterStyle.cardBody
         font.weight: Theme.typography.weightBold
     }
     LogosText {
@@ -36,6 +36,6 @@ ColumnLayout {
                  + "isn't. A newer Muster may know it.").arg(cardRoot.schemaId.length > 0 ? cardRoot.schemaId
                                                                   : qsTr("an unknown effect"))
         color: Theme.palette.textSecondary
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
     }
 }

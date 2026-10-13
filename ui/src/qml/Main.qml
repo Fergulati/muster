@@ -52,7 +52,10 @@ Item {
     property string view: "home"
     // describe() is read once at start, possibly before the platform's chain registry
     // answers; a room's Safe form reads it, so read it again on the way in (R6, 2026-10-07)
-    onViewChanged: if (view === "room" && backend) backend.loadAccount()
+    onViewChanged: {
+        if (view === "room" && backend) backend.loadAccount();
+        root.noteSeen();            // leaving or opening a room marks it read (exo-773)
+    }
 
     // Enter a room by topic: join it in the module, then show the room surface.
     // When `verb` is given (a freshly composed room), PRIME the conversation — the
@@ -71,6 +74,9 @@ Item {
         // A room opened from the composer (a verb) is this member's own: it asks no one
         // to join it (below), and its scope panel offers no "Ask to join" (exo-dcc.30).
         roomSurface.founded = String(verb || "").length > 0;
+        // the room says it is opening until the module's room is this one (exo-ba0)
+        if (root.contentTopicOf(topic) !== root.contentTopicOf(root.roomTopic))
+            roomSurface.beginOpening(root.contentTopicOf(topic));
         root.backend.joinRoom(topic);
         // A person named in the composer (their 64-byte chat id, 128 hex chars) is invited
         // now, before the room says anything: the invite admits them (exo-dcc.29), so they
@@ -181,6 +187,18 @@ Item {
         try { return root.balancesJson ? JSON.parse(root.balancesJson) : []; }
         catch (e) { return []; }
     }
+    // asked and not yet answered (exo-ba0): the wallet says it is reading, rather than "no
+    // balances" while the chains are still being asked; an answer, or 15 s, ends it
+    property bool balancesLoading: false
+    function refreshBalances() {
+        if (!root.backend) return;
+        root.balancesLoading = true;
+        balancesGiveUp.restart();
+        root.backend.loadAccount();
+        root.backend.loadBalances();
+    }
+    onBalancesChanged: root.balancesLoading = false
+    Timer { id: balancesGiveUp; interval: 15000; onTriggered: root.balancesLoading = false }
 
     // Room state, aliased for the home fold.
     readonly property string roomTopic: backend ? backend.roomTopic : ""
@@ -215,17 +233,46 @@ Item {
     // "Bob and Carol", "Bob, Carol and 2 others", or "Just you" — never its code. The module
     // names each member the one way they are named everywhere (a contact's name, or a
     // short id). A room the list does not know yet reads "New room".
+    // the open room's other members by name (alias, else a short id), from its roster
+    function othersInRoom() {
+        var ms = [];
+        try { ms = JSON.parse(root.backend ? root.backend.membersJson : "[]"); } catch (e) { ms = []; }
+        var out = [];
+        for (var i = 0; i < ms.length; ++i) {
+            if (!ms[i] || ms[i].self) continue;
+            var a = String(ms[i].alias || "");
+            out.push(a.length > 0 ? a : String(ms[i].identity || "").replace(/^0x/, "").slice(0, 6) + "…");
+        }
+        return out;
+    }
+    // a name, or a short id standing in for one ("34bd8a…"): only names title a room; the
+    // unnamed are counted (exo-d1a) — "Bob and 1 other", "Someone new"
+    function isShortId(n) { n = String(n || ""); return n.indexOf("…") >= 0 || /^(0x)?[0-9a-f]{6,}$/i.test(n); }
+    function peopleTitle(ps) {
+        var named = ps.filter(function (p) { return !root.isShortId(p); });
+        var more = ps.length - named.length;
+        if (named.length === 0)
+            return more === 0 ? qsTr("Just you") : more === 1 ? qsTr("Someone new") : qsTr("%1 people").arg(more);
+        if (named.length === 3 && more === 0)
+            return qsTr("%1, %2 and %3").arg(named[0]).arg(named[1]).arg(named[2]);
+        if (named.length > 2) { more += named.length - 2; named = named.slice(0, 2); }
+        if (more === 0)
+            return named.length === 1 ? named[0] : qsTr("%1 and %2").arg(named[0]).arg(named[1]);
+        var others = more === 1 ? qsTr("1 other") : qsTr("%1 others").arg(more);
+        return named.length === 1 ? qsTr("%1 and %2").arg(named[0]).arg(others)
+                                  : qsTr("%1, %2 and %3").arg(named[0]).arg(named[1]).arg(others);
+    }
     function shortRoom(topic) {
         var t = root.contentTopicOf(topic);
         var convs = root.conversations;
         for (var i = 0; i < convs.length; ++i) {
             if (String(convs[i].topic || "") !== t) continue;
-            var ps = Array.isArray(convs[i].people) ? convs[i].people.map(String) : [];
-            if (ps.length === 0) return qsTr("Just you");
-            if (ps.length === 1) return ps[0];
-            if (ps.length === 2) return qsTr("%1 and %2").arg(ps[0]).arg(ps[1]);
-            if (ps.length === 3) return qsTr("%1, %2 and %3").arg(ps[0]).arg(ps[1]).arg(ps[2]);
-            return qsTr("%1, %2 and %3 others").arg(ps[0]).arg(ps[1]).arg(ps.length - 2);
+            // `people` is the module's; an older module has none, and then the open room
+            // is named from its roster rather than called "Just you" with others in it
+            var ps = Array.isArray(convs[i].people) ? convs[i].people.map(String)
+                   : t === root.contentTopicOf(root.roomTopic) ? root.othersInRoom() : null;
+            if (ps === null) return qsTr("A room");
+            return root.peopleTitle(ps);
         }
         return qsTr("New room");
     }
@@ -260,6 +307,62 @@ Item {
         try { return JSON.parse(backend ? backend.conversationsJson : "[]"); }
         catch (e) { return []; }
     }
+
+    // ── unread (exo-773) ─────────────────────────────────────────────────
+    // A room is unread when it has been active since you last had it open: its lastTs past
+    // the one remembered for it. A room met for the first time counts as read (a fresh
+    // install has nothing unread); the open room is read as it changes.
+    Prefs.Settings {
+        id: seenPrefs
+        category: "MusterUiSeen"
+        property string seenJson: "{}"
+    }
+    property var seen: ({})
+    property bool seenLoaded: false
+    function seenLoad() {
+        try { root.seen = JSON.parse(seenPrefs.seenJson || "{}") || {}; } catch (e) { root.seen = {}; }
+        root.seenLoaded = true;
+        root.noteSeen();
+    }
+    function isUnread(c) {
+        var t = String((c && c.topic) || "");
+        if (t.length === 0 || (root.view === "room" && t === root.contentTopicOf(root.roomTopic))) return false;
+        var last = Number((c && c.lastTs) || 0);
+        return root.seen[t] !== undefined && last > Number(root.seen[t]);
+    }
+    property var needsBefore: ({})
+    property double needsSince: Date.now()
+    function noteSeen() {
+        if (!root.seenLoaded) return;
+        var s = Object.assign({}, root.seen), changed = false;
+        var open = root.view === "room" ? root.contentTopicOf(root.roomTopic) : "";
+        var news = [], nb = {};
+        for (var i = 0; i < root.conversations.length; ++i) {
+            var c = root.conversations[i], t = String(c.topic || "");
+            if (t.length === 0) continue;
+            var last = Number(c.lastTs || 0);
+            if (s[t] === undefined || (t === open && Number(s[t]) !== last)) { s[t] = last; changed = true; }
+            // something new waits on you in a room you are not looking at: say so once
+            var n = Array.isArray(c.needs) ? c.needs.length : 0;
+            nb[t] = n;
+            if (t !== open && root.needsBefore[t] !== undefined && n > root.needsBefore[t]
+                    && Date.now() - root.needsSince > 4000)
+                news.push(qsTr("%1 needs you").arg(root.titleOf(t) || root.shortRoom(t)));
+        }
+        root.needsBefore = nb;
+        if (changed) { root.seen = s; seenPrefs.seenJson = JSON.stringify(s); }
+        if (news.length > 0) MusterStyle.notify(news.join(" · "));
+    }
+    // whether the module has answered which rooms there are (exo-ba0): its first answer,
+    // or — since an empty answer may equal the default and so change nothing — a moment
+    property bool roomsLoaded: false
+    Timer {
+        interval: 2500
+        running: root.backend !== null && !root.roomsLoaded
+        onTriggered: root.roomsLoaded = true
+    }
+    onConversationsChanged: { root.roomsLoaded = true; root.noteSeen(); }
+    onRoomTopicChanged: root.noteSeen()
 
     // The home surface is a query over intents (F-18, exo-ed5): the module classes every
     // intent in every joined room for THIS member — needs-you, waiting-on-others,
@@ -299,6 +402,23 @@ Item {
         }
         return needs.concat(waiting, settled, idle);
     }
+    // Home's first-run checklist (exo-6e5) reads who you are and whom you have named: both
+    // loaded once at the start, then whenever Settings or Contacts reload them.
+    readonly property var settingsData: {
+        try { return JSON.parse(backend ? backend.settingsJson : "{}") || ({}); }
+        catch (e) { return ({}); }
+    }
+    readonly property string chatId: {
+        var id = root.settingsData.identity || ({});
+        var ed = String(id.ed25519 || "").replace(/^0x/i, ""), x = String(id.x25519 || "").replace(/^0x/i, "");
+        return ed.length > 0 && x.length > 0 ? ed + x : "";
+    }
+    Timer {
+        interval: 300
+        running: root.ready && root.backend !== null
+        onTriggered: { root.backend.loadSettings(); root.backend.loadContacts(); }
+    }
+
     // Keep the list current while it is on screen — what waits on you changes when
     // someone else agrees, pays or proposes, in any room.
     Timer {
@@ -316,8 +436,18 @@ Item {
                 root.ready = isReady && root.backend !== null;
         }
     }
+    // A "Why?" anywhere opens Learn at the step it is about (exo-355a).
+    Connections {
+        target: MusterStyle
+        function onLearnRequested(step) {
+            root.view = "walkthrough";
+            learnView.showStep(step);
+        }
+    }
     Component.onCompleted: {
         root.ready = root.backend !== null && logos.isViewModuleReady("muster_ui");
+        if (root.conversations.length > 0) root.roomsLoaded = true;
+        root.seenLoad();
     }
 
     Rectangle {
@@ -365,7 +495,8 @@ Item {
             LogosText {
                 Layout.fillWidth: true
                 elide: Text.ElideRight
-                text: root.view === "room" ? (root.titleOf(root.roomTopic) || (root.roomTopic.length > 0 ? root.shortRoom(root.roomTopic) : qsTr("Join a room")))
+                text: root.view === "room" ? (roomSurface.opening ? (root.titleOf(roomSurface.openingTopic) || root.shortRoom(roomSurface.openingTopic))
+                                              : root.titleOf(root.roomTopic) || (root.roomTopic.length > 0 ? root.shortRoom(root.roomTopic) : qsTr("Join a room")))
                     : root.view === "home" || root.view === "compose" ? qsTr("Needs you")
                     : root.view === "dashboard" ? qsTr("Wallet")
                     : root.view === "lez" ? qsTr("Wallet")
@@ -386,6 +517,21 @@ Item {
         anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+    }
+
+    // news from the room and other rooms (exo-773), said once and let go
+    Toast {
+        id: newsToast
+        objectName: "newsToast"
+        z: 90
+        duration: 4000
+        anchors.horizontalCenter: contentArea.horizontalCenter
+        anchors.bottom: contentArea.bottom
+        anchors.bottomMargin: 96
+    }
+    Connections {
+        target: MusterStyle
+        function onNotified(text) { newsToast.show(text); }
     }
 
     // the drawer's scrim: a tap outside closes it
@@ -450,6 +596,11 @@ Item {
         visible: root.view === "home"
         actions: root.homeActions
         setup: root.homeSetup
+        chatId: root.chatId
+        contactCount: root.contactList.length
+        roomCount: root.conversations.length
+        loaded: root.roomsLoaded
+        onOpenContacts: { root.view = "contacts"; if (root.backend) root.backend.loadContacts(); }
         onManageAccounts: {
             if (typeof logos !== "undefined" && !!logos && typeof logos.request === "function")
                 logos.request("evm.accounts.manage", {}, function (res) {});
@@ -467,8 +618,13 @@ Item {
             for (var i = 0; i < invites.length; ++i) {
                 var inv = invites[i];
                 if (String(inv.topic || "") === topic) {
-                    root.labelRoom(topic, String(inv.note || "room") + " · from " +
-                                   (inv.fromAlias ? String(inv.fromAlias) : root.shortId(inv.from)));
+                    // what it is for, and from whom when they are a contact; never a hex id (exo-ef6)
+                    var note = String(inv.note || "");
+                    var what = note === "decide" ? qsTr("A decision") : note === "pay" ? qsTr("A payment")
+                             : note === "split" ? qsTr("Splitting a bill") : note === "request" ? qsTr("A payment request") : "";
+                    var from = inv.fromAlias ? String(inv.fromAlias) : "";
+                    if (what.length > 0 || from.length > 0)
+                        root.labelRoom(topic, what.length > 0 ? (from.length > 0 ? qsTr("%1 from %2").arg(what).arg(from) : what) : from);
                     break;
                 }
             }
@@ -526,7 +682,8 @@ Item {
     Room {
         id: roomSurface
         // the session title for this room (never its topic, which names nothing)
-        roomTitle: roomSurface.topic.length > 0 ? (root.titleOf(roomSurface.topic) || root.shortRoom(roomSurface.topic)) : ""
+        roomTitle: roomSurface.opening ? (root.titleOf(roomSurface.openingTopic) || root.shortRoom(roomSurface.openingTopic))
+                 : roomSurface.topic.length > 0 ? (root.titleOf(roomSurface.topic) || root.shortRoom(roomSurface.topic)) : ""
         // Leave (exo-dcc.28): the module forgets the room; back to Home, where it no
         // longer shows. Rename (exo-dcc.25): this member's own name for it.
         onLeaveRequested: function (topic) {
@@ -558,6 +715,8 @@ Item {
 
     // The teaching surface (ADR-012 claims registry).
     Walkthrough {
+        id: learnView
+        objectName: "learnView"
         anchors.top: contentArea.top
         anchors.left: contentArea.left
         anchors.right: parent.right
@@ -637,7 +796,7 @@ Item {
                     text: qsTr("Balances")
                     onClicked: {
                         root.view = "dashboard";
-                        if (root.backend) { root.backend.loadAccount(); root.backend.loadBalances(); }
+                        root.refreshBalances();
                     }
                 }
                 LogosTabButton {

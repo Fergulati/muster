@@ -1172,7 +1172,7 @@ ColumnLayout {
     // ── the message row (exo-720.9): "+" opens the action picker; Enter sends ──────
     function sendMessage() {
         if (room.backend && composer.text.length > 0) {
-            room.backend.postMessage(composer.text);
+            room.sendChat(composer.text);      // shows at once, "sending…" (exo-49d)
             composer.text = "";
         }
     }

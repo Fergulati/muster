@@ -1,0 +1,81 @@
+{
+  "about": "Invite someone into the open room (exo-899): a contact not in the room is one click; a pasted contact link works too, its suggested name said back; either way they are invited and arrive a member.",
+  "snapshot": "data/split-alice-collecting.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "contactsJson": [
+      {
+        "identity": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+        "alias": "Carol",
+        "address": ""
+      }
+    ]
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "click": "roomInviteButton"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "inviteContact_Carol",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "popup"
+    },
+    {
+      "click": "inviteContact_Carol"
+    },
+    {
+      "expect": {
+        "slot": "sendInvite",
+        "args": [
+          "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+          "~/muster/1/"
+        ]
+      }
+    },
+    {
+      "expectProp": [
+        "newsToast",
+        "text",
+        "Invited Carol"
+      ]
+    },
+    {
+      "set": [
+        "inviteLinkField",
+        "text",
+        "muster:contact/cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd?name=Dana%20K"
+      ]
+    },
+    {
+      "click": "inviteSend"
+    },
+    {
+      "expect": {
+        "slot": "sendInvite",
+        "args": [
+          "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+        ]
+      }
+    },
+    {
+      "expectProp": [
+        "newsToast",
+        "text",
+        "Invited Dana K"
+      ]
+    }
+  ]
+}

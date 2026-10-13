@@ -43,8 +43,10 @@ traps below cost a run to find.
   not help; it is not an animation.
 - **A window's `contentItem` cannot be grabbed from QML** ("item has no QML engine").
   The gallery grabs its own root item, so a `Popup` on the window overlay would be missing
-  from the picture. Today's UI has none. When the redesign adds Menus and Drawers, capture
-  the X display instead (`import -window root`), as `census` does.
+  from the picture. Since 2026-10-13 (exo-899) a shot taken while a Popup is open prints
+  `GALLERY-XSHOT <path>` instead; `scripts/ui-screenshot.sh` captures the X display
+  (`import -window root`, cropped to the window, which sits at the Xvfb origin) and moves
+  it into place, and the gallery waits for the file before going on.
 - **`setsid cmd &` forks when the shell's job is a group leader,** so `$!` is not the
   process to kill. Write the pid from inside: `setsid bash -c 'echo $$ >pidfile; exec …'`.
   And never `pkill -f` a pattern the killing shell's own command line contains.

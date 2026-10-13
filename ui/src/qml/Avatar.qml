@@ -3,8 +3,8 @@ import Logos.Theme
 import Logos.Controls
 
 // A member, as a face (exo-720.5). The colour comes from their id (MusterStyle.colorFor) and
-// the letter from the name YOU gave them, else their id: it shows nothing the member did
-// not disclose (invariant 9). Room avatars pass `room: true` for a rounded square.
+// the letter from the name YOU gave them, else none: it shows nothing the member did not
+// disclose (invariant 9). Room avatars pass `room: true` for a rounded square.
 Rectangle {
     id: avatar
 
@@ -15,9 +15,10 @@ Rectangle {
 
     readonly property string letter: {
         var n = String(avatar.name || "").trim();
-        if (n.length > 0) return n.charAt(0).toUpperCase();
-        var id = String(avatar.identity || "").replace(/^0x/i, "");
-        return id.length > 0 ? id.charAt(0).toUpperCase() : "?";
+        // a short id standing in for a name ("34bd8a…") is not a name either
+        if (n.length > 0 && n.indexOf("…") < 0 && !/^(0x)?[0-9a-f]{6,}$/i.test(n)) return n.charAt(0).toUpperCase();
+        // unnamed: the colour alone (exo-d1a) — a hex digit reads as an initial they never had
+        return "";
     }
 
     implicitWidth: size

@@ -1,0 +1,83 @@
+{
+  "about": "Loading, said (exo-ba0): a room being opened says so — never the previous room, never the join form — and after a few seconds that the first time takes longer.",
+  "snapshot": "data/split-alice-collecting.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "openingTopic",
+        "/muster/1/gallery-opening/proto"
+      ]
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "roomOpening",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "messageThread",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "joinRoomButton",
+        "visible",
+        false
+      ]
+    },
+    {
+      "shot": "opening"
+    },
+    {
+      "wait": 5300
+    },
+    {
+      "expectProp": [
+        "roomOpeningSlow",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "slow"
+    },
+    {
+      "set": [
+        "roomSurface",
+        "openingTopic",
+        ""
+      ]
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "roomOpening",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "messageThread",
+        "visible",
+        true
+      ]
+    }
+  ]
+}

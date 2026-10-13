@@ -92,6 +92,17 @@ Rectangle {
     // A one-line "who is behind this" for the collapsed lineage header — the distinct
     // names (aliases where known) that contributed, so you see the people behind a
     // decision at a glance before diving into the full per-piece lineage.
+    // a key as the card already names it: an approver's or a proposer's name, or ""
+    function nameOnCard(key) {
+        var k = MusterStyle.personKey(key);
+        if (k.length === 0) return "";
+        var lists = [(cardRoot.card && cardRoot.card.approvers) || [], (cardRoot.card && cardRoot.card.proposedBy) || []];
+        for (var l = 0; l < lists.length; ++l)
+            for (var i = 0; i < lists[l].length; ++i)
+                if (MusterStyle.personKey(lists[l][i].who) === k)
+                    return lists[l][i].mine ? qsTr("you") : String(lists[l][i].name || "");
+        return "";
+    }
     function provWho(prov) {
         if (!prov || prov.length === 0) return "";
         var names = [];
@@ -99,8 +110,10 @@ Rectangle {
             var it = prov[i];
             var who = String((it && it.alias) || "");
             if (who.length === 0) {
+                // the card's own people first ("you", "Bob"), then a short id, never "ed:"
                 var a = String((it && it.account) || "");
-                who = a.length > 0 ? a.substring(0, 8) + "…" : "";
+                who = cardRoot.nameOnCard(a);
+                if (who.length === 0 && a.length > 0) who = MusterStyle.personKey(a).substring(0, 6) + "…";
             }
             if (who.length > 0 && names.indexOf(who) === -1) names.push(who);
         }
@@ -509,9 +522,9 @@ Rectangle {
         if (p.confirmed) return String(p.tx || "").indexOf("note:") === 0 ? qsTr("✓ received — a private note of exactly this share")
                               : String(p.tx || "").length > 0 ? qsTr("✓ received")
                               : p.settledUp ? qsTr("✓ paid through a settle-up") : qsTr("✓ received outside muster");
-        if (p.settled) return qsTr("paid (%1) — %2 has not seen it yet").arg(String(p.tx || "").slice(0, 10) + "…")
-                                                                     .arg(cardRoot.creditorName);
-        if (p.unresolved) return qsTr("sent — not landed by now; muster keeps watching and won't send it twice");
+        if (p.settled) return cardRoot.iAmCreditor ? qsTr("paid — not seen by your wallet yet")
+                                                   : qsTr("paid — waiting for %1 to see it").arg(cardRoot.creditorName);
+        if (p.unresolved) return qsTr("sent — not landed yet; Muster keeps watching and won't send it twice");
         if (p.paying) return qsTr("paying…");
         if (p.covered) return qsTr("in a settle-up — paid through it");
         var agreed = false;
@@ -562,18 +575,96 @@ Rectangle {
         if (String(c.action || "").length > 0) return "code";
         return "coin";
     }
+    // What a person can do on this card now: the primary actions' own rules, in one place,
+    // so the status pill and the buttons never disagree.
+    readonly property bool canApprove: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
+        && !(cardRoot.card && cardRoot.card.approvedByMe)
+        && !cardRoot.ready
+        // a decline is final (exo-720): who declined does not approve, and a
+        // proposal too many declined is closed
+        && !cardRoot.declinedByMe && !cardRoot.isDeclined
+        // a split: only who it names agrees — each debtor, and the creditor to payTo
+        // being theirs (exo-770), never to an address this client does not hold
+        && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && (cardRoot.payToMine || cardRoot.payToMineUnknown)))
+        && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
+        && !cardRoot.vouchedNotMine    // never vouch for an address this client does not hold
+        && !cardRoot.splitExpired      // past its expiry an agreement is refused (inv 2)
+    readonly property bool canPayShare: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor && !cardRoot.isXmr
+        && cardRoot.ready && !cardRoot.paid && !cardRoot.splitExpired
+        && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
+        && !cardRoot.myPart.covered
+    readonly property bool canPaySettle: cardRoot.kind === "intent-propose" && cardRoot.isSettleUp && cardRoot.ready
+        && !cardRoot.settleUp.expired
+        && cardRoot.myTransfer !== null
+    readonly property bool needsMe: canApprove || canPayShare || canPaySettle
+
+    // What I just clicked, until the room's state shows it (exo-49d): the button gives way
+    // to "Sending your approval…" at once, rather than sitting there inviting a second
+    // click. It clears when the action no longer applies (the log caught up) or after 30 s,
+    // when the button comes back; a refusal is reported by the room's own notice.
+    property string sending: ""            // "approve" | "pay" | "deny" | ""
+    function markSending(what) { cardRoot.sending = what; sendingClear.restart(); }
+    Timer { id: sendingClear; interval: 30000; onTriggered: cardRoot.sending = "" }
+    onCanApproveChanged: if (!cardRoot.canApprove && (cardRoot.sending === "approve" || cardRoot.sending === "deny")) cardRoot.sending = ""
+    onCanPayShareChanged: if (!cardRoot.canPayShare && cardRoot.sending === "pay") cardRoot.sending = ""
+    onCanPaySettleChanged: if (!cardRoot.canPaySettle && cardRoot.sending === "pay") cardRoot.sending = ""
+
+    // The status in words (exo-ce0): what happens next, and who it waits on — "Needs you",
+    // "Waiting for Bob", "Ready to settle", "Sent to the chain", "Paid 1 of 2", "Paid".
+    // `stage` is the intent's lifecycle state; `state` the card's coarser one.
+    readonly property string stage: String((cardRoot.card && (cardRoot.card.stage || cardRoot.card.state)) || "")
+    readonly property bool settlesOnChain: !!(cardRoot.card && cardRoot.card.profile
+                                              && String(cardRoot.card.profile.settlement || "none") !== "none")
+    // who a proposal still waits on to agree, by name where the card names them (a split's parties)
+    function waitingFor() {
+        var left = Math.max(0, cardRoot.threshold - cardRoot.approvals);
+        if (cardRoot.isSplit) {
+            var ap = (cardRoot.card && Array.isArray(cardRoot.card.approvers)) ? cardRoot.card.approvers : [];
+            var names = [];
+            for (var i = 0; i < cardRoot.parts.length; ++i) {
+                var p = cardRoot.parts[i], agreed = false;
+                for (var j = 0; j < ap.length; ++j) if (String(ap[j].who) === String(p.part)) agreed = true;
+                if (!agreed) names.push(p.mine ? qsTr("you") : String(p.name || "").length > 0 ? String(p.name) : String(p.who || "").slice(0, 8) + "…");
+            }
+            if (!cardRoot.creditorAgreed && cardRoot.split) names.push(cardRoot.iAmCreditor ? qsTr("you") : cardRoot.creditorName);
+            if (names.length === 1) return qsTr("Waiting for %1").arg(names[0]);
+            if (names.length === 2) return qsTr("Waiting for %1 and %2").arg(names[0]).arg(names[1]);
+            if (names.length > 2) return qsTr("Waiting for %1 people").arg(names.length);
+        }
+        if (cardRoot.rounds > 1 && cardRoot.roundNo > 1)
+            return qsTr("Round %1 of %2").arg(cardRoot.roundNo).arg(cardRoot.rounds);
+        return left === 1 ? qsTr("Waiting for 1 more") : left > 1 ? qsTr("Waiting for %1 more").arg(left) : qsTr("Waiting");
+    }
     readonly property string stateWord: {
-        var st = String((cardRoot.card && cardRoot.card.state) || "");
-        return st === "proposed" ? qsTr("Proposed") : st === "collecting" ? qsTr("Collecting")
-             : st === "executable" ? qsTr("Ready") : st === "submitted" ? qsTr("Submitted")
-             : st === "settling" ? qsTr("Settling") : st === "final" ? qsTr("Final")
-             : st === "declined" ? qsTr("Declined") : st === "expired" ? qsTr("Expired")
-             : st === "ready" ? qsTr("Ready") : st.length > 0 ? st.charAt(0).toUpperCase() + st.slice(1) : "";
+        var st = cardRoot.stage;
+        if (cardRoot.isDeclined || st === "declined") return qsTr("Declined");
+        if (st === "expired" || cardRoot.splitExpired) return qsTr("Expired");
+        if (cardRoot.sending === "approve") return qsTr("Sending your approval…");
+        if (cardRoot.sending === "deny") return qsTr("Sending…");
+        if (cardRoot.sending === "pay") return qsTr("Sending your payment…");
+        if (cardRoot.canApprove) return qsTr("Needs you");
+        if (cardRoot.canPayShare || cardRoot.canPaySettle) return qsTr("Your turn to pay");
+        var parts = cardRoot.isSplit || cardRoot.isSettleUp;
+        if (st === "proposed" || st === "collecting") return cardRoot.waitingFor();
+        if (st === "executable" || st === "ready") return parts ? qsTr("Agreed · paying") : cardRoot.settlesOnChain ? qsTr("Ready to settle") : qsTr("Agreed");
+        if (st === "submitted") return parts ? qsTr("Paying") : qsTr("Sent to the chain");
+        if (st === "settling") {
+            if (!parts) return qsTr("Settling");
+            var n = 0;
+            for (var i = 0; i < cardRoot.parts.length; ++i) if (cardRoot.parts[i].confirmed) ++n;
+            return qsTr("Paid %1 of %2").arg(n).arg(cardRoot.parts.length);
+        }
+        if (st === "final" || st === "paid") return parts ? qsTr("Paid") : cardRoot.settlesOnChain ? qsTr("Settled") : qsTr("Agreed");
+        return st.length > 0 ? st.charAt(0).toUpperCase() + st.slice(1) : "";
     }
     readonly property string stateTone: {
-        var st = String((cardRoot.card && cardRoot.card.state) || "");
-        return st === "final" ? "settled" : st === "submitted" || st === "settling" ? "info"
-             : st === "declined" || st === "expired" ? "refused" : "waiting";
+        var st = cardRoot.stage;
+        if (cardRoot.isDeclined || st === "declined" || st === "expired" || cardRoot.splitExpired) return "refused";
+        if (cardRoot.sending.length > 0) return "info";
+        if (cardRoot.needsMe) return "needs";
+        if (st === "final" || st === "paid") return "settled";
+        if (st === "executable" || st === "ready" || st === "submitted" || st === "settling") return "info";
+        return "waiting";
     }
 
     // The kinds this component knows how to draw. Anything else is not ours to
@@ -675,7 +766,7 @@ Rectangle {
                     : cardRoot.kind === "intent-approve" ? qsTr("Approved")
                     : qsTr("Payment sent")
                 color: Theme.palette.text
-                font.pixelSize: MusterStyle.body
+                font.pixelSize: MusterStyle.cardBody
                 font.weight: Theme.typography.weightBold
             }
             StatusPill {
@@ -702,7 +793,7 @@ Rectangle {
             text: qsTr("Added to the proposal above.")
             color: Theme.palette.text
             font.family: Theme.typography.publicSans
-            font.pixelSize: Theme.typography.primaryText
+            font.pixelSize: MusterStyle.cardBody
         }
 
         // schema unknown (CardUnknownSchema.qml)
@@ -735,7 +826,7 @@ Rectangle {
                           if (n.length > 0) return n;
                           var x = String(d.who || ""); return x.length > 12 ? x.slice(0, 6) + "…" + x.slice(-4) : x; }).join(", "))
             color: Theme.palette.warning
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // what this needs (CardNeeds.qml)
@@ -759,7 +850,7 @@ Rectangle {
                   : cardRoot.split.private ? qsTr("Expired: no share of it can be paid now. A private split is not renewed — propose it again.")
                   : qsTr("Expired: no share of it can be paid now. Its unpaid shares are already in a renewal or a settle-up.")
             color: Theme.palette.warning
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         LogosText {
@@ -769,7 +860,7 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: cardRoot.splitNote
             color: cardRoot.splitNote.indexOf("⚠") === 0 ? Theme.palette.warning : Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // the card's actions in one row (exo-720.10): the one that moves it forward first and
@@ -803,23 +894,12 @@ Rectangle {
             ActionButton {
                 variant: LogosButton.Variant.Primary
                 objectName: "cardApprove"
-                visible: cardRoot.kind === "intent-propose" && cardRoot.schemaKnown
-                    && !(cardRoot.card && cardRoot.card.approvedByMe)
-                    && !cardRoot.ready
-                    // a decline is final (exo-720): who declined does not approve, and a
-                    // proposal too many declined is closed
-                    && !cardRoot.declinedByMe && !cardRoot.isDeclined
-                    // a split: only who it names agrees — each debtor, and the creditor to payTo
-                    // being theirs (exo-770), never to an address this client does not hold
-                    && (!cardRoot.isSplit || cardRoot.iAmDebtor || (cardRoot.iAmCreditor && (cardRoot.payToMine || cardRoot.payToMineUnknown)))
-                    && (!cardRoot.isSettleUp || !!cardRoot.settleUp.iAmParty)
-                    && !cardRoot.vouchedNotMine    // never vouch for an address this client does not hold
-                    && !cardRoot.splitExpired      // past its expiry an agreement is refused (inv 2)
+                visible: cardRoot.canApprove && cardRoot.sending === ""
                 text: cardRoot.isSettleUp ? qsTr("Agree to settle up")
                     : !cardRoot.isSplit ? qsTr("Approve")
                     : cardRoot.iAmDebtor ? qsTr("Agree to my share")
                     : qsTr("Agree — I paid, and %1 is mine").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
-                onClicked: cardRoot.approve()
+                onClicked: { cardRoot.markSending("approve"); cardRoot.approve(); }
             }
 
             // A settle-up (exo-3c6): once every party agreed, each pays their own net payments —
@@ -827,15 +907,13 @@ Rectangle {
             ActionButton {
                 variant: LogosButton.Variant.Primary
                 objectName: "cardPaySettle"
-                visible: cardRoot.kind === "intent-propose" && cardRoot.isSettleUp && cardRoot.ready
-                    && !cardRoot.settleUp.expired
-                    && cardRoot.myTransfer !== null
+                visible: cardRoot.canPaySettle && cardRoot.sending === ""
                 text: cardRoot.myTransfer
                       ? qsTr("Pay %1 %2 to %3").arg(cardRoot.eth(cardRoot.myTransfer.amount)).arg(cardRoot.unit)
                             .arg(String(cardRoot.myTransfer.toName || "").length > 0 ? cardRoot.myTransfer.toName
                                  : String(cardRoot.myTransfer.to).slice(0, 10) + "…")
                       : ""
-                onClicked: cardRoot.settlePart()
+                onClicked: { cardRoot.markSending("pay"); cardRoot.settlePart(); }
             }
 
             // A split (exo-a90): once everyone named has agreed, each pays their OWN share from
@@ -844,13 +922,10 @@ Rectangle {
             ActionButton {
                 variant: LogosButton.Variant.Primary
                 objectName: "cardPayShare"
-                visible: cardRoot.kind === "intent-propose" && cardRoot.isSplit && cardRoot.iAmDebtor && !cardRoot.isXmr
-                    && cardRoot.ready && !cardRoot.paid && !cardRoot.splitExpired
-                    && cardRoot.myPart !== null && !cardRoot.myPart.settled && !cardRoot.myPart.paying
-                    && !cardRoot.myPart.covered
+                visible: cardRoot.canPayShare && cardRoot.sending === ""
                 text: cardRoot.myPart ? qsTr("Pay my share — %1 %2").arg(cardRoot.eth(cardRoot.myPart.amount)).arg(cardRoot.unit)
                                       : qsTr("Pay my share")
-                onClicked: cardRoot.settlePart()
+                onClicked: { cardRoot.markSending("pay"); cardRoot.settlePart(); }
             }
 
             ActionButton {
@@ -873,8 +948,9 @@ Rectangle {
                     && !cardRoot.ready
                     && !cardRoot.isDeclined
                     && (!cardRoot.isSplit || cardRoot.iAmDebtor || cardRoot.iAmCreditor)
+                    && cardRoot.sending === ""
                 text: qsTr("Deny")
-                onClicked: cardRoot.deny()
+                onClicked: { cardRoot.markSending("deny"); cardRoot.deny(); }
             }
 
             // "Who sees this?" (exo-720.10): this proposal's flow, in the room's Privacy tab
@@ -911,7 +987,7 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: cardRoot.auditStatus
             color: Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
     }
 }

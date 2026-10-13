@@ -24,7 +24,7 @@ ColumnLayout {
         text: qsTr("For: %1").arg(String((cardRoot.card && cardRoot.card.purpose) || ""))
         color: Theme.palette.text
         font.family: Theme.typography.publicSans
-        font.pixelSize: Theme.typography.primaryText
+        font.pixelSize: MusterStyle.cardBody
         font.weight: Theme.typography.weightMedium
     }
     LogosText {
@@ -43,7 +43,7 @@ ColumnLayout {
               : qsTr("This room needs somewhere to send funds. Share an address to continue.")
         color: Theme.palette.textSecondary
         font.family: Theme.typography.publicSans
-        font.pixelSize: Theme.typography.secondaryText
+        font.pixelSize: MusterStyle.cardCaption
     }
     LogosText {
         objectName: "cardAddressWaiting"
@@ -54,7 +54,7 @@ ColumnLayout {
         text: cardRoot.askedOf.length > 0 ? qsTr("Waiting for %1 to share an address.").arg(cardRoot.askedOfName || qsTr("them"))
                                           : qsTr("Waiting for someone in the room to share an address.")
         color: Theme.palette.textSecondary
-        font.pixelSize: Theme.typography.secondaryText
+        font.pixelSize: MusterStyle.cardCaption
     }
     Repeater {
         model: cardRoot.answers || []
@@ -70,7 +70,7 @@ ColumnLayout {
             text: modelData.self ? qsTr("✓ You shared %1").arg(shortAddr)
                                  : qsTr("✓ %1 shared %2").arg(String(modelData.name || "")).arg(shortAddr)
             color: Theme.palette.success
-            font.pixelSize: Theme.typography.secondaryText
+            font.pixelSize: MusterStyle.cardCaption
         }
     }
 }

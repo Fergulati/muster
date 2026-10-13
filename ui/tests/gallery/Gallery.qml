@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 
 // The gallery (exo-720.2): the real Main.qml, rendered against FakeBackend with a
 // fixture's PROPs, then screenshot. No module, no network, no runner: the same Qt and
@@ -90,10 +91,46 @@ Item {
         return null;
     }
 
+    // a Popup lives on the window's overlay, outside this item, and a window's contentItem
+    // cannot be grabbed from QML; while one is open the script captures the X display
+    // instead (GALLERY-XSHOT), and the shot waits for that file to appear
+    function popupOpen() {
+        var ov = gallery.Overlay.overlay;
+        if (!ov) return false;
+        for (var i = 0; i < ov.children.length; ++i)
+            if (ov.children[i].visible && ov.children[i].width > 0 && ov.children[i].height > 0) return true;
+        return false;
+    }
+    function fileThere(path) {
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", Qt.resolvedUrl("file://" + path), false);
+            xhr.send();
+            return (xhr.status === 200 || xhr.status === 0) && xhr.responseText.length > 0;
+        } catch (e) { return false; }
+    }
+    Timer {
+        id: xwait
+        property string path: ""
+        property int tries: 0
+        interval: 100; repeat: true
+        onTriggered: {
+            if (gallery.fileThere(xwait.path)) {
+                xwait.stop();
+                console.log("GALLERY-SHOT " + xwait.path);
+                gallery.next();
+            } else if (++xwait.tries > 100) { xwait.stop(); gallery.fail("no X capture for " + xwait.path); }
+        }
+    }
+
     function shoot(suffix) {
         var path = outPrefix + (suffix ? "-" + suffix : "") + ".png";
-        // the gallery item itself (a window's contentItem has no engine to grab with); the
-        // UI uses no Popup today, so nothing lives on the overlay outside it
+        if (gallery.popupOpen()) {
+            console.log("GALLERY-XSHOT " + path);
+            xwait.path = path; xwait.tries = 0; xwait.start();
+            return;
+        }
+        // the gallery item itself (a window's contentItem has no engine to grab with)
         gallery.grabToImage(function (r) {
             if (!r.saveToFile(path)) { fail("cannot write " + path); return; }
             console.log("GALLERY-SHOT " + path);

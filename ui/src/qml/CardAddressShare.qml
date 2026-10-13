@@ -22,7 +22,7 @@ ColumnLayout {
             ? String(cardRoot.card.asset) : qsTr("private account")
         color: Theme.palette.text
         font.family: Theme.typography.publicSans
-        font.pixelSize: Theme.typography.primaryText
+        font.pixelSize: MusterStyle.cardBody
     }
 
     // What kind of destination it is matters more than the sixty
@@ -49,7 +49,7 @@ ColumnLayout {
         }
         color: Theme.palette.textTertiary
         font.family: MusterStyle.mono
-        font.pixelSize: Theme.typography.secondaryText
+        font.pixelSize: MusterStyle.cardCaption
     }
 
     // A public account is worth a word: the payer should know the
@@ -68,7 +68,7 @@ ColumnLayout {
               ? qsTr("Anyone reading the zone can see what lands here.")
               : qsTr("Anyone reading the chain can see what lands here.")
         color: Theme.palette.textTertiary
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
     }
 
     // Close the loop: use the address the counterparty just disclosed as the

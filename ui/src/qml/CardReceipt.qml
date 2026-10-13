@@ -23,7 +23,7 @@ ColumnLayout {
             + " " + String((cardRoot.card && cardRoot.card.denom) || "")).trim()
         color: Theme.palette.text
         font.family: Theme.typography.publicSans
-        font.pixelSize: Theme.typography.primaryText
+        font.pixelSize: MusterStyle.cardBody
         font.weight: Theme.typography.weightMedium
     }
 
@@ -33,7 +33,7 @@ ColumnLayout {
         text: String((cardRoot.card && cardRoot.card.rail) || "")
         color: Theme.palette.textSecondary
         font.family: MusterStyle.mono
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
     }
 
     // ── what left the room ─────────────────────────────────────────
@@ -46,7 +46,7 @@ ColumnLayout {
         Layout.topMargin: Theme.spacing.tiny
         text: qsTr("What left the room")
         color: Theme.palette.textTertiary
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
         font.weight: Theme.typography.weightBold
     }
 
@@ -75,7 +75,7 @@ ColumnLayout {
             LogosText {
                 text: modelData.k
                 color: Theme.palette.textTertiary
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
 
             Item { Layout.fillWidth: true }
@@ -86,7 +86,7 @@ ColumnLayout {
                     ? Theme.palette.success : Theme.palette.textSecondary
                 horizontalAlignment: Text.AlignRight
                 font.family: MusterStyle.mono
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
                 font.weight: Theme.typography.weightMedium
             }
         }
@@ -101,6 +101,6 @@ ColumnLayout {
         text: String((cardRoot.card && cardRoot.card.tx) || "")
         color: Theme.palette.textTertiary
         font.family: MusterStyle.mono
-        font.pixelSize: MusterStyle.caption
+        font.pixelSize: MusterStyle.cardCaption
     }
 }

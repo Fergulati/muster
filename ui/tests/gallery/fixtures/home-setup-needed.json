@@ -1,0 +1,30 @@
+{
+  "about": "The same install with an approval waiting: now the account notice asks, since the approval needs it (exo-5a5).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "keystoreStatusJson": {
+      "identity": {
+        "kind": "module"
+      },
+      "accounts": []
+    }
+  },
+  "steps": [
+    {
+      "view": "home"
+    },
+    {
+      "expectProp": [
+        "homeSetup",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

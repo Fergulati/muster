@@ -110,6 +110,33 @@ Item {
     }
     // "Not now" on a join request hides its notice, this session only: the request stays,
     // and People still offers Admit. The module has no "refuse": nobody is told anything.
+    // Someone in the room you haven't named (exo-d1a): the room asks once who they are, so
+    // they read as a name everywhere after — the roster, the thread, the cards. The name is
+    // yours (your address book), never sent. "Not now" leaves them unnamed this session.
+    property var namingSkipped: ({})
+    readonly property var unnamedMember: {
+        for (var i = 0; i < room.members.length; ++i) {
+            var m = room.members[i];
+            if (!m || m.self || String(m.alias || "").length > 0) continue;
+            if (room.namingSkipped[String(m.identity)]) continue;
+            return m;
+        }
+        return null;
+    }
+    function nameMember(identityHex, alias) {
+        var a = String(alias || "").trim();
+        if (!room.backend || a.length === 0) return;
+        room.backend.addContact(identityHex, a);
+        room.backend.loadMembers();
+        room.backend.loadMessages();
+        room.backend.loadIntents();
+        MusterStyle.notify(qsTr("Saved as %1").arg(a));
+    }
+    function skipNaming(identityHex) {
+        var s = Object.assign({}, room.namingSkipped);
+        s[String(identityHex)] = true;
+        room.namingSkipped = s;
+    }
     property var dismissedRequests: ({})
     function dismissRequest(identityHex) {
         var m = Object.assign({}, room.dismissedRequests); m[identityHex] = true; room.dismissedRequests = m;
@@ -130,10 +157,11 @@ Item {
              : what === "approve" ? qsTr("Needs your approval") : what === "submit" ? qsTr("Ready to settle")
              : qsTr("Waiting on you");
     }
+    // the pinned bar's word for a proposal that does not wait on you (exo-ce0)
     function stateWord(st) {
-        return st === "proposed" ? qsTr("Proposed") : st === "collecting" ? qsTr("Collecting")
-             : st === "executable" ? qsTr("Ready") : st === "submitted" ? qsTr("Submitted")
-             : st === "settling" ? qsTr("Settling") : st === "final" ? qsTr("Final") : String(st || "");
+        return st === "proposed" || st === "collecting" ? qsTr("Waiting on others")
+             : st === "executable" ? qsTr("Agreed") : st === "submitted" ? qsTr("Sent to the chain")
+             : st === "settling" ? qsTr("Settling") : st === "final" ? qsTr("Done") : String(st || "");
     }
     // The pinned proposal (U-3): what waits on you first, else the latest still under way.
     readonly property var liveProposal: {
@@ -168,7 +196,18 @@ Item {
     // What this instance knows the room as (Main's session-only title), shown instead of
     // the topic, which names nothing (exo-661.7 / exo-59c). Empty → the topic.
     property string roomTitle: ""
-    readonly property bool joined: room.topic.length > 0
+    // The room being opened (exo-ba0): set by Main when it asks the module to join, and
+    // cleared when the module's room is that room. Until then the room says it is opening —
+    // never the previous room's thread, and never the join form.
+    property string openingTopic: ""
+    readonly property bool opening: room.openingTopic.length > 0 && room.openingTopic !== room.topic
+    function beginOpening(t) { room.openingTopic = String(t || ""); openingGiveUp.restart(); }
+    onTopicChanged: if (room.topic === room.openingTopic) room.openingTopic = ""
+    Timer { id: openingGiveUp; interval: 45000; onTriggered: room.openingTopic = "" }
+    property bool openingSlow: false
+    onOpeningChanged: room.openingSlow = false
+    Timer { interval: 5000; running: room.opening; onTriggered: room.openingSlow = true }
+    readonly property bool joined: room.topic.length > 0 && !room.opening
 
     // Whether the proposal composer is open (the "+" in the message row), and which
     // effect type is being composed: "payment" (a transfer) or "statement" (text the
@@ -202,6 +241,63 @@ Item {
     readonly property var messages: {
         try { return JSON.parse(backend ? backend.messagesJson : "[]"); }
         catch (e) { return []; }
+    }
+    // What I sent that the room's log has not shown back yet (exo-49d): the line appears in
+    // the thread at once, "sending…", and leaves the outbox when the log returns it. Still
+    // missing after a while, it reads "Not sent" with a retry. Never a second record: the
+    // log is the thread; this is only the wait before it catches up.
+    property var outbox: []        // [{key, body, at, failed}]
+    function sendChat(body) {
+        var b = String(body || "");
+        if (!room.backend || b.length === 0) return;
+        room.outbox = room.outbox.concat([{ key: String(Date.now()) + "-" + room.outbox.length,
+                                            body: b, at: Date.now(), failed: false }]);
+        room.backend.postMessage(b);
+    }
+    function retrySend(key) {
+        var keep = [], body = "";
+        for (var i = 0; i < room.outbox.length; ++i)
+            if (room.outbox[i].key === key) body = room.outbox[i].body; else keep.push(room.outbox[i]);
+        room.outbox = keep;
+        room.sendChat(body);
+    }
+    // each outbox line is matched to one of my own messages with the same text, sent no
+    // earlier than a minute before it (the log's clock is in seconds)
+    function reconcileOutbox() {
+        if (room.outbox.length === 0) return;
+        var used = {}, keep = [], changed = false;
+        for (var i = 0; i < room.outbox.length; ++i) {
+            var o = room.outbox[i], hit = false;
+            for (var j = 0; j < room.messages.length && !hit; ++j) {
+                var m = room.messages[j];
+                if (used[j] || !m.self || String(m.body) !== o.body) continue;
+                if (MusterStyle.msOf(m.ts) < o.at - 60000) continue;
+                used[j] = true; hit = true;
+            }
+            if (hit) { changed = true; continue; }
+            if (!o.failed && Date.now() - o.at > 30000) {
+                o = { key: o.key, body: o.body, at: o.at, failed: true }; changed = true;
+            }
+            keep.push(o);
+        }
+        if (changed) room.outbox = keep;
+    }
+    onMessagesChanged: room.reconcileOutbox()
+    Timer {
+        interval: 5000; repeat: true
+        running: room.outbox.length > 0
+        onTriggered: room.reconcileOutbox()
+    }
+    // the thread as drawn: the log, then what is on its way
+    readonly property var threadItems: {
+        var out = room.messages.slice();
+        for (var i = 0; i < room.outbox.length; ++i) {
+            var o = room.outbox[i];
+            out.push({ id: "outbox:" + o.key, outboxKey: o.key, author: room.myIdentity, self: true,
+                       ts: Math.floor(o.at / 1000), body: o.body, alias: "",
+                       pending: !o.failed, failed: o.failed });
+        }
+        return out;
     }
     readonly property var members: {
         try { return JSON.parse(backend ? backend.membersJson : "[]"); }
@@ -337,6 +433,65 @@ Item {
         try { return JSON.parse(backend ? backend.intentsJson : "[]"); }
         catch (e) { return []; }
     }
+
+    // What other people did since the last look, said once as a toast (exo-773): an
+    // approval, a payment, a decline, a join, a proposal done. Facts are kept per intent and
+    // compared on each refresh; for a few seconds after the room changes they are only
+    // recorded, since the folds for the new room arrive one by one and are not news.
+    property var facts: ({})
+    property var memberFacts: ({})
+    property string factsTopic: ""
+    property double factsSince: 0
+    function nameOr(n) { var s = String(n || ""); return s.length > 0 ? s : qsTr("Someone"); }
+    function noteChanges() {
+        var t = room.backend ? String(room.backend.roomTopic || "") : "";
+        if (t !== room.factsTopic) { room.factsTopic = t; room.factsSince = Date.now(); }
+        var quiet = Date.now() - room.factsSince < 4000;
+        var news = [], fresh = {};
+        for (var i = 0; i < room.intents.length; ++i) {
+            var it = room.intents[i];
+            if (!it || !it.id) continue;
+            var id = String(it.id), old = room.facts[id];
+            var f = { ap: {}, paid: {}, conf: {}, dec: {}, st: String(it.state || "") };
+            var ap = Array.isArray(it.approvers) ? it.approvers : [];
+            for (var a = 0; a < ap.length; ++a) {
+                f.ap[ap[a].who] = true;
+                if (old && !old.ap[ap[a].who] && !ap[a].mine) news.push(qsTr("%1 approved").arg(room.nameOr(ap[a].name)));
+            }
+            var ps = Array.isArray(it.parts) ? it.parts : [];
+            for (var p = 0; p < ps.length; ++p) {
+                var k = String(ps[p].part || p);
+                if (ps[p].settled) f.paid[k] = true;
+                if (ps[p].confirmed) f.conf[k] = true;
+                if (!old || ps[p].mine) continue;
+                if (ps[p].confirmed && !old.conf[k]) news.push(qsTr("%1's payment arrived").arg(room.nameOr(ps[p].name)));
+                else if (ps[p].settled && !old.paid[k]) news.push(qsTr("%1 paid their share").arg(room.nameOr(ps[p].name)));
+            }
+            var dn = Array.isArray(it.declinerNames) ? it.declinerNames : [];
+            for (var d = 0; d < dn.length; ++d) {
+                f.dec[dn[d].who] = true;
+                if (old && !old.dec[dn[d].who] && !dn[d].mine && String(dn[d].name) !== qsTr("you"))
+                    news.push(qsTr("%1 declined").arg(room.nameOr(dn[d].name)));
+            }
+            if (old && old.st !== f.st && f.st === "final") news.push(ps.length > 0 ? qsTr("Every share is paid") : qsTr("Settled"));
+            fresh[id] = f;
+        }
+        room.facts = fresh;
+        var mf = {};
+        for (var m = 0; m < room.members.length; ++m) {
+            var mm = room.members[m];
+            if (!mm) continue;
+            mf[String(mm.identity)] = true;
+            if (Object.keys(room.memberFacts).length > 0 && !room.memberFacts[String(mm.identity)] && !mm.self)
+                news.push(qsTr("%1 joined").arg(String(mm.alias || "").length > 0 ? String(mm.alias) : qsTr("Someone new")));
+        }
+        room.memberFacts = mf;
+        if (quiet || news.length === 0) return;
+        MusterStyle.notify(news.length > 2 ? qsTr("%1, and %2 more").arg(news[0]).arg(news.length - 1)
+                                          : news.join(" · "));
+    }
+    onIntentsChanged: room.noteChanges()
+    onMembersChanged: room.noteChanges()
     // The room's coordination history (coordinate_activity): a plain-language
     // narrative of every state transition, in causal order, folded from the SAME
     // log the cards come from. The education seam — how the room got here.
@@ -875,6 +1030,7 @@ Item {
             committed: Number((it && it.committed) || 0),
             unattested: Number((it && it.unattested) || 0),
             state: cardState,
+            stage: st,                       // the lifecycle state, for the status in words (exo-ce0)
             // the verify view: the re-derived safeTxHash and the domain it binds to
             txhash: (it && it.txhash) ? String(it.txhash) : "",
             chainId: (it && it.chainId !== undefined) ? Number(it.chainId) : 0,
@@ -1431,6 +1587,39 @@ Item {
             RoomPinned { room: roomItem }
             RoomThread { room: roomItem }
 
+            // opening (exo-ba0): the module is joining; the first time it also starts the
+            // node, which takes longer, and the line says so after a few seconds
+            Item {
+                objectName: "roomOpening"
+                visible: room.opening
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Column {
+                    anchors.centerIn: parent
+                    width: Math.min(parent.width - 2 * Theme.spacing.xlarge, 420)
+                    spacing: Theme.spacing.small
+                    Loading { anchors.horizontalCenter: parent.horizontalCenter; running: room.opening }
+                    LogosText {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: qsTr("Opening the room…")
+                        color: Theme.palette.text
+                        font.pixelSize: MusterStyle.body
+                        font.weight: Theme.typography.weightMedium
+                    }
+                    LogosText {
+                        objectName: "roomOpeningSlow"
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        visible: room.openingSlow
+                        text: qsTr("Connecting to the network. The first time takes a little longer.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: MusterStyle.caption
+                    }
+                }
+            }
+
             // someone asks to join: said where the conversation is, with Admit (U3)
             Repeater {
                 model: room.joined ? room.visibleRequests : []
@@ -1456,6 +1645,42 @@ Item {
                         quiet: true
                         onClicked: room.dismissRequest(String(modelData.identity || ""))
                     }
+                }
+            }
+
+            InlineNotice {
+                id: nameNotice
+                objectName: "roomNameMember"
+                readonly property string identity: room.unnamedMember ? String(room.unnamedMember.identity || "") : ""
+                visible: room.joined && room.unnamedMember !== null
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.spacing.xlarge
+                Layout.rightMargin: Theme.spacing.xlarge
+                Layout.bottomMargin: Theme.spacing.small
+                tone: "info"
+                title: qsTr("Someone new is here. Who is it?")
+                text: qsTr("Give them a name only you see. Their chat id is %1.")
+                      .arg(nameNotice.identity.slice(0, 6) + "…" + nameNotice.identity.slice(-4))
+                LogosTextField {
+                    id: nameField
+                    objectName: "roomNameField"
+                    width: 160
+                    placeholderText: qsTr("Their name")
+                    Keys.onReturnPressed: if (nameSave.enabled) nameSave.clicked()
+                }
+                ActionButton {
+                    id: nameSave
+                    objectName: "roomNameSave"
+                    text: qsTr("Save")
+                    variant: LogosButton.Variant.Primary
+                    enabled: nameField.text.trim().length > 0
+                    onClicked: { room.nameMember(nameNotice.identity, nameField.text); nameField.text = ""; }
+                }
+                ActionButton {
+                    objectName: "roomNameSkip"
+                    text: qsTr("Not now")
+                    quiet: true
+                    onClicked: room.skipNaming(nameNotice.identity)
                 }
             }
 

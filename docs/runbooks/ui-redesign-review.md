@@ -85,7 +85,7 @@ Make each window about 1440×900, side by side if your screen allows.
 **A room**
 
 6. **Alice:** **Start something** → **Just talk** → pick **Bob** → **Open the room with them**. **Bob:** **Needs you** (or Home) → **Invitations** → **Join**. ✓ Within a few seconds both windows show the room. The header shows 2 faces, and under the message bar the line reads **end-to-end · 2 can read · … Who can see what**.
-7. Click **Invite**. ✓ A popover shows the room code with **Copy**. Click outside it to close it.
+7. Click **Invite**. ✓ A popover shows **Invite someone** (your contacts not in the room, one click each, or a pasted contact link) and, under it, the room code with **Copy**. Click outside it to close it.
 8. Click the coloured dot (**live**) in the header. ✓ A popover lists the connections (delivery, RPC), each with its state.
 9. Click the room's title. ✓ It becomes editable. Type a name, press **Enter**, and the title changes on this side only.
 10. Click **⋯** (More). ✓ A menu with **Room history** and **Leave room…**. Choose **Leave room…**: a dialog asks **Leave this room?**. Press **Stay**.
@@ -95,15 +95,15 @@ Make each window about 1440×900, side by side if your screen allows.
 **A decision (the card)**
 
 13. **Alice:** click **+** beside the message bar. ✓ A picker with **Payment**, **Split a bill**, **Request a payment**, **Statement**, **Call a module**, each with an icon and a line of explanation. Choose **Statement**, type a sentence, and **Propose**. ✓ A titled panel opens above the message bar, and the thread is not pushed down. Then the card appears, **compact**:
-    - its header: an icon, **Proposed a statement**, and a **Proposed** pill;
+    - its header: an icon, **Proposed a statement**, and a pill in words: **Needs you** on the side that can approve, **Waiting for 1 more** on the other;
     - the statement, and the empty approval slots with **0 of 2**;
-    - one line under the slots: **✓ Re-derived on this device · … traced to where it came from**;
+    - one line under the slots: **✓ Checked on your device · … traced to where it came from**, with **Why?** at its end;
     - the buttons **Approve**, **Deny**, **Who sees this?** and **Details**.
 
     A bar under the room header names the proposal, with **Review**. **Screenshot this card (A13).**
 14. Click **Details**. ✓ The card grows to show the status path (proposed · collecting · ready · final), **▸ How this account works**, the green **✓ your client re-derived this…** box, **How do I know this?**, **What this needs**, and **Download audit trail**. The button now reads **Hide details**. Open **What this needs**. ✓ It loads the needs. **Screenshot (A14)**, then click **Hide details**.
 15. Click **Who sees this?** ✓ The drawer opens on **Privacy** with a chip **Showing one proposal: …** and that proposal's flow alone. The store node is always listed. Click the chip's **×**: the whole room's flow shows.
-16. **Bob:** the sidebar shows a count on **Needs you**, and the room's row says it waits on him. Both **Approve**. ✓ The slots fill with each person's initial, **by Alice, you** (or the reverse) appears under them, and the pill reaches **Final**.
+16. **Bob:** the sidebar shows a count on **Needs you**, and the room's row says it waits on him. Both **Approve**. ✓ The moment you click, the button gives way to **Sending your approval…**. The slots fill with each person's avatar, **by Alice, you** (or the reverse) appears under them, and the pill reaches **Agreed**. The other window shows a toast, **Bob approved**.
 17. Propose a second statement. **Bob: Deny.** ✓ The card reads **1 declined: Bob** in amber.
 
 **Money**
@@ -135,6 +135,20 @@ grep -aE 'qrc:/.*(Error|error)|TypeError|ReferenceError|is not a type|Cannot ass
 | scope panel, **Waiting to join**, **Admit** | room details → **People**; a join request also shows in the thread with **Admit** |
 | on the card: **▸ How this account works**, **What this needs**, the verify box | the card's **Details** |
 | the nav bar *Home · Room · Account · Walkthrough · Settings · Contacts · Send λ* | the sidebar; **Learn** is the walkthrough, **Wallet** holds the account and **Send on LEZ** |
+
+### A6. The polish round (exo-720.15), in the same two windows
+
+Do these before A5's log check if you can; each is quick.
+
+1. **Fresh start.** In a third terminal: `scripts/try-peer.sh carol --fresh`. ✓ **Needs you** briefly says **Loading your rooms…**, then shows **Getting started** with three steps and an optional one for an Ethereum account. No account warning appears above it.
+2. **Share.** Carol: **Share** on the first step. ✓ A popup **Your contact link** with a name field, the link (`muster:contact/…`), **Copy link** and **QR code**. Type `Carol`, **Copy link**: the step ticks itself off.
+3. **Invite by link.** Alice, in the room with Bob: **Invite** → paste Carol's link → **Invite**. ✓ A toast **Invited Carol**. Carol's Home shows the invitation; **Join**. ✓ Carol's window says **Opening the room…** (and, if it takes a while, that the first time connects to the network), never the join form.
+4. **Someone new.** In Alice's room, if Carol is not in Alice's contacts: ✓ a notice **Someone new is here. Who is it?** with a name field. Type `Carol`, **Save**: the roster, the header faces and the room's name (**Bob and Carol**) use it. Unnamed people show a coloured face with no letter, never a hex digit.
+5. **Messages.** Send a message. ✓ It shows at once with **Sending…** under it, which goes when it lands. Times read **just now**, **4 min ago**; a day divider sits above the first message of a day.
+6. **Unread and news.** Open **Settings** in Bob's window, then have Alice send a message. ✓ Bob's sidebar shows the room in bold with a dot. Have Alice propose something: ✓ Bob gets a toast **… needs you** naming the room.
+7. **Why?** Room details → **People** → **How this room is protected** → **Why?**. ✓ **Learn** opens scrolled to **Open the room**, its title highlighted.
+8. **Settings.** ✓ **Basic** shows your contact link, the mixnet as three buttons (the current one lit), and Ethereum accounts as ready or not. **Advanced** adds your keys, the endpoints, delivery and RLN. The choice survives a restart.
+9. **Card text** is a size larger than the page's captions; say if it is now too big.
 
 ## Part B — Muster in Basecamp 0.3.2 (≈ 20 min build, 15 min install, 15 min looking)
 
@@ -195,7 +209,7 @@ The qt-mcp acceptance harness (`ui/tests/muster-ui-test.mjs`) needs a logos-base
 
 Reply in this session with:
 
-1. **The step numbers that did not match their ✓ Expect**, one sentence each: A1–A5 with A4's items 1–21, and B1–B6 with B5's items 1–6. Silence about a step means it matched.
+1. **The step numbers that did not match their ✓ Expect**, one sentence each: A1–A6 with A4's items 1–21 and A6's 1–9, and B1–B6 with B5's items 1–6. Silence about a step means it matched.
 2. **The screenshots:** A13, A14, A19, B4, B5-card, plus one of anything wrong.
 3. **The two log files:** `.run/review/A5-qml-errors.txt` and `.run/review/B6-basecamp-errors.txt`, even if empty.
 4. **Your judgement from A4 #21.**

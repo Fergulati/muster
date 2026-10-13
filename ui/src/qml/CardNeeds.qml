@@ -54,13 +54,13 @@ Rectangle {
                 text: cardRoot.readiness ? qsTr("What this needs — %1").arg(cardRoot.readinessSummary())
                                          : qsTr("What this needs")
                 color: (cardRoot.readiness && cardRoot.readiness.ready) ? Theme.palette.success : Theme.palette.textSecondary
-                font.pixelSize: Theme.typography.secondaryText
+                font.pixelSize: MusterStyle.cardCaption
                 font.weight: Theme.typography.weightMedium
             }
             LogosText {
                 text: cardRoot.needsOpen ? "−" : "+"
                 color: Theme.palette.textSecondary
-                font.pixelSize: Theme.typography.secondaryText
+                font.pixelSize: MusterStyle.cardCaption
             }
         }
 
@@ -68,7 +68,7 @@ Rectangle {
             visible: cardRoot.needsOpen && !cardRoot.readiness
             text: qsTr("checking with the module…")
             color: Theme.palette.textTertiary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // needs: one row per requirement — status, what, detail, remedy.
@@ -94,7 +94,7 @@ Rectangle {
                         color: modelData.status === "met" ? Theme.palette.success
                              : modelData.status === "missing" ? Theme.palette.warning : Theme.palette.textTertiary
                         font.family: MusterStyle.mono
-                        font.pixelSize: Theme.typography.secondaryText
+                        font.pixelSize: MusterStyle.cardCaption
                     }
                     LogosText {
                         Layout.fillWidth: true
@@ -104,7 +104,7 @@ Rectangle {
                                : modelData.party === "payer" ? qsTr(" (each person who pays their part)") : "")
                             + (modelData.detail ? " — " + String(modelData.detail) : "")
                         color: Theme.palette.text
-                        font.pixelSize: MusterStyle.caption
+                        font.pixelSize: MusterStyle.cardCaption
                     }
                 }
                 RowLayout {
@@ -120,7 +120,7 @@ Rectangle {
                         wrapMode: Text.WordWrap
                         text: qsTr("To fix: ") + String(modelData.remedy || "")
                         color: Theme.palette.textSecondary
-                        font.pixelSize: MusterStyle.caption
+                        font.pixelSize: MusterStyle.cardCaption
                     }
                     // A LEZ account is provisioned in the LEZ Wallet App, not
                     // Settings (exo-44b). Muster only detects + points; the
@@ -133,7 +133,7 @@ Rectangle {
                         wrapMode: Text.WordWrap
                         text: qsTr("↳ Open the LEZ Wallet App to set up a funded account, then reopen this.")
                         color: Theme.palette.textTertiary
-                        font.pixelSize: MusterStyle.caption
+                        font.pixelSize: MusterStyle.cardCaption
                     }
                     ActionButton {
                         objectName: "needRemedy_" + String(modelData.kind)
@@ -181,7 +181,7 @@ Rectangle {
                         text: needRow.note
                         color: (needRow.req && (needRow.req.state === "open" || needRow.req.state === "asking"))
                                ? Theme.palette.textSecondary : Theme.palette.warning
-                        font.pixelSize: MusterStyle.caption
+                        font.pixelSize: MusterStyle.cardCaption
                     }
                     // not in any enabled catalogue: show the package in Package
                     // Manager, where the catalogues are
@@ -202,7 +202,7 @@ Rectangle {
                               : qsTr("Package Manager could not be opened (%1). Open it from Basecamp.")
                                 .arg(String((needRow.req && needRow.req.showError) || ""))
                         color: Theme.palette.warning
-                        font.pixelSize: MusterStyle.caption
+                        font.pixelSize: MusterStyle.cardCaption
                     }
                     // read readiness again on demand: the module may have been
                     // installed or started since (and the re-read window is over)
@@ -224,7 +224,7 @@ Rectangle {
             visible: cardRoot.showFromYou && cardRoot.needsOpen && cardRoot.shareableOffers.length > 0
             text: qsTr("From you:")
             color: Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
             font.weight: Theme.typography.weightMedium
         }
         Repeater {
@@ -248,7 +248,7 @@ Rectangle {
                         return what + qsTr(" — pick what to share:");
                     }
                     color: offerSlot.modelData.status === "satisfiable" ? Theme.palette.text : Theme.palette.warning
-                    font.pixelSize: MusterStyle.caption
+                    font.pixelSize: MusterStyle.cardCaption
                 }
                 Repeater {
                     model: offerSlot.modelData.candidates || []
@@ -267,7 +267,7 @@ Rectangle {
                                      + (d.length > 0 ? "  ·  " + qsTr("discloses ") + d : "");
                             }
                             color: Theme.palette.textSecondary
-                            font.pixelSize: MusterStyle.caption
+                            font.pixelSize: MusterStyle.cardCaption
                         }
                         ActionButton {
                             objectName: "shareCandidate"
@@ -289,7 +289,7 @@ Rectangle {
             text: visible ? qsTr("Touches: ") + cardRoot.readiness.manifest.touches.map(function (t) {
                       return String(t.target) + " (" + String(t.mode) + ")"; }).join(", ") : ""
             color: Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // what will happen: the disclosure, grouped by observer, outside-the-room included
@@ -297,7 +297,7 @@ Rectangle {
             visible: cardRoot.needsOpen && cardRoot.readiness && cardRoot.readiness.declared !== false
             text: qsTr("Who will see what:")
             color: Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
             font.weight: Theme.typography.weightMedium
         }
         Repeater {
@@ -310,7 +310,7 @@ Rectangle {
                 wrapMode: Text.WordWrap
                 text: String(modelData.label) + ": " + String(modelData.fields)
                 color: modelData.to === "room-member" ? Theme.palette.textSecondary : Theme.palette.warning
-                font.pixelSize: MusterStyle.caption
+                font.pixelSize: MusterStyle.cardCaption
             }
         }
 
@@ -321,7 +321,7 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: qsTr("Agreement: ") + cardRoot.agreementLine()
             color: Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
     }
 }
