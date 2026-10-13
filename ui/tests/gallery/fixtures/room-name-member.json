@@ -1,0 +1,80 @@
+{
+  "about": "Someone unnamed in the room (exo-d1a): the room asks once who they are, the name saved to your address book; the avatar of an unnamed member is their colour alone, never a hex digit; an approval slot is the approver's own face.",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "membersJson": [
+      {
+        "identity": "cd3930fefce17daeba560f92b088ee16b2ac52067ba028d1e9bb1a6ea1e9954d7563dcc927c1a986ecfa833b4e026a1fdacc174092a7d56f0644463af0e2e208",
+        "self": true,
+        "alias": ""
+      },
+      {
+        "identity": "34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40",
+        "self": false,
+        "alias": ""
+      }
+    ]
+  },
+  "steps": [
+    {
+      "view": "room"
+    },
+    {
+      "expectProp": [
+        "roomTitleText",
+        "text",
+        "Someone new"
+      ]
+    },
+    {
+      "expectProp": [
+        "roomNameMember",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "ask"
+    },
+    {
+      "set": [
+        "roomNameField",
+        "text",
+        "Bob"
+      ]
+    },
+    {
+      "click": "roomNameSave"
+    },
+    {
+      "expect": {
+        "slot": "addContact",
+        "args": [
+          "34bd8ae3fb46fe30f0f0e26239cf2061ce91ebd295b9c23e42f3d960d20440bf1ddfb1eb763ffd609f65a03d8e76350a31e967daea48f50040cc94d87972da40",
+          "Bob"
+        ]
+      }
+    },
+    {
+      "expect": {
+        "slot": "loadMembers"
+      }
+    },
+    {
+      "click": "roomNameSkip"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "expectProp": [
+        "roomNameMember",
+        "visible",
+        false
+      ]
+    }
+  ]
+}

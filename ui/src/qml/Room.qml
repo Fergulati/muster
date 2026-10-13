@@ -110,6 +110,33 @@ Item {
     }
     // "Not now" on a join request hides its notice, this session only: the request stays,
     // and People still offers Admit. The module has no "refuse": nobody is told anything.
+    // Someone in the room you haven't named (exo-d1a): the room asks once who they are, so
+    // they read as a name everywhere after — the roster, the thread, the cards. The name is
+    // yours (your address book), never sent. "Not now" leaves them unnamed this session.
+    property var namingSkipped: ({})
+    readonly property var unnamedMember: {
+        for (var i = 0; i < room.members.length; ++i) {
+            var m = room.members[i];
+            if (!m || m.self || String(m.alias || "").length > 0) continue;
+            if (room.namingSkipped[String(m.identity)]) continue;
+            return m;
+        }
+        return null;
+    }
+    function nameMember(identityHex, alias) {
+        var a = String(alias || "").trim();
+        if (!room.backend || a.length === 0) return;
+        room.backend.addContact(identityHex, a);
+        room.backend.loadMembers();
+        room.backend.loadMessages();
+        room.backend.loadIntents();
+        MusterStyle.notify(qsTr("Saved as %1").arg(a));
+    }
+    function skipNaming(identityHex) {
+        var s = Object.assign({}, room.namingSkipped);
+        s[String(identityHex)] = true;
+        room.namingSkipped = s;
+    }
     property var dismissedRequests: ({})
     function dismissRequest(identityHex) {
         var m = Object.assign({}, room.dismissedRequests); m[identityHex] = true; room.dismissedRequests = m;
@@ -1618,6 +1645,42 @@ Item {
                         quiet: true
                         onClicked: room.dismissRequest(String(modelData.identity || ""))
                     }
+                }
+            }
+
+            InlineNotice {
+                id: nameNotice
+                objectName: "roomNameMember"
+                readonly property string identity: room.unnamedMember ? String(room.unnamedMember.identity || "") : ""
+                visible: room.joined && room.unnamedMember !== null
+                Layout.fillWidth: true
+                Layout.leftMargin: Theme.spacing.xlarge
+                Layout.rightMargin: Theme.spacing.xlarge
+                Layout.bottomMargin: Theme.spacing.small
+                tone: "info"
+                title: qsTr("Someone new is here. Who is it?")
+                text: qsTr("Give them a name only you see. Their chat id is %1.")
+                      .arg(nameNotice.identity.slice(0, 6) + "…" + nameNotice.identity.slice(-4))
+                LogosTextField {
+                    id: nameField
+                    objectName: "roomNameField"
+                    width: 160
+                    placeholderText: qsTr("Their name")
+                    Keys.onReturnPressed: if (nameSave.enabled) nameSave.clicked()
+                }
+                ActionButton {
+                    id: nameSave
+                    objectName: "roomNameSave"
+                    text: qsTr("Save")
+                    variant: LogosButton.Variant.Primary
+                    enabled: nameField.text.trim().length > 0
+                    onClicked: { room.nameMember(nameNotice.identity, nameField.text); nameField.text = ""; }
+                }
+                ActionButton {
+                    objectName: "roomNameSkip"
+                    text: qsTr("Not now")
+                    quiet: true
+                    onClicked: room.skipNaming(nameNotice.identity)
                 }
             }
 

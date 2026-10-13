@@ -116,9 +116,15 @@ QtObject {
     readonly property var avatarColors: [Theme.colors.orange300, Theme.colors.yellow400, Theme.colors.green400,
                                          Theme.colors.blue400, Theme.colors.cyan400, Theme.colors.red400,
                                          Theme.colors.peach100, Theme.colors.green700]
+    // one person, one key: a member's id appears as 128 hex (the roster), "ed:" + its first
+    // 64 (an approver) or with 0x; all of them read as the same person, so the same colour
+    function personKey(id) {
+        var s = String(id || "").toLowerCase().replace(/^0x/, "").replace(/^ed:/, "");
+        return /^[0-9a-f]{64,}$/.test(s) ? s.slice(0, 64) : s;
+    }
     function colorFor(id) {
         // FNV-1a, then a final avalanche, so ids that differ in one character spread out
-        var s = String(id || "").toLowerCase().replace(/^0x/, ""), h = 0x811c9dc5;
+        var s = style.personKey(id), h = 0x811c9dc5;
         for (var i = 0; i < s.length; ++i) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
         h ^= h >>> 16; h = Math.imul(h, 0x45d9f3b); h ^= h >>> 16;
         return avatarColors[(h >>> 0) % avatarColors.length];

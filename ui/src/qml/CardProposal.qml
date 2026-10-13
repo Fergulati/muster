@@ -792,11 +792,19 @@ ColumnLayout {
                 border.width: slot.pasted ? 2 : (slot.filled ? 0 : 1)
                 border.color: slot.pasted ? Theme.palette.warning : Theme.palette.borderSubtle
 
+                // who, as the same face they have in the roster: their colour, your name's letter
+                Avatar {
+                    anchors.centerIn: parent
+                    visible: slot.filled && !slot.pasted && slot.who !== null
+                    size: 22
+                    identity: slot.who ? String(slot.who.who || "") : ""
+                    name: slot.who ? (slot.who.mine ? qsTr("you") : String(slot.who.name || "")) : ""
+                }
                 LogosText {
                     anchors.centerIn: parent
-                    visible: slot.filled
+                    visible: slot.filled && (slot.pasted || slot.who === null)
                     text: slot.who && slot.who.initials
-                        ? String(slot.who.initials) : ""
+                        ? String(slot.who.initials).charAt(0) : ""
                     color: slot.pasted ? Theme.palette.warning : Theme.palette.background
                     font.pixelSize: MusterStyle.caption
                     font.weight: Theme.typography.weightMedium

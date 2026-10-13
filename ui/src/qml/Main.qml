@@ -245,6 +245,23 @@ Item {
         }
         return out;
     }
+    // a name, or a short id standing in for one ("34bd8a…"): only names title a room; the
+    // unnamed are counted (exo-d1a) — "Bob and 1 other", "Someone new"
+    function isShortId(n) { n = String(n || ""); return n.indexOf("…") >= 0 || /^(0x)?[0-9a-f]{6,}$/i.test(n); }
+    function peopleTitle(ps) {
+        var named = ps.filter(function (p) { return !root.isShortId(p); });
+        var more = ps.length - named.length;
+        if (named.length === 0)
+            return more === 0 ? qsTr("Just you") : more === 1 ? qsTr("Someone new") : qsTr("%1 people").arg(more);
+        if (named.length === 3 && more === 0)
+            return qsTr("%1, %2 and %3").arg(named[0]).arg(named[1]).arg(named[2]);
+        if (named.length > 2) { more += named.length - 2; named = named.slice(0, 2); }
+        if (more === 0)
+            return named.length === 1 ? named[0] : qsTr("%1 and %2").arg(named[0]).arg(named[1]);
+        var others = more === 1 ? qsTr("1 other") : qsTr("%1 others").arg(more);
+        return named.length === 1 ? qsTr("%1 and %2").arg(named[0]).arg(others)
+                                  : qsTr("%1, %2 and %3").arg(named[0]).arg(named[1]).arg(others);
+    }
     function shortRoom(topic) {
         var t = root.contentTopicOf(topic);
         var convs = root.conversations;
@@ -255,11 +272,7 @@ Item {
             var ps = Array.isArray(convs[i].people) ? convs[i].people.map(String)
                    : t === root.contentTopicOf(root.roomTopic) ? root.othersInRoom() : null;
             if (ps === null) return qsTr("A room");
-            if (ps.length === 0) return qsTr("Just you");
-            if (ps.length === 1) return ps[0];
-            if (ps.length === 2) return qsTr("%1 and %2").arg(ps[0]).arg(ps[1]);
-            if (ps.length === 3) return qsTr("%1, %2 and %3").arg(ps[0]).arg(ps[1]).arg(ps[2]);
-            return qsTr("%1, %2 and %3 others").arg(ps[0]).arg(ps[1]).arg(ps.length - 2);
+            return root.peopleTitle(ps);
         }
         return qsTr("New room");
     }
