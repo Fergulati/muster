@@ -1,0 +1,29 @@
+{
+  "about": "Settings › Your contact link: the link with your suggested name, copyable, and as a QR code (exo-899).",
+  "snapshot": "data/split-alice-collecting.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "steps": [
+    {
+      "view": "settings"
+    },
+    {
+      "set": [
+        "shareNameField",
+        "text",
+        "Alice"
+      ]
+    },
+    {
+      "expectProp": [
+        "shareLinkText",
+        "text",
+        "~?name=Alice"
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

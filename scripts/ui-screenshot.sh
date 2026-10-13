@@ -93,7 +93,18 @@ cmd_gallery() {
     for s in $(echo "${fsizes:-$sizes}" | tr , ' '); do
       w=${s%x*}; h=${s#*x}
       log="$out/$name-$s.log"
-      timeout 60 "$QML_BIN" ui/tests/gallery/Gallery.qml -- "$(realpath "$f")" "$(realpath -m "$out")/$name-$s" "$w" "$h" ${main_qml:+"$main_qml"} >"$log" 2>&1
+      # a shot with a Popup open asks for the X display (GALLERY-XSHOT <path>): the window
+      # sits at the origin of the Xvfb screen, so the capture is cropped to its size
+      : >"$log"
+      timeout 60 "$QML_BIN" ui/tests/gallery/Gallery.qml -- "$(realpath "$f")" "$(realpath -m "$out")/$name-$s" "$w" "$h" ${main_qml:+"$main_qml"} 2>&1 |
+        while IFS= read -r line; do
+          printf '%s\n' "$line" >>"$log"
+          case "$line" in
+            *GALLERY-XSHOT\ *)
+              p=${line##*GALLERY-XSHOT }
+              import -window root -crop "${w}x${h}+0+0" +repage "$p.tmp.png" 2>>"$log" && mv "$p.tmp.png" "$p" ;;
+          esac
+        done
       if grep -q "GALLERY-DONE" "$log"; then
         warns=$(grep -c '\.qml:[0-9]' "$log")
         echo "  ok   $name $s ($(grep -c GALLERY-SHOT "$log") shot(s), $(grep -c GALLERY-PASS "$log") check(s), $warns QML warning(s))"

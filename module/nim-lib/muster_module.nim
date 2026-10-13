@@ -2705,7 +2705,8 @@ proc musterCoordinateIntents(): string =
     if chainPending.len > 0: o["chainPending"] = %chainPending
     # What it moves, in the family's own words and unit — the same reading the history
     # uses (effect_summary.nim), so a Bitcoin spend or a LEZ call shows its amount (exo-59c).
-    let sm = effectSummary(v.effectJson)
+    # members named as the card names them ("1 person owes you", not a short id)
+    let sm = effectSummary(v.effectJson, proc(who: string): string = memberName(who, mine))
     o["summary"] = %*{"kind": sm.kind, "amount": sm.amount, "unit": sm.unit, "to": sm.to, "text": sm.text}
     # Who approved, named from the address book (or "you"), and whether I did — read
     # from the log + my keys (attest.approvedByMe), or an in-app approval made here.

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Controls
 
 import QtCore as Prefs
 import Logos.Theme
@@ -63,7 +64,7 @@ Item {
     readonly property var steps: {
         var s = [
             { key: "share", done: firstRun.sharedChatId || home.roomCount > 0,
-              text: qsTr("Share your chat ID, so someone can add you to a room"), action: qsTr("Copy chat ID") },
+              text: qsTr("Share your contact link, so someone can invite you to a room"), action: qsTr("Share") },
             { key: "room", done: home.roomCount > 0,
               text: qsTr("Start something, or join a room with its code"), action: qsTr("Start something") },
             { key: "contact", done: home.contactCount > 0,
@@ -80,14 +81,41 @@ Item {
     readonly property bool checklistDone: home.steps.every(function (x) { return x.done || x.optional; })
     readonly property bool checklistShown: home.loaded && !firstRun.hidden && !home.checklistDone
     function runStep(key) {
-        if (key === "share") {
-            clip.text = home.chatId; clip.selectAll(); clip.copy();
-            firstRun.sharedChatId = true;
-        } else if (key === "room") home.newActivity();
+        if (key === "share") sharePop.open();
+        else if (key === "room") home.newActivity();
         else if (key === "contact") home.openContacts();
         else if (key === "account") home.manageAccounts();
     }
-    TextEdit { id: clip; visible: false; width: 0; height: 0 }
+    // the contact link to give someone (exo-899); copying it ticks the step off
+    Popup {
+        id: sharePop
+        objectName: "homeSharePopup"
+        anchors.centerIn: Overlay.overlay
+        width: Math.min(460, home.width - 2 * Theme.spacing.large)
+        modal: true
+        padding: Theme.spacing.large
+        background: Surface { level: 2 }
+        contentItem: ColumnLayout {
+            spacing: Theme.spacing.small
+            LogosText {
+                text: qsTr("Your contact link")
+                color: Theme.palette.text
+                font.pixelSize: MusterStyle.subtitle
+                font.weight: Theme.typography.weightBold
+            }
+            ShareContact {
+                Layout.fillWidth: true
+                chatId: home.chatId
+                onCopied: firstRun.sharedChatId = true
+            }
+            ActionButton {
+                Layout.alignment: Qt.AlignRight
+                quiet: true
+                text: qsTr("Done")
+                onClicked: sharePop.close()
+            }
+        }
+    }
     // A received invite's Join was clicked → open (and ask to join) that room.
     signal joinInvite(string topic)
     // join a room by the code someone shared (exo-dcc.28)

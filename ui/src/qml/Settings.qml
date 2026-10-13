@@ -189,46 +189,18 @@ Item {
                         }
                     }
 
-                    // ── your shareable chat id ────────────────────────────────
+                    // ── your contact link (exo-899): your chat id, to give someone ──
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("Your chat ID")
+                        text: qsTr("Your contact link")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightBold
                     }
-                    LogosText {
+                    ShareContact {
+                        objectName: "settingsShareContact"
                         Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: qsTr("Share this so someone can add you to a room. It's your two encryption keys as one string — paste it to them, or into the composer.")
-                        color: Theme.palette.textTertiary
-                        font.pixelSize: MusterStyle.caption
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing.small
-                        // Read-only + selectByMouse so the id can be HIGHLIGHTED (drag to
-                        // select, Ctrl-C) as well as copied by the button — the two things
-                        // that were missing. Styled to match the mono key rows above.
-                        TextEdit {
-                            id: chatIdField
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignVCenter
-                            readOnly: true
-                            selectByMouse: true
-                            wrapMode: TextEdit.WrapAnywhere
-                            text: settings.chatId.length > 0 ? settings.chatId : qsTr("(not loaded)")
-                            color: Theme.palette.textSecondary
-                            selectionColor: Theme.palette.primary
-                            font.family: MusterStyle.mono
-                            font.pixelSize: MusterStyle.caption
-                        }
-                        ActionButton {
-                            objectName: "copyChatId"
-                            text: qsTr("Copy")
-                            enabled: settings.chatId.length > 0
-                            onClicked: { chatIdField.selectAll(); chatIdField.copy(); }
-                        }
+                        chatId: settings.chatId
                     }
 
                     // ── your Bitcoin key (exo-59c) ─────────────────────────────

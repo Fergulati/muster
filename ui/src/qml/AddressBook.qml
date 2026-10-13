@@ -79,7 +79,7 @@ Item {
                     LogosText {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
-                        text: qsTr("Paste the chat id they shared with you and give them a name.")
+                        text: qsTr("Paste the contact link they shared with you and give them a name.")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                     }
@@ -87,8 +87,13 @@ Item {
                         id: newIdField
                         objectName: "contactIdField"
                         Layout.fillWidth: true
-                        placeholderText: qsTr("their chat id (128 hex)")
+                        placeholderText: qsTr("their contact link")
                         font.family: MusterStyle.mono
+                        // a link carries the name they suggest: offered, yours to change
+                        onTextChanged: {
+                            var c = MusterStyle.parseContact(text);
+                            if (c && c.name.length > 0 && newAliasField.text.length === 0) newAliasField.text = c.name;
+                        }
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -102,11 +107,11 @@ Item {
                         ActionButton {
                             objectName: "contactAddButton"
                             text: qsTr("Add")
-                            enabled: newIdField.text.length > 0 && newAliasField.text.length > 0
+                            enabled: MusterStyle.parseContact(newIdField.text) !== null && newAliasField.text.trim().length > 0
                             onClicked: {
-                                if (book.backend)
-                                    book.backend.addContact(newIdField.text.trim(),
-                                                            newAliasField.text.trim());
+                                var c = MusterStyle.parseContact(newIdField.text);
+                                if (book.backend && c)
+                                    book.backend.addContact(c.id, newAliasField.text.trim());
                                 newIdField.text = "";
                                 newAliasField.text = "";
                             }

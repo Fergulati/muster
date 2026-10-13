@@ -1,5 +1,5 @@
 {
-  "about": "A fresh Basecamp install with no rooms: the Getting started checklist, the account an optional step in it, and no account notice while nothing waits on you (exo-6e5, exo-5a5).",
+  "about": "A fresh Basecamp install with no rooms: the Getting started checklist, the account an optional step in it, and no account notice while nothing waits on you (exo-6e5, exo-5a5); Share opens your contact link with a QR code, and copying it ticks the step (exo-899).",
   "snapshot": "data/statement-proposed.json",
   "sizes": [
     "1440x900"
@@ -44,6 +44,42 @@
     },
     {
       "click": "homeStep_share"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "homeSharePopup",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "shareLinkText",
+        "text",
+        "~muster:contact/"
+      ]
+    },
+    {
+      "click": "shareShowQr"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "shareQr",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "share"
+    },
+    {
+      "click": "shareCopyLink"
     },
     {
       "expectProp": [

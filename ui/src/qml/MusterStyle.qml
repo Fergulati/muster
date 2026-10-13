@@ -15,6 +15,29 @@ QtObject {
     signal notified(string text)
     function notify(t) { if (String(t || "").length > 0) style.notified(String(t)); }
 
+    // ── a contact link (exo-899) ──────────────────────────────────────────
+    // "muster:contact/<chat id>?name=Alice": the chat id (128 hex, the 64-byte identity an
+    // invite is sealed to) with the name its owner suggests. It names nothing else and is
+    // read only by whoever it is given to. Anywhere a chat id is pasted, a link does too.
+    function contactLink(id, name) {
+        var h = String(id || "").replace(/^0x/i, "").toLowerCase();
+        if (h.length === 0) return "";
+        var n = String(name || "").trim();
+        return "muster:contact/" + h + (n.length > 0 ? "?name=" + encodeURIComponent(n) : "");
+    }
+    // {id, name} from a link or a bare chat id (0x optional), else null
+    function parseContact(text) {
+        var t = String(text || "").trim();
+        var m = /^muster:contact\/(?:0x)?([0-9a-fA-F]{128})(?:\?name=([^&\s]*))?$/.exec(t);
+        if (m) {
+            var n = "";
+            try { n = decodeURIComponent(m[2] || ""); } catch (e) { n = ""; }
+            return { id: m[1].toLowerCase(), name: n.trim() };
+        }
+        m = /^(?:0x)?([0-9a-fA-F]{128})$/.exec(t);
+        return m ? { id: m[1].toLowerCase(), name: "" } : null;
+    }
+
     // ── "Why?" (exo-355a) ─────────────────────────────────────────────────
     // A surface says one line and offers "Why?"; the reasons live in Learn, at the
     // lifecycle step the line is about (ClaimsRegistry's step ids). Any view calls

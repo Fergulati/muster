@@ -25,6 +25,24 @@ ColumnLayout {
 
     function startRename() { renameField.text = header.room.roomTitle; renameRow.open = true; renameField.textInput.forceActiveFocus(); }
 
+    // the contacts not in this room yet, to invite with one click (exo-899)
+    readonly property var invitable: {
+        var cs = [];
+        try { cs = JSON.parse(header.room.backend ? header.room.backend.contactsJson : "[]"); } catch (e) { cs = []; }
+        var inRoom = {};
+        for (var i = 0; i < header.room.members.length; ++i)
+            inRoom[MusterStyle.personKey(header.room.members[i].identity)] = true;
+        return cs.filter(function (c) {
+            return c && /^(0x)?[0-9a-fA-F]{128}$/.test(String(c.identity || "")) && !inRoom[MusterStyle.personKey(c.identity)];
+        });
+    }
+    function inviteById(id, name) {
+        if (!header.room.backend || String(id).length === 0) return;
+        header.room.backend.sendInvite(id, header.room.topic, "");
+        header.room.backend.loadMembers();
+        MusterStyle.notify(String(name || "").length > 0 ? qsTr("Invited %1").arg(name) : qsTr("Invited"));
+    }
+
     // worst of the room's connections: down > warn > ok (the dot's colour)
     readonly property string connLevel: {
         var rows = (header.room.connectivity && header.room.connectivity.rows) || [];
@@ -184,7 +202,11 @@ ColumnLayout {
             visible: header.room.joined && !renameRow.visible
             text: qsTr("Invite")
             iconSource: MusterStyle.icon("link")
-            onClicked: invitePop.opened ? invitePop.close() : invitePop.open()
+            onClicked: {
+                if (invitePop.opened) { invitePop.close(); return; }
+                if (header.room.backend) header.room.backend.loadContacts();
+                invitePop.open();
+            }
             Popup {
                 id: invitePop
                 y: parent.height + 6
@@ -194,6 +216,57 @@ ColumnLayout {
                 background: Surface { level: 2 }
                 contentItem: ColumnLayout {
                     spacing: Theme.spacing.small
+                    // ── invite someone by name or link (exo-899): they arrive a member ──
+                    LogosText {
+                        text: qsTr("Invite someone")
+                        color: Theme.palette.text
+                        font.pixelSize: MusterStyle.body
+                        font.weight: Theme.typography.weightBold
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        visible: header.invitable.length > 0
+                        spacing: Theme.spacing.small
+                        Repeater {
+                            model: header.invitable
+                            delegate: ActionButton {
+                                required property var modelData
+                                objectName: "inviteContact_" + String(modelData.alias || "")
+                                compact: true
+                                text: String(modelData.alias || "")
+                                onClicked: header.inviteById(String(modelData.identity || ""), String(modelData.alias || ""))
+                            }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosTextField {
+                            id: inviteField
+                            objectName: "inviteLinkField"
+                            Layout.fillWidth: true
+                            placeholderText: qsTr("or paste their contact link")
+                        }
+                        ActionButton {
+                            objectName: "inviteSend"
+                            text: qsTr("Invite")
+                            variant: LogosButton.Variant.Primary
+                            enabled: MusterStyle.parseContact(inviteField.text) !== null
+                            onClicked: {
+                                var c = MusterStyle.parseContact(inviteField.text);
+                                if (c) header.inviteById(c.id, c.name);
+                                inviteField.text = "";
+                            }
+                        }
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("They get it on their Home and join as a member: they read from then on, never what came before.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: MusterStyle.caption
+                    }
+                    Rectangle { Layout.fillWidth: true; Layout.topMargin: Theme.spacing.small; implicitHeight: 1; color: Theme.palette.borderSubtle }
                     LogosText {
                         text: qsTr("Room code")
                         color: Theme.palette.text
@@ -205,8 +278,7 @@ ColumnLayout {
                         wrapMode: Text.WordWrap
                         // exo-dcc.25: whoever joins with the code asks to join; a person you
                         // invite from "Start something" is let in by the invite itself
-                        text: qsTr("Whoever joins with it asks to join, and a member here decides. "
-                                   + "Someone you invite from Start something arrives a member.")
+                        text: qsTr("Whoever joins with the code asks to join, and a member here decides.")
                         color: Theme.palette.textSecondary
                         font.pixelSize: MusterStyle.caption
                     }
