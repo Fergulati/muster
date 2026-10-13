@@ -9,6 +9,12 @@ import Logos.Theme
 QtObject {
     id: style
 
+    // ── news, said once (exo-773) ─────────────────────────────────────────
+    // "Bob approved", "Bob joined": a short toast Main shows and lets go. For what other
+    // people did; what I did is on the card already.
+    signal notified(string text)
+    function notify(t) { if (String(t || "").length > 0) style.notified(String(t)); }
+
     // ── "Why?" (exo-355a) ─────────────────────────────────────────────────
     // A surface says one line and offers "Why?"; the reasons live in Learn, at the
     // lifecycle step the line is about (ClaimsRegistry's step ids). Any view calls

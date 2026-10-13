@@ -189,6 +189,7 @@ Rectangle {
                         detail: side.roomDetail(modelData)
                         detailHot: !!(modelData.needs && modelData.needs.length > 0)
                         needs: detailHot
+                        unread: side.app.isUnread(modelData)
                         avatarId: topic
                         rail: side.rail
                         current: side.app.view === "room" && active

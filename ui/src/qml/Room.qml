@@ -395,6 +395,65 @@ Item {
         try { return JSON.parse(backend ? backend.intentsJson : "[]"); }
         catch (e) { return []; }
     }
+
+    // What other people did since the last look, said once as a toast (exo-773): an
+    // approval, a payment, a decline, a join, a proposal done. Facts are kept per intent and
+    // compared on each refresh; for a few seconds after the room changes they are only
+    // recorded, since the folds for the new room arrive one by one and are not news.
+    property var facts: ({})
+    property var memberFacts: ({})
+    property string factsTopic: ""
+    property double factsSince: 0
+    function nameOr(n) { var s = String(n || ""); return s.length > 0 ? s : qsTr("Someone"); }
+    function noteChanges() {
+        var t = room.backend ? String(room.backend.roomTopic || "") : "";
+        if (t !== room.factsTopic) { room.factsTopic = t; room.factsSince = Date.now(); }
+        var quiet = Date.now() - room.factsSince < 4000;
+        var news = [], fresh = {};
+        for (var i = 0; i < room.intents.length; ++i) {
+            var it = room.intents[i];
+            if (!it || !it.id) continue;
+            var id = String(it.id), old = room.facts[id];
+            var f = { ap: {}, paid: {}, conf: {}, dec: {}, st: String(it.state || "") };
+            var ap = Array.isArray(it.approvers) ? it.approvers : [];
+            for (var a = 0; a < ap.length; ++a) {
+                f.ap[ap[a].who] = true;
+                if (old && !old.ap[ap[a].who] && !ap[a].mine) news.push(qsTr("%1 approved").arg(room.nameOr(ap[a].name)));
+            }
+            var ps = Array.isArray(it.parts) ? it.parts : [];
+            for (var p = 0; p < ps.length; ++p) {
+                var k = String(ps[p].part || p);
+                if (ps[p].settled) f.paid[k] = true;
+                if (ps[p].confirmed) f.conf[k] = true;
+                if (!old || ps[p].mine) continue;
+                if (ps[p].confirmed && !old.conf[k]) news.push(qsTr("%1's payment arrived").arg(room.nameOr(ps[p].name)));
+                else if (ps[p].settled && !old.paid[k]) news.push(qsTr("%1 paid their share").arg(room.nameOr(ps[p].name)));
+            }
+            var dn = Array.isArray(it.declinerNames) ? it.declinerNames : [];
+            for (var d = 0; d < dn.length; ++d) {
+                f.dec[dn[d].who] = true;
+                if (old && !old.dec[dn[d].who] && !dn[d].mine && String(dn[d].name) !== qsTr("you"))
+                    news.push(qsTr("%1 declined").arg(room.nameOr(dn[d].name)));
+            }
+            if (old && old.st !== f.st && f.st === "final") news.push(ps.length > 0 ? qsTr("Every share is paid") : qsTr("Settled"));
+            fresh[id] = f;
+        }
+        room.facts = fresh;
+        var mf = {};
+        for (var m = 0; m < room.members.length; ++m) {
+            var mm = room.members[m];
+            if (!mm) continue;
+            mf[String(mm.identity)] = true;
+            if (Object.keys(room.memberFacts).length > 0 && !room.memberFacts[String(mm.identity)] && !mm.self)
+                news.push(qsTr("%1 joined").arg(String(mm.alias || "").length > 0 ? String(mm.alias) : qsTr("Someone new")));
+        }
+        room.memberFacts = mf;
+        if (quiet || news.length === 0) return;
+        MusterStyle.notify(news.length > 2 ? qsTr("%1, and %2 more").arg(news[0]).arg(news.length - 1)
+                                          : news.join(" · "));
+    }
+    onIntentsChanged: room.noteChanges()
+    onMembersChanged: room.noteChanges()
     // The room's coordination history (coordinate_activity): a plain-language
     // narrative of every state transition, in causal order, folded from the SAME
     // log the cards come from. The education seam — how the room got here.

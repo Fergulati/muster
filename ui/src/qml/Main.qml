@@ -52,7 +52,10 @@ Item {
     property string view: "home"
     // describe() is read once at start, possibly before the platform's chain registry
     // answers; a room's Safe form reads it, so read it again on the way in (R6, 2026-10-07)
-    onViewChanged: if (view === "room" && backend) backend.loadAccount()
+    onViewChanged: {
+        if (view === "room" && backend) backend.loadAccount();
+        root.noteSeen();            // leaving or opening a room marks it read (exo-773)
+    }
 
     // Enter a room by topic: join it in the module, then show the room surface.
     // When `verb` is given (a freshly composed room), PRIME the conversation — the
@@ -277,6 +280,54 @@ Item {
         catch (e) { return []; }
     }
 
+    // ── unread (exo-773) ─────────────────────────────────────────────────
+    // A room is unread when it has been active since you last had it open: its lastTs past
+    // the one remembered for it. A room met for the first time counts as read (a fresh
+    // install has nothing unread); the open room is read as it changes.
+    Prefs.Settings {
+        id: seenPrefs
+        category: "MusterUiSeen"
+        property string seenJson: "{}"
+    }
+    property var seen: ({})
+    property bool seenLoaded: false
+    function seenLoad() {
+        try { root.seen = JSON.parse(seenPrefs.seenJson || "{}") || {}; } catch (e) { root.seen = {}; }
+        root.seenLoaded = true;
+        root.noteSeen();
+    }
+    function isUnread(c) {
+        var t = String((c && c.topic) || "");
+        if (t.length === 0 || (root.view === "room" && t === root.contentTopicOf(root.roomTopic))) return false;
+        var last = Number((c && c.lastTs) || 0);
+        return root.seen[t] !== undefined && last > Number(root.seen[t]);
+    }
+    property var needsBefore: ({})
+    property double needsSince: Date.now()
+    function noteSeen() {
+        if (!root.seenLoaded) return;
+        var s = Object.assign({}, root.seen), changed = false;
+        var open = root.view === "room" ? root.contentTopicOf(root.roomTopic) : "";
+        var news = [], nb = {};
+        for (var i = 0; i < root.conversations.length; ++i) {
+            var c = root.conversations[i], t = String(c.topic || "");
+            if (t.length === 0) continue;
+            var last = Number(c.lastTs || 0);
+            if (s[t] === undefined || (t === open && Number(s[t]) !== last)) { s[t] = last; changed = true; }
+            // something new waits on you in a room you are not looking at: say so once
+            var n = Array.isArray(c.needs) ? c.needs.length : 0;
+            nb[t] = n;
+            if (t !== open && root.needsBefore[t] !== undefined && n > root.needsBefore[t]
+                    && Date.now() - root.needsSince > 4000)
+                news.push(qsTr("%1 needs you").arg(root.titleOf(t) || root.shortRoom(t)));
+        }
+        root.needsBefore = nb;
+        if (changed) { root.seen = s; seenPrefs.seenJson = JSON.stringify(s); }
+        if (news.length > 0) MusterStyle.notify(news.join(" · "));
+    }
+    onConversationsChanged: root.noteSeen()
+    onRoomTopicChanged: root.noteSeen()
+
     // The home surface is a query over intents (F-18, exo-ed5): the module classes every
     // intent in every joined room for THIS member — needs-you, waiting-on-others,
     // settled — from the room's log and this member's own keys. One row per intent that
@@ -359,6 +410,7 @@ Item {
     }
     Component.onCompleted: {
         root.ready = root.backend !== null && logos.isViewModuleReady("muster_ui");
+        root.seenLoad();
     }
 
     Rectangle {
@@ -427,6 +479,21 @@ Item {
         anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+    }
+
+    // news from the room and other rooms (exo-773), said once and let go
+    Toast {
+        id: newsToast
+        objectName: "newsToast"
+        z: 90
+        duration: 4000
+        anchors.horizontalCenter: contentArea.horizontalCenter
+        anchors.bottom: contentArea.bottom
+        anchors.bottomMargin: 96
+    }
+    Connections {
+        target: MusterStyle
+        function onNotified(text) { newsToast.show(text); }
     }
 
     // the drawer's scrim: a tap outside closes it
