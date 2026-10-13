@@ -92,6 +92,17 @@ Rectangle {
     // A one-line "who is behind this" for the collapsed lineage header — the distinct
     // names (aliases where known) that contributed, so you see the people behind a
     // decision at a glance before diving into the full per-piece lineage.
+    // a key as the card already names it: an approver's or a proposer's name, or ""
+    function nameOnCard(key) {
+        var k = MusterStyle.personKey(key);
+        if (k.length === 0) return "";
+        var lists = [(cardRoot.card && cardRoot.card.approvers) || [], (cardRoot.card && cardRoot.card.proposedBy) || []];
+        for (var l = 0; l < lists.length; ++l)
+            for (var i = 0; i < lists[l].length; ++i)
+                if (MusterStyle.personKey(lists[l][i].who) === k)
+                    return lists[l][i].mine ? qsTr("you") : String(lists[l][i].name || "");
+        return "";
+    }
     function provWho(prov) {
         if (!prov || prov.length === 0) return "";
         var names = [];
@@ -99,8 +110,10 @@ Rectangle {
             var it = prov[i];
             var who = String((it && it.alias) || "");
             if (who.length === 0) {
+                // the card's own people first ("you", "Bob"), then a short id, never "ed:"
                 var a = String((it && it.account) || "");
-                who = a.length > 0 ? a.substring(0, 8) + "…" : "";
+                who = cardRoot.nameOnCard(a);
+                if (who.length === 0 && a.length > 0) who = MusterStyle.personKey(a).substring(0, 6) + "…";
             }
             if (who.length > 0 && names.indexOf(who) === -1) names.push(who);
         }
@@ -753,7 +766,7 @@ Rectangle {
                     : cardRoot.kind === "intent-approve" ? qsTr("Approved")
                     : qsTr("Payment sent")
                 color: Theme.palette.text
-                font.pixelSize: MusterStyle.body
+                font.pixelSize: MusterStyle.cardBody
                 font.weight: Theme.typography.weightBold
             }
             StatusPill {
@@ -780,7 +793,7 @@ Rectangle {
             text: qsTr("Added to the proposal above.")
             color: Theme.palette.text
             font.family: Theme.typography.publicSans
-            font.pixelSize: Theme.typography.primaryText
+            font.pixelSize: MusterStyle.cardBody
         }
 
         // schema unknown (CardUnknownSchema.qml)
@@ -813,7 +826,7 @@ Rectangle {
                           if (n.length > 0) return n;
                           var x = String(d.who || ""); return x.length > 12 ? x.slice(0, 6) + "…" + x.slice(-4) : x; }).join(", "))
             color: Theme.palette.warning
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // what this needs (CardNeeds.qml)
@@ -837,7 +850,7 @@ Rectangle {
                   : cardRoot.split.private ? qsTr("Expired: no share of it can be paid now. A private split is not renewed — propose it again.")
                   : qsTr("Expired: no share of it can be paid now. Its unpaid shares are already in a renewal or a settle-up.")
             color: Theme.palette.warning
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         LogosText {
@@ -847,7 +860,7 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: cardRoot.splitNote
             color: cardRoot.splitNote.indexOf("⚠") === 0 ? Theme.palette.warning : Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
 
         // the card's actions in one row (exo-720.10): the one that moves it forward first and
@@ -974,7 +987,7 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: cardRoot.auditStatus
             color: Theme.palette.textSecondary
-            font.pixelSize: MusterStyle.caption
+            font.pixelSize: MusterStyle.cardCaption
         }
     }
 }

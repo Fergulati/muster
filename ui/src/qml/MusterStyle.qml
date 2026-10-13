@@ -105,6 +105,9 @@ QtObject {
     readonly property int body: Theme.typography.primaryText        // 14: what people read
     readonly property int caption: Theme.typography.secondaryText   // 12: what explains it
     readonly property int badge: 11                                 // counts and status pills
+    // a card is read closely, so its text is a step up from the page's (exo-01f)
+    readonly property int cardBody: body + 1                         // 15
+    readonly property int cardCaption: caption + 1                   // 13
 
     // ── colour: the theme's, with the tints a status needs ────────────────
     function tint(c, a) { return Qt.rgba(c.r, c.g, c.b, a); }
