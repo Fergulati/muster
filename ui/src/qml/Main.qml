@@ -299,6 +299,23 @@ Item {
         }
         return needs.concat(waiting, settled, idle);
     }
+    // Home's first-run checklist (exo-6e5) reads who you are and whom you have named: both
+    // loaded once at the start, then whenever Settings or Contacts reload them.
+    readonly property var settingsData: {
+        try { return JSON.parse(backend ? backend.settingsJson : "{}") || ({}); }
+        catch (e) { return ({}); }
+    }
+    readonly property string chatId: {
+        var id = root.settingsData.identity || ({});
+        var ed = String(id.ed25519 || "").replace(/^0x/i, ""), x = String(id.x25519 || "").replace(/^0x/i, "");
+        return ed.length > 0 && x.length > 0 ? ed + x : "";
+    }
+    Timer {
+        interval: 300
+        running: root.ready && root.backend !== null
+        onTriggered: { root.backend.loadSettings(); root.backend.loadContacts(); }
+    }
+
     // Keep the list current while it is on screen — what waits on you changes when
     // someone else agrees, pays or proposes, in any room.
     Timer {
@@ -450,6 +467,10 @@ Item {
         visible: root.view === "home"
         actions: root.homeActions
         setup: root.homeSetup
+        chatId: root.chatId
+        contactCount: root.contactList.length
+        roomCount: root.conversations.length
+        onOpenContacts: { root.view = "contacts"; if (root.backend) root.backend.loadContacts(); }
         onManageAccounts: {
             if (typeof logos !== "undefined" && !!logos && typeof logos.request === "function")
                 logos.request("evm.accounts.manage", {}, function (res) {});
@@ -467,8 +488,13 @@ Item {
             for (var i = 0; i < invites.length; ++i) {
                 var inv = invites[i];
                 if (String(inv.topic || "") === topic) {
-                    root.labelRoom(topic, String(inv.note || "room") + " · from " +
-                                   (inv.fromAlias ? String(inv.fromAlias) : root.shortId(inv.from)));
+                    // what it is for, and from whom when they are a contact; never a hex id (exo-ef6)
+                    var note = String(inv.note || "");
+                    var what = note === "decide" ? qsTr("A decision") : note === "pay" ? qsTr("A payment")
+                             : note === "split" ? qsTr("Splitting a bill") : note === "request" ? qsTr("A payment request") : "";
+                    var from = inv.fromAlias ? String(inv.fromAlias) : "";
+                    if (what.length > 0 || from.length > 0)
+                        root.labelRoom(topic, what.length > 0 ? (from.length > 0 ? qsTr("%1 from %2").arg(what).arg(from) : what) : from);
                     break;
                 }
             }

@@ -1,0 +1,59 @@
+{
+  "about": "A fresh Basecamp install with no rooms: the Getting started checklist, the account an optional step in it, and no account notice while nothing waits on you (exo-6e5, exo-5a5).",
+  "snapshot": "data/statement-proposed.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "keystoreStatusJson": {
+      "identity": {
+        "kind": "module"
+      },
+      "accounts": []
+    },
+    "conversationsJson": [],
+    "contactsJson": []
+  },
+  "steps": [
+    {
+      "view": "home"
+    },
+    {
+      "expectProp": [
+        "homeChecklist",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "homeSetup",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "homeStep_account",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "fresh"
+    },
+    {
+      "click": "homeStep_share"
+    },
+    {
+      "expectProp": [
+        "homeStep_share",
+        "visible",
+        false
+      ]
+    },
+    {
+      "shot": "shared"
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 
+import QtCore as Prefs
 import Logos.Theme
 import Logos.Controls
 
@@ -44,6 +45,46 @@ Item {
     property var setup: ({})
     signal manageAccounts()
     signal openSettings()
+    signal openContacts()
+
+    // the first-run checklist (exo-6e5): who you are, and how far along you are
+    property string chatId: ""
+    property int contactCount: 0
+    property int roomCount: 0
+    Prefs.Settings {
+        id: firstRun
+        category: "MusterUiFirstRun"
+        property bool sharedChatId: false
+        property bool hidden: false
+    }
+    readonly property var steps: {
+        var s = [
+            { key: "share", done: firstRun.sharedChatId || home.roomCount > 0,
+              text: qsTr("Share your chat ID, so someone can add you to a room"), action: qsTr("Copy chat ID") },
+            { key: "room", done: home.roomCount > 0,
+              text: qsTr("Start something, or join a room with its code"), action: qsTr("Start something") },
+            { key: "contact", done: home.contactCount > 0,
+              text: qsTr("Put a name to someone you know"), action: qsTr("Open Contacts") }
+        ];
+        // under Basecamp a fresh install has no account to pay or approve with; optional
+        // until something needs it, when the notice above asks instead (exo-5a5)
+        if (home.setup.show && home.setup.action === "accounts")
+            s.push({ key: "account", done: false, optional: true,
+                     text: qsTr("Optional: set up an Ethereum account, to pay or approve payments"),
+                     action: qsTr("Create or import") });
+        return s;
+    }
+    readonly property bool checklistDone: home.steps.every(function (x) { return x.done || x.optional; })
+    readonly property bool checklistShown: !firstRun.hidden && !home.checklistDone
+    function runStep(key) {
+        if (key === "share") {
+            clip.text = home.chatId; clip.selectAll(); clip.copy();
+            firstRun.sharedChatId = true;
+        } else if (key === "room") home.newActivity();
+        else if (key === "contact") home.openContacts();
+        else if (key === "account") home.manageAccounts();
+    }
+    TextEdit { id: clip; visible: false; width: 0; height: 0 }
     // A received invite's Join was clicked → open (and ask to join) that room.
     signal joinInvite(string topic)
     // join a room by the code someone shared (exo-dcc.28)
@@ -119,11 +160,82 @@ Item {
                 }
             }
 
-            // ── getting set up (a fresh install, exo-d4d.6) ─────────────────────
+            // ── getting started (exo-6e5): a short checklist that ticks itself off ──
+            Surface {
+                id: checklistSurface
+                objectName: "homeChecklist"
+                visible: !firstRun.hidden && !home.checklistDone
+                Layout.fillWidth: true
+                implicitHeight: checklistCol.implicitHeight + 2 * Theme.spacing.large
+                ColumnLayout {
+                    id: checklistCol
+                    anchors.fill: parent
+                    anchors.margins: Theme.spacing.large
+                    spacing: Theme.spacing.small
+                    RowLayout {
+                        Layout.fillWidth: true
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: qsTr("Getting started")
+                            color: Theme.palette.text
+                            font.pixelSize: MusterStyle.subtitle
+                            font.weight: Theme.typography.weightBold
+                        }
+                        ActionButton {
+                            objectName: "homeChecklistHide"
+                            quiet: true
+                            compact: true
+                            text: qsTr("Hide")
+                            onClicked: firstRun.hidden = true
+                        }
+                    }
+                    Repeater {
+                        model: home.steps
+                        delegate: RowLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.medium
+                            Rectangle {
+                                implicitWidth: 18; implicitHeight: 18; radius: 9
+                                color: modelData.done ? MusterStyle.settledSoft : "transparent"
+                                border.width: modelData.done ? 0 : 1
+                                border.color: Theme.palette.border
+                                LogosText {
+                                    anchors.centerIn: parent
+                                    visible: modelData.done
+                                    text: "✓"
+                                    color: MusterStyle.settled
+                                    font.pixelSize: MusterStyle.caption
+                                    font.weight: Theme.typography.weightBold
+                                }
+                            }
+                            LogosText {
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: modelData.text
+                                color: modelData.done ? Theme.palette.textTertiary : Theme.palette.text
+                                font.pixelSize: MusterStyle.body
+                                font.strikeout: modelData.done
+                            }
+                            ActionButton {
+                                objectName: "homeStep_" + modelData.key
+                                visible: !modelData.done && (modelData.key !== "share" || home.chatId.length > 0)
+                                compact: true
+                                text: modelData.action
+                                onClicked: home.runStep(modelData.key)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── setting up, when something waits on you (a fresh install, exo-d4d.6) ──
             // Muster never makes keys or chains: each step hands off to the app that owns it.
+            // Asked only once an approval or a payment waits on you (exo-5a5); before that,
+            // it is an optional step in the checklist above.
             InlineNotice {
                 objectName: "homeSetup"
-                visible: !!home.setup.show
+                visible: !!home.setup.show && (home.needsCount > 0 || home.setup.action !== "accounts")
                 tone: "warning"
                 title: String(home.setup.title || "")
                 text: String(home.setup.detail || "")
@@ -286,7 +398,8 @@ Item {
             // Nothing on yet — the invitation to start, standing in for the list.
             EmptyState {
                 objectName: "homeEmpty"
-                visible: (home.actions || []).length === 0
+                // the checklist says the same while it shows
+                visible: (home.actions || []).length === 0 && !home.checklistShown
                 Layout.fillWidth: true
                 text: qsTr("Nothing on yet. Start something with someone, or join a room with its code.")
             }
