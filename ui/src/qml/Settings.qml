@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtCore as Prefs
 
 import Logos.Theme
 import Logos.Controls
@@ -25,6 +26,15 @@ Item {
     property var backend
     property string manageNote: ""   // what the keystore app hand-off answered (exo-d4d.2)
     property string chainNote: ""    // what the chain settings hand-off answered (exo-d4d.6)
+
+    // Basic or Advanced (exo-816), remembered on this device; Basic by default
+    Prefs.Settings {
+        id: settingsPrefs
+        category: "MusterUiSettings"
+        property bool advanced: false
+    }
+    property bool advanced: settingsPrefs.advanced
+    onAdvancedChanged: settingsPrefs.advanced = settings.advanced
 
     readonly property var s: {
         try { return JSON.parse(backend ? backend.settingsJson : "{}"); }
@@ -132,7 +142,34 @@ Item {
 
             PageHeader {
                 title: qsTr("Settings")
-                subtitle: qsTr("Your identity, and the infrastructure Muster talks to. Nothing here goes to a server; there is none.")
+                subtitle: qsTr("Nothing here goes to a server; there is none.")
+            }
+
+            // Basic, or everything (exo-816): your keys, the nodes and endpoints Muster talks
+            // to, delivery and RLN are there when you want them, out of the way when not
+            RowLayout {
+                spacing: Theme.spacing.small
+                ActionButton {
+                    objectName: "settingsBasic"
+                    compact: true
+                    text: qsTr("Basic")
+                    variant: settings.advanced ? LogosButton.Variant.Secondary : LogosButton.Variant.Primary
+                    onClicked: settings.advanced = false
+                }
+                ActionButton {
+                    objectName: "settingsAdvanced"
+                    compact: true
+                    text: qsTr("Advanced")
+                    variant: settings.advanced ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                    onClicked: settings.advanced = true
+                }
+                LogosText {
+                    Layout.leftMargin: Theme.spacing.small
+                    text: settings.advanced ? qsTr("Your keys, nodes and network, too")
+                                            : qsTr("What most people need")
+                    color: Theme.palette.textTertiary
+                    font.pixelSize: MusterStyle.caption
+                }
             }
 
             // ── identity ──────────────────────────────────────────────────────
@@ -153,38 +190,44 @@ Item {
                     spacing: Theme.spacing.tiny
 
                     LogosText {
-                        text: qsTr("Identity")
+                        text: qsTr("You")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightBold
                     }
 
-                    Repeater {
-                        model: [
-                            { k: qsTr("address"), v: String((settings.identity && settings.identity.address) || "") },
-                            { k: qsTr("ed25519"), v: String((settings.identity && settings.identity.ed25519) || "") },
-                            { k: qsTr("x25519"),  v: String((settings.identity && settings.identity.x25519) || "") }
-                        ]
-                        delegate: RowLayout {
-                            required property var modelData
-                            Layout.fillWidth: true
-                            spacing: Theme.spacing.small
-
-                            LogosText {
-                                Layout.preferredWidth: 70
-                                Layout.alignment: Qt.AlignTop
-                                text: modelData.k
-                                color: Theme.palette.textTertiary
-                                font.family: MusterStyle.mono
-                                font.pixelSize: MusterStyle.caption
-                            }
-                            LogosText {
+                    ColumnLayout {
+                        objectName: "advancedKeys"
+                        visible: settings.advanced
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        Repeater {
+                            model: [
+                                { k: qsTr("address"), v: String((settings.identity && settings.identity.address) || "") },
+                                { k: qsTr("ed25519"), v: String((settings.identity && settings.identity.ed25519) || "") },
+                                { k: qsTr("x25519"),  v: String((settings.identity && settings.identity.x25519) || "") }
+                            ]
+                            delegate: RowLayout {
+                                required property var modelData
                                 Layout.fillWidth: true
-                                wrapMode: Text.WrapAnywhere
-                                text: modelData.v.length > 0 ? modelData.v : qsTr("(not loaded)")
-                                color: Theme.palette.textSecondary
-                                font.family: MusterStyle.mono
-                                font.pixelSize: MusterStyle.caption
+                                spacing: Theme.spacing.small
+
+                                LogosText {
+                                    Layout.preferredWidth: 70
+                                    Layout.alignment: Qt.AlignTop
+                                    text: modelData.k
+                                    color: Theme.palette.textTertiary
+                                    font.family: MusterStyle.mono
+                                    font.pixelSize: MusterStyle.caption
+                                }
+                                LogosText {
+                                    Layout.fillWidth: true
+                                    wrapMode: Text.WrapAnywhere
+                                    text: modelData.v.length > 0 ? modelData.v : qsTr("(not loaded)")
+                                    color: Theme.palette.textSecondary
+                                    font.family: MusterStyle.mono
+                                    font.pixelSize: MusterStyle.caption
+                                }
                             }
                         }
                     }
@@ -203,55 +246,61 @@ Item {
                         chatId: settings.chatId
                     }
 
-                    // ── your Bitcoin key (exo-59c) ─────────────────────────────
-                    LogosText {
-                        Layout.topMargin: Theme.spacing.small
-                        text: qsTr("Your Bitcoin key")
-                        color: Theme.palette.textTertiary
-                        font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightBold
-                    }
-                    LogosText {
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: qsTr("Share this with whoever sets up a Bitcoin multisig with you (Accounts → "
-                                 + "Bitcoin multisig). It's the public half of your authorization key, "
-                                 + "compressed — the key your in-app approvals sign with.")
-                        color: Theme.palette.textTertiary
-                        font.pixelSize: MusterStyle.caption
-                    }
-                    RowLayout {
+                    ColumnLayout {
+                        objectName: "advancedBtcKey"
+                        visible: settings.advanced
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
-                        TextEdit {
-                            id: btcKeyField
+                        // ── your Bitcoin key (exo-59c) ─────────────────────────────
+                        LogosText {
+                            Layout.topMargin: Theme.spacing.small
+                            text: qsTr("Your Bitcoin key")
+                            color: Theme.palette.textTertiary
+                            font.pixelSize: MusterStyle.caption
+                            font.weight: Theme.typography.weightBold
+                        }
+                        LogosText {
                             Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignVCenter
-                            readOnly: true
-                            selectByMouse: true
-                            wrapMode: TextEdit.WrapAnywhere
-                            text: String((settings.identity && settings.identity.btcPubKey) || "").replace(/^0x/i, "")
-                            color: Theme.palette.textSecondary
-                            selectionColor: Theme.palette.primary
-                            font.family: MusterStyle.mono
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Share this with whoever sets up a Bitcoin multisig with you (Accounts → "
+                                     + "Bitcoin multisig). It's the public half of your authorization key, "
+                                     + "compressed — the key your in-app approvals sign with.")
+                            color: Theme.palette.textTertiary
                             font.pixelSize: MusterStyle.caption
                         }
-                        ActionButton {
-                            objectName: "copyBtcKey"
-                            text: qsTr("Copy")
-                            enabled: btcKeyField.text.length > 0
-                            onClicked: { btcKeyField.selectAll(); btcKeyField.copy(); btcKeyField.deselect(); }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.small
+                            TextEdit {
+                                id: btcKeyField
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                readOnly: true
+                                selectByMouse: true
+                                wrapMode: TextEdit.WrapAnywhere
+                                text: String((settings.identity && settings.identity.btcPubKey) || "").replace(/^0x/i, "")
+                                color: Theme.palette.textSecondary
+                                selectionColor: Theme.palette.primary
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
+                            }
+                            ActionButton {
+                                objectName: "copyBtcKey"
+                                text: qsTr("Copy")
+                                enabled: btcKeyField.text.length > 0
+                                onClicked: { btcKeyField.selectAll(); btcKeyField.copy(); btcKeyField.deselect(); }
+                            }
                         }
-                    }
 
-                    LogosText {
-                        Layout.fillWidth: true
-                        Layout.topMargin: 2
-                        wrapMode: Text.WordWrap
-                        text: qsTr("Your keys stay in the module's keystore — the client never hands them out. "
-                                 + "Backup, import, and Keycard are the platform's to provide (basecamp).")
-                        color: Theme.palette.textTertiary
-                        font.pixelSize: MusterStyle.caption
+                        LogosText {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 2
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Your keys stay in the module's keystore — the client never hands them out. "
+                                     + "Backup, import, and Keycard are the platform's to provide (basecamp).")
+                            color: Theme.palette.textTertiary
+                            font.pixelSize: MusterStyle.caption
+                        }
                     }
                 }
             }
@@ -274,19 +323,25 @@ Item {
                     spacing: Theme.spacing.small
 
                     LogosText {
-                        text: qsTr("Infrastructure")
+                        text: qsTr("Accounts and network")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightBold
                     }
 
-                    LogosText {
+                    ColumnLayout {
+                        objectName: "advancedInfraNote"
+                        visible: settings.advanced
                         Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: qsTr("Store nodes and RPC are untrusted infrastructure you choose. "
-                                 + "Point them at your own node.")
-                        color: Theme.palette.textTertiary
-                        font.pixelSize: MusterStyle.caption
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Store nodes and RPC are untrusted infrastructure you choose. "
+                                     + "Point them at your own node.")
+                            color: Theme.palette.textTertiary
+                            font.pixelSize: MusterStyle.caption
+                        }
                     }
 
                     // ── Ethereum chains ──
@@ -329,206 +384,212 @@ Item {
                             }
                         }
                     }
-                    // ── RPC endpoint (muster's own, when not on the platform) ──
-                    RowLayout {
-                        visible: !(settings.s && settings.s.evmPlatform)
+                    ColumnLayout {
+                        objectName: "advancedEndpoints"
+                        visible: settings.advanced
+                        Layout.fillWidth: true
                         spacing: Theme.spacing.small
-                        LogosText {
-                            objectName: "settingsRpcNow"
-                            // bounded: one long value must not widen the whole column
+                        // ── RPC endpoint (muster's own, when not on the platform) ──
+                        RowLayout {
+                            visible: !(settings.s && settings.s.evmPlatform)
+                            spacing: Theme.spacing.small
+                            LogosText {
+                                objectName: "settingsRpcNow"
+                                // bounded: one long value must not widen the whole column
+                                Layout.fillWidth: true
+                                elide: Text.ElideMiddle
+                                text: qsTr("RPC endpoint  ·  now: %1")
+                                      .arg(String((settings.s && (settings.showRpc ? settings.s.rpc
+                                                                                   : settings.s.rpcMasked)) || "(unset)"))
+                                color: Theme.palette.textSecondary
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
+                            }
+                            ActionButton {
+                                objectName: "settingsRpcShow"
+                                visible: !!(settings.s && settings.s.rpc && settings.s.rpc !== settings.s.rpcMasked)
+                                text: settings.showRpc ? qsTr("Hide") : qsTr("Show")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: settings.showRpc = !settings.showRpc
+                            }
+                        }
+                        RowLayout {
+                            visible: !(settings.s && settings.s.evmPlatform)
                             Layout.fillWidth: true
-                            elide: Text.ElideMiddle
-                            text: qsTr("RPC endpoint  ·  now: %1")
-                                  .arg(String((settings.s && (settings.showRpc ? settings.s.rpc
-                                                                               : settings.s.rpcMasked)) || "(unset)"))
+                            Layout.maximumWidth: 460       // keep the input a tidy width, not full-bleed
+                            Layout.alignment: Qt.AlignLeft
+                            spacing: Theme.spacing.small
+                            LogosTextField {
+                                id: rpcField
+                                objectName: "settingsRpc"
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("new RPC URL, e.g. http://127.0.0.1:8545")
+                                font.family: MusterStyle.mono
+                            }
+                            ActionButton {
+                                objectName: "settingsRpcSave"
+                                text: qsTr("Save")
+                                enabled: rpcField.text.length > 0
+                                onClicked: {
+                                    if (settings.backend) settings.backend.setSetting("rpc", rpcField.text);
+                                    rpcField.text = "";
+                                }
+                            }
+                        }
+
+                        // ── the user's Bitcoin node (exo-a50.2.6) ──
+                        RowLayout {
+                            Layout.topMargin: Theme.spacing.small
+                            spacing: Theme.spacing.small
+                            LogosText {
+                                objectName: "settingsBtcRpcNow"
+                                // bounded: one long value must not widen the whole column
+                                Layout.fillWidth: true
+                                elide: Text.ElideMiddle
+                                text: qsTr("Bitcoin node  ·  now: %1")
+                                      .arg(String((settings.s && (settings.showBtcRpc ? settings.s.btcRpc
+                                                                                      : settings.s.btcRpcMasked))
+                                                  || "(none — a Bitcoin payment needs one)"))
+                                color: Theme.palette.textSecondary
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
+                            }
+                            ActionButton {
+                                objectName: "settingsBtcRpcShow"
+                                visible: !!(settings.s && settings.s.btcRpc && settings.s.btcRpc !== settings.s.btcRpcMasked)
+                                text: settings.showBtcRpc ? qsTr("Hide") : qsTr("Show")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: settings.showBtcRpc = !settings.showBtcRpc
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 460
+                            Layout.alignment: Qt.AlignLeft
+                            spacing: Theme.spacing.small
+                            LogosTextField {
+                                id: btcRpcField
+                                objectName: "settingsBtcRpc"
+                                Layout.fillWidth: true
+                                // the credentials travel as Basic auth, and show above only behind Show
+                                placeholderText: qsTr("your node, e.g. http://user:pass@127.0.0.1:8332")
+                                font.family: MusterStyle.mono
+                            }
+                            ActionButton {
+                                objectName: "settingsBtcRpcSave"
+                                text: qsTr("Save")
+                                enabled: btcRpcField.text.length > 0
+                                onClicked: {
+                                    if (settings.backend) settings.backend.setSetting("btc-rpc", btcRpcField.text);
+                                    btcRpcField.text = "";
+                                }
+                            }
+                        }
+
+                        // ── the user's LEZ sequencer (exo-3c9) ──
+                        RowLayout {
+                            Layout.topMargin: Theme.spacing.small
+                            spacing: Theme.spacing.small
+                            LogosText {
+                                objectName: "settingsLezRpcNow"
+                                // bounded: one long value must not widen the whole column
+                                Layout.fillWidth: true
+                                elide: Text.ElideMiddle
+                                text: qsTr("LEZ sequencer  ·  now: %1  (%2)")
+                                      .arg(String((settings.s && settings.s.lez && (settings.showLezRpc ? settings.s.lez.rpc
+                                                                                                        : settings.s.lez.rpcMasked))
+                                                  || "https://testnet.lez.logos.co"))
+                                      .arg(String((settings.s && settings.s.lez && settings.s.lez.chain) || "lez:testnet"))
+                                color: Theme.palette.textSecondary
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
+                            }
+                            ActionButton {
+                                objectName: "settingsLezRpcShow"
+                                visible: !!(settings.s && settings.s.lez && settings.s.lez.rpc
+                                            && settings.s.lez.rpc !== settings.s.lez.rpcMasked)
+                                text: settings.showLezRpc ? qsTr("Hide") : qsTr("Show")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: settings.showLezRpc = !settings.showLezRpc
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 460
+                            Layout.alignment: Qt.AlignLeft
+                            spacing: Theme.spacing.small
+                            LogosTextField {
+                                id: lezRpcField
+                                objectName: "settingsLezRpc"
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("your sequencer, e.g. http://127.0.0.1:3040")
+                                font.family: MusterStyle.mono
+                            }
+                            ActionButton {
+                                objectName: "settingsLezRpcSave"
+                                text: qsTr("Save")
+                                enabled: lezRpcField.text.length > 0
+                                onClicked: {
+                                    if (settings.backend) settings.backend.setSetting("lez-rpc", lezRpcField.text);
+                                    lezRpcField.text = "";
+                                }
+                            }
+                        }
+
+                        // ── delivery config ──
+                        LogosText {
+                            // the config is one long JSON line: wrapped and bounded, or its width
+                            // widens the whole column and every text in it runs off the page
+                            Layout.fillWidth: true
+                            Layout.topMargin: Theme.spacing.small
+                            wrapMode: Text.WrapAnywhere
+                            maximumLineCount: 4
+                            elide: Text.ElideRight
+                            text: qsTr("Delivery node config  ·  now: %1")
+                                  .arg(String((settings.s && settings.s.delivery) || "{}"))
                             color: Theme.palette.textSecondary
                             font.family: MusterStyle.mono
                             font.pixelSize: MusterStyle.caption
                         }
-                        ActionButton {
-                            objectName: "settingsRpcShow"
-                            visible: !!(settings.s && settings.s.rpc && settings.s.rpc !== settings.s.rpcMasked)
-                            text: settings.showRpc ? qsTr("Hide") : qsTr("Show")
-                            variant: LogosButton.Variant.Secondary
-                            onClicked: settings.showRpc = !settings.showRpc
-                        }
-                    }
-                    RowLayout {
-                        visible: !(settings.s && settings.s.evmPlatform)
-                        Layout.fillWidth: true
-                        Layout.maximumWidth: 460       // keep the input a tidy width, not full-bleed
-                        Layout.alignment: Qt.AlignLeft
-                        spacing: Theme.spacing.small
-                        LogosTextField {
-                            id: rpcField
-                            objectName: "settingsRpc"
+                        RowLayout {
                             Layout.fillWidth: true
-                            placeholderText: qsTr("new RPC URL, e.g. http://127.0.0.1:8545")
-                            font.family: MusterStyle.mono
-                        }
-                        ActionButton {
-                            objectName: "settingsRpcSave"
-                            text: qsTr("Save")
-                            enabled: rpcField.text.length > 0
-                            onClicked: {
-                                if (settings.backend) settings.backend.setSetting("rpc", rpcField.text);
-                                rpcField.text = "";
+                            Layout.maximumWidth: 460       // keep the input a tidy width, not full-bleed
+                            Layout.alignment: Qt.AlignLeft
+                            spacing: Theme.spacing.small
+                            LogosTextField {
+                                id: deliveryField
+                                objectName: "settingsDelivery"
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("full createNode JSON, or a fleet name: 'logos.dev' or 'logos.test'")
+                                font.family: MusterStyle.mono
+                            }
+                            ActionButton {
+                                objectName: "settingsDeliverySave"
+                                text: qsTr("Save")
+                                enabled: deliveryField.text.length > 0
+                                onClicked: {
+                                    if (settings.backend) settings.backend.setSetting("delivery", deliveryField.text);
+                                    deliveryField.text = "";
+                                }
                             }
                         }
-                    }
-
-                    // ── the user's Bitcoin node (exo-a50.2.6) ──
-                    RowLayout {
-                        Layout.topMargin: Theme.spacing.small
-                        spacing: Theme.spacing.small
-                        LogosText {
-                            objectName: "settingsBtcRpcNow"
-                            // bounded: one long value must not widen the whole column
-                            Layout.fillWidth: true
-                            elide: Text.ElideMiddle
-                            text: qsTr("Bitcoin node  ·  now: %1")
-                                  .arg(String((settings.s && (settings.showBtcRpc ? settings.s.btcRpc
-                                                                                  : settings.s.btcRpcMasked))
-                                              || "(none — a Bitcoin payment needs one)"))
-                            color: Theme.palette.textSecondary
-                            font.family: MusterStyle.mono
-                            font.pixelSize: MusterStyle.caption
-                        }
-                        ActionButton {
-                            objectName: "settingsBtcRpcShow"
-                            visible: !!(settings.s && settings.s.btcRpc && settings.s.btcRpc !== settings.s.btcRpcMasked)
-                            text: settings.showBtcRpc ? qsTr("Hide") : qsTr("Show")
-                            variant: LogosButton.Variant.Secondary
-                            onClicked: settings.showBtcRpc = !settings.showBtcRpc
-                        }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.maximumWidth: 460
-                        Layout.alignment: Qt.AlignLeft
-                        spacing: Theme.spacing.small
-                        LogosTextField {
-                            id: btcRpcField
-                            objectName: "settingsBtcRpc"
-                            Layout.fillWidth: true
-                            // the credentials travel as Basic auth, and show above only behind Show
-                            placeholderText: qsTr("your node, e.g. http://user:pass@127.0.0.1:8332")
-                            font.family: MusterStyle.mono
-                        }
-                        ActionButton {
-                            objectName: "settingsBtcRpcSave"
-                            text: qsTr("Save")
-                            enabled: btcRpcField.text.length > 0
-                            onClicked: {
-                                if (settings.backend) settings.backend.setSetting("btc-rpc", btcRpcField.text);
-                                btcRpcField.text = "";
+                        // one-click presets, no JSON to paste. logos.dev is the default; since
+                        // Testnet v0.3 a node on logos.test sends nothing until it has an active
+                        // RLN membership (exo-eb6.3), so the button says so.
+                        RowLayout {
+                            spacing: Theme.spacing.small
+                            ActionButton {
+                                objectName: "settingsDeliveryFleet"
+                                text: qsTr("Use the logos.dev fleet")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.dev")
                             }
-                        }
-                    }
-
-                    // ── the user's LEZ sequencer (exo-3c9) ──
-                    RowLayout {
-                        Layout.topMargin: Theme.spacing.small
-                        spacing: Theme.spacing.small
-                        LogosText {
-                            objectName: "settingsLezRpcNow"
-                            // bounded: one long value must not widen the whole column
-                            Layout.fillWidth: true
-                            elide: Text.ElideMiddle
-                            text: qsTr("LEZ sequencer  ·  now: %1  (%2)")
-                                  .arg(String((settings.s && settings.s.lez && (settings.showLezRpc ? settings.s.lez.rpc
-                                                                                                    : settings.s.lez.rpcMasked))
-                                              || "https://testnet.lez.logos.co"))
-                                  .arg(String((settings.s && settings.s.lez && settings.s.lez.chain) || "lez:testnet"))
-                            color: Theme.palette.textSecondary
-                            font.family: MusterStyle.mono
-                            font.pixelSize: MusterStyle.caption
-                        }
-                        ActionButton {
-                            objectName: "settingsLezRpcShow"
-                            visible: !!(settings.s && settings.s.lez && settings.s.lez.rpc
-                                        && settings.s.lez.rpc !== settings.s.lez.rpcMasked)
-                            text: settings.showLezRpc ? qsTr("Hide") : qsTr("Show")
-                            variant: LogosButton.Variant.Secondary
-                            onClicked: settings.showLezRpc = !settings.showLezRpc
-                        }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.maximumWidth: 460
-                        Layout.alignment: Qt.AlignLeft
-                        spacing: Theme.spacing.small
-                        LogosTextField {
-                            id: lezRpcField
-                            objectName: "settingsLezRpc"
-                            Layout.fillWidth: true
-                            placeholderText: qsTr("your sequencer, e.g. http://127.0.0.1:3040")
-                            font.family: MusterStyle.mono
-                        }
-                        ActionButton {
-                            objectName: "settingsLezRpcSave"
-                            text: qsTr("Save")
-                            enabled: lezRpcField.text.length > 0
-                            onClicked: {
-                                if (settings.backend) settings.backend.setSetting("lez-rpc", lezRpcField.text);
-                                lezRpcField.text = "";
+                            ActionButton {
+                                objectName: "settingsDeliveryFleetTest"
+                                text: qsTr("Use logos.test (needs an RLN membership)")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.test")
                             }
-                        }
-                    }
-
-                    // ── delivery config ──
-                    LogosText {
-                        // the config is one long JSON line: wrapped and bounded, or its width
-                        // widens the whole column and every text in it runs off the page
-                        Layout.fillWidth: true
-                        Layout.topMargin: Theme.spacing.small
-                        wrapMode: Text.WrapAnywhere
-                        maximumLineCount: 4
-                        elide: Text.ElideRight
-                        text: qsTr("Delivery node config  ·  now: %1")
-                              .arg(String((settings.s && settings.s.delivery) || "{}"))
-                        color: Theme.palette.textSecondary
-                        font.family: MusterStyle.mono
-                        font.pixelSize: MusterStyle.caption
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Layout.maximumWidth: 460       // keep the input a tidy width, not full-bleed
-                        Layout.alignment: Qt.AlignLeft
-                        spacing: Theme.spacing.small
-                        LogosTextField {
-                            id: deliveryField
-                            objectName: "settingsDelivery"
-                            Layout.fillWidth: true
-                            placeholderText: qsTr("full createNode JSON, or a fleet name: 'logos.dev' or 'logos.test'")
-                            font.family: MusterStyle.mono
-                        }
-                        ActionButton {
-                            objectName: "settingsDeliverySave"
-                            text: qsTr("Save")
-                            enabled: deliveryField.text.length > 0
-                            onClicked: {
-                                if (settings.backend) settings.backend.setSetting("delivery", deliveryField.text);
-                                deliveryField.text = "";
-                            }
-                        }
-                    }
-                    // one-click presets, no JSON to paste. logos.dev is the default; since
-                    // Testnet v0.3 a node on logos.test sends nothing until it has an active
-                    // RLN membership (exo-eb6.3), so the button says so.
-                    RowLayout {
-                        spacing: Theme.spacing.small
-                        ActionButton {
-                            objectName: "settingsDeliveryFleet"
-                            text: qsTr("Use the logos.dev fleet")
-                            variant: LogosButton.Variant.Secondary
-                            onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.dev")
-                        }
-                        ActionButton {
-                            objectName: "settingsDeliveryFleetTest"
-                            text: qsTr("Use logos.test (needs an RLN membership)")
-                            variant: LogosButton.Variant.Secondary
-                            onClicked: if (settings.backend) settings.backend.setSetting("delivery", "logos.test")
                         }
                     }
 
@@ -537,13 +598,14 @@ Item {
                     // exit that publishes it. It carries sends only, and the text says so.
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("Mixnet for sends")
+                        text: qsTr("Send through the mixnet")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightBold
                     }
                     LogosText {
                         objectName: "settingsMixNow"
+                        visible: settings.advanced
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
                         // the level the next node is asked for differs from the setting only
@@ -562,19 +624,19 @@ Item {
                         ActionButton {
                             objectName: "settingsMixOff"
                             text: qsTr("Off")
-                            variant: LogosButton.Variant.Secondary
+                            variant: String((settings.s && settings.s.mix) || "off") === "off" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("mix", "off")
                         }
                         ActionButton {
                             objectName: "settingsMixPreferred"
                             text: qsTr("Preferred")
-                            variant: LogosButton.Variant.Secondary
+                            variant: String((settings.s && settings.s.mix) || "off") === "preferred" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("mix", "preferred")
                         }
                         ActionButton {
                             objectName: "settingsMixRequired"
                             text: qsTr("Required")
-                            variant: LogosButton.Variant.Secondary
+                            variant: String((settings.s && settings.s.mix) || "off") === "required" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                             onClicked: if (settings.backend) settings.backend.setSetting("mix", "required")
                         }
                     }
@@ -613,6 +675,16 @@ Item {
                     LogosText {
                         Layout.fillWidth: true
                         wrapMode: Text.WordWrap
+                        visible: !settings.advanced
+                        text: qsTr("Hides which member sent each message from the network's nodes; not who reads the room. "
+                                 + "Takes effect the next time Muster starts.")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: MusterStyle.caption
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        visible: settings.advanced
                         text: qsTr("Preferred and Required send each room message through the Logos mixnet: three mix hops, "
                                  + "then an exit that publishes it, so the relay and store nodes do not learn which node sent it. "
                                  + "Preferred takes the plain path when the mixnet cannot carry a send; Required never does, so "
@@ -623,78 +695,84 @@ Item {
                         font.pixelSize: MusterStyle.caption
                     }
 
-                    // ── RLN membership (exo-eb6.3) ──
-                    // This node's own membership: on logos.test a node sends nothing without
-                    // one. The RLN modules register by themselves once the node's payer is
-                    // funded, so the one thing shown to act on is that payer, whole, to copy.
-                    LogosText {
-                        Layout.topMargin: Theme.spacing.small
-                        text: qsTr("RLN membership")
-                        color: Theme.palette.textTertiary
-                        font.pixelSize: MusterStyle.caption
-                        font.weight: Theme.typography.weightBold
-                    }
-                    RowLayout {
+                    ColumnLayout {
+                        objectName: "advancedRln"
+                        visible: settings.advanced
                         Layout.fillWidth: true
                         spacing: Theme.spacing.small
-                        Rectangle {
-                            Layout.alignment: Qt.AlignTop
-                            Layout.topMargin: 5
-                            Layout.preferredWidth: 8
-                            Layout.preferredHeight: 8
-                            radius: 4
-                            color: settings.rln.level === "ok" ? Theme.palette.success
-                                 : settings.rln.level === "warn" ? Theme.palette.warning
-                                 : settings.rln.level === "down" ? Theme.palette.error
-                                 : Theme.palette.textTertiary
+                        // ── RLN membership (exo-eb6.3) ──
+                        // This node's own membership: on logos.test a node sends nothing without
+                        // one. The RLN modules register by themselves once the node's payer is
+                        // funded, so the one thing shown to act on is that payer, whole, to copy.
+                        LogosText {
+                            Layout.topMargin: Theme.spacing.small
+                            text: qsTr("RLN membership")
+                            color: Theme.palette.textTertiary
+                            font.pixelSize: MusterStyle.caption
+                            font.weight: Theme.typography.weightBold
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.small
+                            Rectangle {
+                                Layout.alignment: Qt.AlignTop
+                                Layout.topMargin: 5
+                                Layout.preferredWidth: 8
+                                Layout.preferredHeight: 8
+                                radius: 4
+                                color: settings.rln.level === "ok" ? Theme.palette.success
+                                     : settings.rln.level === "warn" ? Theme.palette.warning
+                                     : settings.rln.level === "down" ? Theme.palette.error
+                                     : Theme.palette.textTertiary
+                            }
+                            LogosText {
+                                objectName: "settingsRlnDetail"
+                                Layout.fillWidth: true
+                                wrapMode: Text.WordWrap
+                                text: settings.rln.detail ? String(settings.rln.detail) : qsTr("checking…")
+                                color: Theme.palette.textSecondary
+                                font.pixelSize: Theme.typography.secondaryText
+                            }
                         }
                         LogosText {
-                            objectName: "settingsRlnDetail"
                             Layout.fillWidth: true
+                            visible: !!settings.rln.remedy
                             wrapMode: Text.WordWrap
-                            text: settings.rln.detail ? String(settings.rln.detail) : qsTr("checking…")
-                            color: Theme.palette.textSecondary
-                            font.pixelSize: Theme.typography.secondaryText
-                        }
-                    }
-                    LogosText {
-                        Layout.fillWidth: true
-                        visible: !!settings.rln.remedy
-                        wrapMode: Text.WordWrap
-                        text: String(settings.rln.remedy || "")
-                        color: Theme.palette.warning
-                        font.pixelSize: MusterStyle.caption
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        visible: rlnPayerField.text.length > 0
-                        spacing: Theme.spacing.small
-                        TextEdit {
-                            id: rlnPayerField
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignVCenter
-                            readOnly: true
-                            selectByMouse: true
-                            wrapMode: TextEdit.WrapAnywhere
-                            text: String(settings.rln.payer || "")
-                            color: Theme.palette.textSecondary
-                            selectionColor: Theme.palette.primary
-                            font.family: MusterStyle.mono
+                            text: String(settings.rln.remedy || "")
+                            color: Theme.palette.warning
                             font.pixelSize: MusterStyle.caption
                         }
-                        ActionButton {
-                            objectName: "copyRlnPayer"
-                            text: qsTr("Copy payer")
-                            onClicked: { rlnPayerField.selectAll(); rlnPayerField.copy(); rlnPayerField.deselect(); }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: rlnPayerField.text.length > 0
+                            spacing: Theme.spacing.small
+                            TextEdit {
+                                id: rlnPayerField
+                                Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
+                                readOnly: true
+                                selectByMouse: true
+                                wrapMode: TextEdit.WrapAnywhere
+                                text: String(settings.rln.payer || "")
+                                color: Theme.palette.textSecondary
+                                selectionColor: Theme.palette.primary
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
+                            }
+                            ActionButton {
+                                objectName: "copyRlnPayer"
+                                text: qsTr("Copy payer")
+                                onClicked: { rlnPayerField.selectAll(); rlnPayerField.copy(); rlnPayerField.deselect(); }
+                            }
                         }
-                    }
-                    LogosText {
-                        Layout.fillWidth: true
-                        wrapMode: Text.WordWrap
-                        text: qsTr("On logos.test every message carries an RLN proof, so a node sends nothing until "
-                                 + "it has an active membership, funded on the registry's own zone. logos.dev runs no RLN.")
-                        color: Theme.palette.textTertiary
-                        font.pixelSize: MusterStyle.caption
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("On logos.test every message carries an RLN proof, so a node sends nothing until "
+                                     + "it has an active membership, funded on the registry's own zone. logos.dev runs no RLN.")
+                            color: Theme.palette.textTertiary
+                            font.pixelSize: MusterStyle.caption
+                        }
                     }
 
                     // ── EVM keystore (exo-149.1 K1) ──
@@ -703,7 +781,7 @@ Item {
                     // whether it is there and whether it sees muster's requests as muster's.
                     LogosText {
                         Layout.topMargin: Theme.spacing.small
-                        text: qsTr("EVM keystore")
+                        text: qsTr("Ethereum accounts")
                         color: Theme.palette.textTertiary
                         font.pixelSize: MusterStyle.caption
                         font.weight: Theme.typography.weightBold
@@ -726,14 +804,18 @@ Item {
                             objectName: "settingsKeystoreDetail"
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
-                            text: settings.keystore.detail ? String(settings.keystore.detail) : qsTr("checking…")
+                            // in Basic, the state in words; the module's own diagnosis in Advanced
+                            text: !settings.keystore.detail ? qsTr("checking…")
+                                : settings.advanced ? String(settings.keystore.detail)
+                                : settings.keystore.level === "ok" ? qsTr("Ready: approvals can use an account here.")
+                                : qsTr("Not available right now. Advanced says why.")
                             color: Theme.palette.textSecondary
                             font.pixelSize: Theme.typography.secondaryText
                         }
                     }
                     LogosText {
                         Layout.fillWidth: true
-                        visible: !!settings.keystore.remedy
+                        visible: settings.advanced && !!settings.keystore.remedy
                         wrapMode: Text.WordWrap
                         text: String(settings.keystore.remedy || "")
                         color: Theme.palette.warning
@@ -867,6 +949,7 @@ Item {
                     LogosText {
                         Layout.fillWidth: true
                         Layout.topMargin: 2
+                        visible: settings.advanced
                         wrapMode: Text.WordWrap
                         text: qsTr("RPC applies to the wallet/Safe path on next use; delivery config applies the "
                                  + "next time Muster starts (one node per run). Saved beside your keystore (settings.json), so they survive a restart; inside basecamp the platform's own settings are the eventual home.")

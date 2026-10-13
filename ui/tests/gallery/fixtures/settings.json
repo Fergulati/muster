@@ -1,5 +1,48 @@
 {
-  "about": "Settings, as a member with a joined room sees it.",
+  "about": "Settings, as a member with a joined room sees it: Basic (your contact link, chains and accounts, the mixnet), then Advanced (your keys, nodes and network) (exo-816).",
   "snapshot": "data/split-alice-final.json",
-  "steps": [ {"view": "settings"}, {"shot": ""} ]
+  "steps": [
+    {
+      "view": "settings"
+    },
+    {
+      "click": "settingsBasic"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "advancedEndpoints",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "advancedKeys",
+        "visible",
+        false
+      ]
+    },
+    {
+      "shot": "basic"
+    },
+    {
+      "click": "settingsAdvanced"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "advancedKeys",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "advanced"
+    }
+  ]
 }

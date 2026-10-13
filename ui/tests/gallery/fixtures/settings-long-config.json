@@ -38,6 +38,19 @@
       "view": "settings"
     },
     {
+      "click": "settingsAdvanced"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "expectProp": [
+        "advancedEndpoints",
+        "visible",
+        true
+      ]
+    },
+    {
       "expectMax": [
         "settingsRlnDetail",
         "width",
