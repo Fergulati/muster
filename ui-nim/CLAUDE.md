@@ -4,7 +4,8 @@ This is the port of the UI backend from C++ (`ui/src/muster_ui_backend.cpp`) to 
 
 ## What is here
 
-- **`flake.nix`**: the toolchain. It pins nim-seaqt `qt-6.8` and nimside by commit, and takes nixpkgs from the **same logos-module-builder rev as `ui/flake.nix`**, so it uses the very `qtbase-6.9.2` the runner links (the same store path, not merely the same version). `lib.seaqtApp` builds an app. `checks.<system>.hello` is the toolchain gate.
+- **`flake.nix`**: the toolchain. It pins nim-seaqt `qt-6.11` and nimside by commit, on nixos-unstable's Qt 6.11.2 (T1b). It also builds `logos-core` and `logos-protocol-lib`, the two Logos libraries the app loads in-process, on that Qt from the runner's revisions. `lib.seaqtApp` builds an app. `checks.<system>.hello` is the toolchain gate.
+- **`nix/nixpkgs-app/`**: the nixpkgs the Logos tree builds on, nixos-unstable plus the overrides it needs (GCC 14, Boost 1.87, `<cstring>`), applied without rebuilding Qt.
 - **`nix/seaqt-app.nix`**: one seaqt app runs `nim c` with seaqt and nimside on the path. seaqt's `{.compile.}` pragmas build its generated C++ wrappers during that step. That C++ exists only in the build, never in the repo.
 - **`hello/`**: T1. One nimside `qobject:` and one QML file, bound in both directions. `--self-test` checks that QML can call a slot with an argument, that QML can write a property through its setter, and that a Nim change reaches a QML binding.
 - **`contract/`**: T2, the view contract.
@@ -31,12 +32,13 @@ cd ui-nim && nix build .#checks.x86_64-linux.contract  # T2: the contract, index
 cd ui-nim && nix run .#contract-test -- --dump         # the nimside declaration repContract generates
 cd ui-nim && nix build .#checks.x86_64-linux.ro             # T3: QtRemoteObjects from Nim (bindings generated in the build)
 cd ui-nim && nix build .#checks.x86_64-linux.muster-app-view   # T4a: the real Main.qml in the Nim host (sandbox)
+cd ui-nim && nix build .#logos-core .#logos-protocol-lib     # T1b: the in-process Logos libraries, on the app's Qt
 scripts/nim-app-core-probe.sh                          # T4a: + logos-core and muster_module.health() over lp_* (needs make build)
 ```
 
 ## Rules
 
-- **One Qt per process.** seaqt compiles against Qt's private headers. It loads only on the Qt minor version it was generated for, or newer. One process cannot hold two Qt copies. Until T1b lands, that Qt is the runner's 6.9.2, exactly: bump `logos-module-builder` here in the same change as `ui/flake.nix`. From T1b (ADR-019, "newest everything") the app has its own, newer Qt. Then every library the app loads in-process, `liblogos_core` and `liblogos_protocol` included, is built here on that Qt, never taken from the builder's closure. The module processes keep Logos's Qt.
+- **One Qt per process.** seaqt compiles against Qt's private headers. It loads only on the Qt minor version it was generated for, or newer. One process cannot hold two Qt copies. Since T1b (ADR-019, "newest everything") the app has its own Qt, nixos-unstable's 6.11.2. Every library the app loads in-process is built here on that Qt, never taken from the builder's closure: `liblogos_core` and `liblogos_protocol`, through `nix/nixpkgs-app` (see its CLAUDE.md). The module processes keep Logos's Qt 6.9.2. Bump `logos-module-builder` here in the same change as `ui/flake.nix`, and move the `logos-liblogos` / `logos-protocol` pins with the runner's.
 - **The app is standalone** (ADR-019, option B). Write it as if Basecamp did not exist. The C++ Basecamp UI in `ui/` is frozen. It gets no feature of its own, but the QML and the `.rep` are shared, so a slot added to the contract is implemented in both backends. The compile fails on either side until it is.
 - **Pin seaqt and nimside by commit.** Their branches are rebased upstream.
 - **The UI reaches muster_module only through the logos API.** This applies here too. Code sharing means the client that logos-nim-sdk generates from `muster.lidl`. It never means linking the core into the UI process.

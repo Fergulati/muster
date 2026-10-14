@@ -1,4 +1,4 @@
-# nim-seaqt qt-6.8 plus QtRemoteObjects bindings (exo-607 T3), generated at BUILD time.
+# nim-seaqt (qt-6.11 since T1b) plus QtRemoteObjects bindings (exo-607 T3), generated at BUILD time.
 #
 # nim-seaqt ships no QtRemoteObjects. seaqt-gen, its generator (Go, a miqt fork that
 # parses Qt headers with clang), can emit it. This derivation runs the pinned generator
@@ -7,21 +7,21 @@
 # they are produced here and never committed. The repo carries only the generator
 # patches, which is how "no C++ in the repo" holds while muster uses QtRO from Nim.
 #
-#   seaqt-gen  56485e6, the rev that produced nim-seaqt qt-6.8@7d40abd7 (a QtCore
-#              regenerated with it is byte-identical in structure; the only diffs are
-#              6.8.3 → 6.9.2 API changes)
+#   seaqt-gen  56485e6, the rev that produced nim-seaqt qt-6.8@7d40abd7 and
+#              qt-6.11@41a8f1b1 (T3 checked a QtCore regenerated with it against qt-6.8:
+#              the same structure, only the 6.8.3 → 6.9.2 API changes)
 #   patches    0001 add RemoteObjects to the module list (upstream-worthy)
 #              0002 SEAQT_GEN_MODULES, to parse only RemoteObjects' closure (local)
 #              0003 a parameter named `self` no longer collides (upstream-worthy, required)
 #              0004 QSet<> return values emit valid Nim (upstream-worthy, required)
 #   clang      14.0.6, the generator's own Docker version; clang >= 16 prints nested types
 #              unqualified and the generator panics
-#   Qt         the caller's qt6 (the runner's 6.9.2) through qt6.env, one merged include
+#   Qt         the caller's qt6 (the app's, 6.11.2 since T1b) through qt6.env, one merged include
 #              tree so the generator finds <QT_INSTALL_HEADERS>/QtRemoteObjects
 #
 # Only Core, Network and RemoteObjects are parsed: Qt6RemoteObjects.pc requires exactly
 # Qt6Core + Qt6Network, so that is the full closure and the output equals a full run's.
-# The bindings carry GenVersion 6.9.2 (the rest of nim-seaqt says 6.8.3): Qt >= 6.9.
+# The bindings carry the caller's Qt version as GenVersion, so they need that Qt or newer.
 { pkgs, nim-seaqt, seaqt-gen, clang14 }:
 
 let

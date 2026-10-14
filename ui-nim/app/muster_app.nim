@@ -125,6 +125,11 @@ proc main(): int =
     _ = QGuiApplication.create()
     backend = MusterUi.create()
     logos = LogosShim.create(backend)
+  # QML's Settings (the view's prefs) refuse to open without these on Qt 6.11, and then
+  # persist nothing. The organization is the one logos-standalone-app sets.
+  QCoreApplication.setOrganizationName("Logos")
+  QCoreApplication.setOrganizationDomain("logos.co")
+  QCoreApplication.setApplicationName("muster")
 
   var failed = 0
   template check(ok: bool, what: string) =

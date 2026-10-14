@@ -1,6 +1,6 @@
 # Muster's UI on nim-seaqt: no C++ in the repo
 
-**Status:** T0–T4 landed 2026-09-29 (§9). The gate was decided on 2026-10-14: a standalone app (option B), on the newest Qt and seaqt, with the Basecamp UI kept until Basecamp can take a Nim one (§8, ADR-019). Next is T1b, the move to Qt 6.11. Code: branch `feat/seaqt-ui`, [corpetty/muster#181](https://github.com/corpetty/muster/pull/181). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
+**Status:** T0–T4 landed 2026-09-29 (§9). The gate was decided on 2026-10-14: a standalone app (option B), on the newest Qt and seaqt, with the Basecamp UI kept until Basecamp can take a Nim one (§8, ADR-019). T1b, the move to Qt 6.11, landed the same day on branch `feat/seaqt-app`, which carries the work until the Nim app is at parity. Next is T5. Code: branch `feat/seaqt-ui`, [corpetty/muster#181](https://github.com/corpetty/muster/pull/181). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
 **Reads with:** `docs/02-implementation-plan.md` (ADR-008 builder, ADR-013 the coherent UI builder, ADR-014 Nimbus/Status Nim reuse), `CLAUDE.md` working agreements (the UI reaches the module only through the logos API), `ui/tests/README.md`.
 **Reference projects:** [`seaqt/nim-seaqt`](https://github.com/seaqt/nim-seaqt) (Qt bindings), `seaqt/nimside` (the `qobject:` DSL and plugin macros), [`arnetheduck/nora-poc`](https://github.com/arnetheduck/nora-poc) (the pilot where nimside's DSL was designed), `status-im/status-desktop` (the production consumer).
 
@@ -20,7 +20,7 @@ Muster's UI backend is 1,151 lines of C++ in a Qt plugin. It is a thin pass-thro
 | T4a: probe B, a standalone seaqt app | done | The real `Main.qml` runs in a Nim host, which starts logos-core itself and calls `muster_module` over `lp_*`. `health()` reaches the view as `ok`. No C++ of ours, no chronos worker. |
 | T4b: probe A, a Nim plugin in Basecamp | done | A Nim `.so` works in the real `ui-host`, both ways through the builder's typed replica. That only happens once the object is registered under the replica's name, which today takes an ABI hack. It cannot reach the capability token without the C++ SDK. Two small `ui-host` changes would make A clean. |
 | Gate | decided, 2026-10-14 | B, written as if Basecamp did not exist. Newest Qt and seaqt. C++ generated at build time is fine. The Basecamp UI stays, frozen. ADR-019. |
-| T1b: newest everything | next | Qt 6.11, seaqt `qt-6.11` with RemoteObjects, liblogos and logos-protocol rebuilt on it, and the QtRO check across Qt versions. |
+| T1b: newest everything | done | Qt 6.11.2 and seaqt `qt-6.11`. `liblogos_core` and `liblogos_protocol` are rebuilt on it from the runner's revisions. Every check is green again, and a 6.11 app calls `muster_module` in a 6.9.2 module process. |
 
 **For Jacek:**
 
@@ -138,7 +138,7 @@ The slices are tracked under epic `exo-607`. T1–T3 are needed whatever the hos
 | **T4a** (exo-607.5) | **Probe B.** `muster-app` loads `Main.qml` with a Nim `logos` shim (`module()`, `isViewModuleReady()`), stands up logos-core, and makes an **async** `muster_module` call from Nim. It follows nora-poc's chronos worker + ThreadChannel pattern for results. | M | T2, T3 | done |
 | **T4b** (exo-607.6) | **Probe A.** `ui-host` loads a Nim `.so`. nimside `plugingen` is extended to emit the `PluginInterface` / `LogosViewPlugin` shim, the T2 object is remoted, and the builder's typed replica reads a property and invokes a slot correctly. The capability token is forwarded from `initLogos` to `lp_*`. | L | T2, T3 | done |
 | **Gate** (exo-607.7) | Choose A or B with Jacek (Q1–Q5). Record it as an ADR in `02-implementation-plan.md`. Skip whichever probe the answer makes moot. | — | T4a or T4b | done: B, ADR-019 |
-| **T1b** (exo-607.13) | **Newest everything.** Qt 6.11 from a pinned nixpkgs, seaqt `qt-6.11` with RemoteObjects regenerated on it, nimside and seaqt-gen at their heads. `liblogos_core` and `liblogos_protocol` are rebuilt on that Qt from the revisions the builder pins. The checks so far (`hello`, `contract`, `ro`, `muster-app-view`, `nim-app-core-probe.sh`) stay green. The probe adds one check: a 6.11 app calls a module process on Logos's 6.9.2 over QtRO. | M | Gate | next |
+| **T1b** (exo-607.13) | **Newest everything.** Qt 6.11 from a pinned nixpkgs, seaqt `qt-6.11` with RemoteObjects regenerated on it, nimside and seaqt-gen at their heads. `liblogos_core` and `liblogos_protocol` are rebuilt on that Qt from the revisions the builder pins. The checks so far (`hello`, `contract`, `ro`, `muster-app-view`, `nim-app-core-probe.sh`) stay green. The probe adds one check: a 6.11 app calls a module process on Logos's 6.9.2 over QtRO. | M | Gate | done |
 | **T5** (exo-607.8) | **Port the backend logic.** All 67 slots, the autopilot, the retry timers and the audit download, calling `muster_module` through the logos-nim-sdk consumer client generated from `muster.lidl`. | M | Gate, T0, T1b | — |
 | **T6** (exo-607.9) | **Hosting integration (B).** A `muster-app` flake app that takes `--user-dir` and meets `scripts/lib/ui-build.sh`'s contract, built into `.run/runner-nim`, with `make run` / `run-fleet` able to choose it. T0 goes green on the Nim build. The Basecamp build (`ui/`) stays the catalogue's. | M | T5 | — |
 | **T7** (exo-607.10) | **Delete the C++ that has no Basecamp role.** Port the headless host and the probe harness to Nim. Add a `scripts/check-no-cpp.py` gate that exempts `ui/` (until Basecamp can take a Nim UI) and `demo/` (not the client) by name. `ui/src/*.{cpp,h}` and the `.rep` go when the `ui/` exemption ends. | S–M | T6 | — |
@@ -412,3 +412,25 @@ With both, a Nim UI plugin would call `muster_module` exactly as the T4a host do
   - **seaqt:** the `qt-6.11` branch is at `41a8f1b1` (2026-07-08). Its layout is the same as `qt-6.8`'s. It has no RemoteObjects, so T3's patches are applied to a regeneration on 6.11.
   - **nimside** (`38406061`) and **seaqt-gen** (`56485e6d`) have not moved since the T1–T3 pins. T3's four patches therefore apply to the generator as it is.
 - **What did not change.** The UI still reaches `muster_module` only through the logos API (`lp_*`). The `.rep` is still the contract's source of truth: the frozen C++ build reads it with repc, and `repContract` reads it for Nim. So the two builds cannot drift while both exist.
+
+### T1b: newest everything (exo-607.13, 2026-10-14)
+
+**The app runs on Qt 6.11.2, and its module processes stay on Logos's 6.9.2.** This is on branch `feat/seaqt-app`.
+
+- **The pins:**
+  - nixos-unstable `7fd4004d`: Qt 6.11.2, Nim 2.2.12. That Nim meets nimside's own floor (2.2.8) for the first time.
+  - nim-seaqt `qt-6.11` `41a8f1b1`.
+  - nimside and seaqt-gen, unchanged at their heads.
+  - The `logos-module-builder` pin stays. It now supplies only what runs in other processes: `logos_host`, the modules and the pure-QML design system.
+- **The two in-process Logos libraries** (`ui-nim#logos-core`, `ui-nim#logos-protocol-lib`) are built from the runner's revisions. Every Logos input under them takes `ui-nim/nix/nixpkgs-app` as its nixpkgs: nixos-unstable plus three overrides, the runner's GCC 14 and Boost 1.87 and an `-include cstring` for fmt 12. They replace attributes rather than overlay them, so only Logos's own 38 derivations build, and Qt stays the cache's. The traps are in `docs/labbook/logos-libraries-on-a-newer-nixpkgs.md`.
+- **The checks:**
+  - `checks.hello`: 3/3.
+  - `checks.contract`: 55 properties and 79 slots (the contract has grown since T2), index for index with repc 6.11.2, and 128 QML references.
+  - `checks.ro`: 9/9. The RemoteObjects bindings were regenerated on 6.11.2 by the same generator and patches, and all four patches still apply.
+  - `checks.muster-app-view`: 3/3.
+  - `scripts/nim-app-core-probe.sh`: 5/5.
+- **Across Qt versions.** In the core probe, the app process maps only `qtbase`/`qtremoteobjects` 6.11.2, and the `logos_host_qt` it starts maps only 6.9.2. This was read from `/proc/<pid>/maps` and scoped to the probe's instance id. `muster_module.health()` crosses between them over QtRO.
+- **Found on the way:**
+  - Qt 6.11's QML `Settings` refuse to open without an organization name, and then persist nothing. The host now sets `Logos` / `logos.co` / `muster`, the organization logos-standalone-app uses.
+  - Settings are not yet scoped per `--user-dir`, so two peers on one machine would share view prefs. That is for T6.
+- **The runner the probe borrows** is any `.run/runner` built on the same `logos-standalone-app` (`44f5zpbl`). This worktree symlinks another worktree's, because no rebuild was needed.

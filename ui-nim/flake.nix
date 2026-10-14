@@ -1,19 +1,62 @@
 {
-  description = "muster's Nim UI (exo-607): nim-seaqt + nimside, built against the exact Qt the Logos runner links";
+  description = "muster's Nim UI (exo-607): a standalone nim-seaqt app on the newest Qt (ADR-019)";
 
   inputs = {
-    # nixpkgs comes from the SAME logos-module-builder rev ui/flake.nix pins, so qt6 here
-    # is the very qtbase-6.9.2 store path the standalone runner, ui-host and Basecamp
-    # link. seaqt compiles against Qt's private headers and loads only on the Qt minor it
-    # was generated for or newer, and one process cannot hold two Qt copies — so the Qt
-    # must be identical, not merely compatible. Bump this together with ui/flake.nix.
+    # The app's own nixpkgs, and with it its Qt: nixos-unstable, Qt 6.11.2 (T1b, ADR-019
+    # "newest everything"). seaqt compiles against Qt's private headers and loads only on
+    # the Qt minor it was generated for or newer, and one process cannot hold two Qt
+    # copies — so EVERYTHING the app loads in-process is built here on this Qt, the two
+    # Logos libraries (below) included. Pin by commit.
+    # Pinned in nix/nixpkgs-app (nixos-unstable 7fd4004d + an overlay for the Logos tree).
+    nixpkgs.url = "path:./nix/nixpkgs-app";
+
+    # The Logos runner's builder. It is no longer the app's Qt: the app takes from it only
+    # what runs in OTHER processes — logos_host, the modules and the (pure-QML) design
+    # system — which keep Logos's Qt 6.9.2 and reach the app over QtRemoteObjects
+    # (`QtRO 2.0`, QDataStream Qt_6_2, in 6.9.2 and 6.11.2 alike). Bump with ui/flake.nix.
     logos-module-builder.url = "github:logos-co/logos-module-builder/4717b9af35d88a20a960067ee55bc5417af5a1f0";
 
-    # nim-seaqt's qt-6.8 branch: generated for Qt 6.8, so it runs on 6.9.2 (qt-6.11 needs
-    # Qt >= 6.11 and cannot load in a Logos process today). The rev Status Desktop vendors.
+    # liblogos (liblogos_core: start the core, load modules, hand out tokens), rebuilt on
+    # the app's Qt. Same rev as the runner's (logos-standalone-app's logos-liblogos); its
+    # flake.lock resolves every input to the runner's revs, checked 2026-10-14. Every
+    # Logos input under it takes nixpkgs from its own logos-nix, so that nixpkgs is
+    # redirected at each one (generated from the lock; the capability module's build
+    # tooling is left alone, as nothing of it links into liblogos_core).
+    logos-liblogos = {
+      url = "github:logos-co/logos-liblogos/64de644ec6c8fcad1eee3546255002f4ff929c21";
+      inputs.default-container.inputs.logos-container.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.default-container.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.default-module-loader.inputs.logos-container.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.default-module-loader.inputs.logos-module.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.default-module-loader.inputs.logos-module-loader.inputs.logos-container.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.default-module-loader.inputs.logos-module-loader.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.default-module-loader.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-container.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-cpp-sdk.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-module.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-module-loader.inputs.logos-container.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-module-loader.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-package-manager.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-package-manager.inputs.logos-package.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-package-manager.inputs.nix-bundle-appimage.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-package-manager.inputs.nix-bundle-appimage.inputs.nix-bundle-dir.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-package-manager.inputs.nix-bundle-dir.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-protocol.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.logos-qt-sdk.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+      inputs.process-stats.inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+    };
+    # logos-protocol's liblogos_protocol: the lp_* consumer ABI. The SAME rev the modules
+    # embed (logos-module-builder's logos-protocol), rebuilt on the app's Qt.
+    logos-protocol = {
+      url = "github:logos-co/logos-protocol/6401e30ae1cfabac77285ee8e7a82c2cef3858f1";
+      inputs.logos-nix.inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    # nim-seaqt's qt-6.11 branch (head 2026-07-08), generated for Qt 6.11: the app's Qt.
     # The branches are rebased upstream — pin by commit, never by branch.
     nim-seaqt = {
-      url = "github:seaqt/nim-seaqt/7d40abd7b493036b4ede5b111fc4260237504796";
+      url = "github:seaqt/nim-seaqt/41a8f1b16c8fc6afc86de4559bb819980fb07d72";
       flake = false;
     };
     # nimside: the qobject: DSL (compile-time QMetaObject, the moc replacement) and the
@@ -28,7 +71,8 @@
       url = "github:corpetty/logos-nim-sdk/6077eb70a8709dccf3d60601121dbf66e794b89c";
       flake = false;
     };
-    # T3: seaqt-gen, the generator that produced nim-seaqt qt-6.8@7d40abd7. nix/seaqt-ro.nix
+    # T3: seaqt-gen, the generator that produced nim-seaqt qt-6.8@7d40abd7 and
+    # qt-6.11@41a8f1b1 (master has not moved since). nix/seaqt-ro.nix
     # runs it at build time (with nix/seaqt-gen-patches) to add QtRemoteObjects.
     seaqt-gen = {
       url = "github:seaqt/seaqt-gen/56485e6d0c3243f9511b34d65c215afead60865f";
@@ -40,11 +84,12 @@
     nixpkgs-clang14.url = "github:NixOS/nixpkgs/b134951a4c9f3c995fd7be05f3243f8ecd65d798";
   };
 
-  outputs = { self, logos-module-builder, nim-seaqt, nimside, logos-nim-sdk, seaqt-gen, nixpkgs-clang14 }:
+  outputs = { self, nixpkgs, logos-module-builder, logos-liblogos, logos-protocol, nim-seaqt, nimside, logos-nim-sdk, seaqt-gen, nixpkgs-clang14 }:
     let
-      nixpkgs = logos-module-builder.inputs.nixpkgs;
       systems = [ "x86_64-linux" "aarch64-linux" ];
-      forAll = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs { inherit system; }));
+      # The app itself builds on plain nixos-unstable (its default compiler, Boost, …). Only
+      # the Logos tree takes nix/nixpkgs-app's overrides. Qt is the same store path in both.
+      forAll = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs.inputs.upstream { inherit system; }));
       seaqtApp = pkgs: pkgs.callPackage ./nix/seaqt-app.nix { inherit nim-seaqt nimside; };
       # nim-seaqt + QtRemoteObjects, generated at build time (T3).
       seaqtRO = pkgs: import ./nix/seaqt-ro.nix {
@@ -54,13 +99,14 @@
       # The view contract and the QML that uses it, shared with the C++ build (ui/).
       viewContract = ../ui/src/muster_ui.rep;
       viewQml = ../ui/src/qml;
-      # T4a (option B): the Logos host pieces a Nim app links, taken from the builder
-      # rev above so they are the runner's own. logos-standalone-app carries
-      # liblogos_core (the core's C API), logos_host (the per-module process) and the
-      # design system (lib/Logos). logos-protocol-lib carries the lp_* consumer ABI the
-      # modules embed.
-      logosApp = system: logos-module-builder.inputs.logos-standalone-app.packages.${system}.default;
-      logosProtocol = system: logos-module-builder.inputs.logos-protocol.packages.${system}.logos-protocol-lib;
+      # Option B's Logos pieces, split by process (T1b, ADR-019).
+      #   In the app's process, on the app's Qt: liblogos_core (the core's C API) and
+      #   liblogos_protocol (the lp_* consumer ABI), rebuilt from the runner's revs.
+      #   In processes of their own, on Logos's Qt: logos_host and the design system
+      #   (pure QML), straight from the runner's logos-standalone-app.
+      logosRunner = system: logos-module-builder.inputs.logos-standalone-app.packages.${system}.default;
+      logosCore = system: logos-liblogos.packages.${system}.default;
+      logosProtocol = system: logos-protocol.packages.${system}.logos-protocol-lib;
     in {
       # A builder for seaqt apps, for the later slices (T2 onward): seaqtApp pkgs { pname; src; main; }
       lib.seaqtApp = seaqtApp;
@@ -79,17 +125,18 @@
         # T4a: muster's real QML in a Nim host (option B). `--self-test` loads the view
         # against stub Impls; `--self-test-core --modules <dir> --user-dir <dir>` also
         # starts logos-core and calls muster_module (scripts/nim-app-core-probe.sh).
-        muster-app = let app = logosApp pkgs.system; lp = logosProtocol pkgs.system; in seaqtApp pkgs {
+        muster-app = let runner = logosRunner pkgs.system; core = logosCore pkgs.system; lp = logosProtocol pkgs.system; in seaqtApp pkgs {
           pname = "muster-app";
           src = ./.;
           main = "app/muster_app.nim";
           nimFlags = [
             "-d:musterRep=${viewContract}" "-d:musterQml=${viewQml}"
-            "-d:logosQmlImports=${app}/lib" "--path:${logos-nim-sdk}/src"
-            "--passL:-L${app}/lib -llogos_core -Wl,-rpath,${app}/lib"
+            "-d:logosQmlImports=${runner}/lib" "--path:${logos-nim-sdk}/src"
+            "--passL:-L${core}/lib -llogos_core -Wl,-rpath,${core}/lib"
             "--passL:-L${lp}/lib -llogos_protocol -Wl,-rpath,${lp}/lib"
           ];
-          extraAttrs.qtWrapperArgs = [ "--set-default" "LOGOS_HOST_PATH" "${app}/bin/logos_host" ];
+          # The runner's logos_host: the module processes stay on Logos's Qt.
+          extraAttrs.qtWrapperArgs = [ "--set-default" "LOGOS_HOST_PATH" "${runner}/bin/logos_host" ];
         };
         # T3: nim-seaqt with QtRemoteObjects, and its proof (checks.ro): a nimside source
         # remoted over local:, acquired as a dynamic replica, driven both ways.
@@ -101,6 +148,9 @@
           seaqt = seaqtRO pkgs;
           extraBuildInputs = [ pkgs.qt6.qtremoteobjects ];
         };
+        # T1b: the two Logos libraries the app loads in-process, on the app's Qt.
+        logos-core = logosCore pkgs.system;
+        logos-protocol-lib = logosProtocol pkgs.system;
         default = hello;
       });
 
