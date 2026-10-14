@@ -1,8 +1,8 @@
 # Install Muster from its catalogue
 
-**As of 2026-10-08 (exo-dcc.3).** For anyone with Logos Basecamp who wants to try Muster. You add Muster's catalogue once, then install Muster like any other app; its dependencies come from the official Logos catalogue. Every label below was read on screen in Basecamp 0.3.2 on 2026-10-08, from a catalogue served locally (`docs/design/catalogue-install.md`, §7). The code wins over this page.
+**As of 2026-10-08 (exo-dcc.3); versions updated for Muster 0.3.0 on 2026-10-14.** For anyone with Logos Basecamp who wants to try Muster. You add Muster's catalogue once, then install Muster like any other app; its dependencies come from the official Logos catalogue. Every label below was read on screen in Basecamp 0.3.2 on 2026-10-08, from a catalogue served locally (`docs/design/catalogue-install.md`, §7). The code wins over this page.
 
-> **Before the first release.** Muster appears in the catalogue once `muster-v0.2.0` is published and `catalog/index.json` is on `main`. Until then, adding the URL succeeds but lists nothing.
+> **No Basecamp yet?** The [latest release](https://github.com/corpetty/muster/releases/latest) also carries an AppImage: Basecamp 0.3.2 with Muster and its dependencies already installed. Download it, `chmod +x`, run it and click **M**; nothing on this page is needed. This page is for adding Muster to the Basecamp you already run.
 
 ## What you need
 
@@ -42,8 +42,10 @@ The link `basecamp://app/muster_ui` does the same thing once the catalogue is ad
 
 The dialog lists:
 
-- **Required (10):** Muster 0.2.0 and Muster Module 0.2.0 from the Muster catalogue. From Logos Official: Delivery Module 0.3.2, LEZ Core Module 0.5.0, keystore_module 0.1.0, eth_rpc_module 0.1.0, EVM Fee Estimator 0.1.0, EVM Transaction Sender 0.1.0, LEZ RLN Module 4.2.1 and RLN Module 0.10.0.
-- **Optional, all pre-ticked:** libp2p Networking 1.1.0, Module State 0.1.0 (already installed: Basecamp ships it), Verified Proxy Module 0.1.3, **Monero Node (local)** 0.1.1, and Monero Wallet Backend 0.1.1. The Monero Wallet Backend brings `monero_node_module` and `monero_wallet_core_module` with it.
+- **Required (10):** Muster 0.3.0 and Muster Module 0.3.0 from the Muster catalogue. From Logos Official: Delivery Module 0.3.2, LEZ Core Module 0.5.1, keystore_module 0.1.0, eth_rpc_module 0.1.0, EVM Fee Estimator 0.1.0, EVM Transaction Sender 0.1.0, LEZ RLN Module 4.2.1 and RLN Module 0.10.0.
+- **Optional, all pre-ticked:** libp2p Networking 1.1.0, Module State 0.1.0 (already installed: Basecamp ships it), Verified Proxy Module 0.1.4, **Monero Node (local)** 0.1.1, and Monero Wallet Backend 0.1.1. The Monero Wallet Backend brings `monero_node_module` and `monero_wallet_core_module` with it.
+
+The dialog offers the newest version each catalogue holds; the numbers above are as of 2026-10-14.
 
 ### What to untick
 
@@ -56,7 +58,7 @@ Keep the rest:
 
 ## 3. Open Muster
 
-Press **Launch**, or later click Muster's icon in the sidebar. Home reads **Nothing waiting on you** and **Set up an Ethereum account**. Your account and chains are set up from there: [`basecamp-fresh-install.md`](basecamp-fresh-install.md), §1 on.
+Press **Launch**, or later click Muster's icon in the sidebar. **Needs you** shows **Getting started**: share your contact link, start or join a room, name someone, and (optional) set up an Ethereum account. Your account and chains are set up from there: [`basecamp-fresh-install.md`](basecamp-fresh-install.md), §1 on.
 
 Installing starts nothing. Opening Muster starts the modules it declares.
 
