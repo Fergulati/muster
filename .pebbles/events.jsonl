@@ -2508,3 +2508,4 @@
 {"type":"close","timestamp":"2026-10-13T16:39:46.151771594Z","issue_id":"exo-720.15.15","payload":{}}
 {"type":"close","timestamp":"2026-10-13T17:13:50.762919764Z","issue_id":"exo-720.15","payload":{}}
 {"type":"comment","timestamp":"2026-10-13T17:13:50.999099228Z","issue_id":"exo-720.15","payload":{"body":"Runner built from e61c3a1 (merge of #292) on bugger; scripts/ui-parity.sh MUSTER_FLEET=local 11/11 green (split under nix shell nixpkgs#foundry), no QML errors in the logs. On-screen A6 in docs/runbooks/ui-redesign-review.md remains for the operator."}}
+{"type":"comment","timestamp":"2026-10-14T17:58:29.377782598Z","issue_id":"exo-720","payload":{"body":"2026-10-14: operator review (docs/runbooks/ui-redesign-review.md Parts A1–A6 and B) passed on main after #292, every step as expected. Only exo-720.13 (client-tour rewrite) remains in the epic."}}
