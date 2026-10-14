@@ -2,6 +2,8 @@
 
 **For Corey, at a Linux x86_64 machine with a display. Written 2026-10-11 against `main` after PR #277.** The redesign is merged (`docs/design/ui-modernization.md`). Everything below is what no script can judge: how it looks and feels, and how it behaves inside Basecamp 0.3.2. Follow the parts in order. Each step says what to do, then **✓ Expect** what you should see. Write down the number of any step where you saw something else.
 
+**Done 2026-10-14.** Corey ran Parts A (A1–A6) and B on `main` after #292: every step matched its ✓ Expect. Before that, a runner built from the same commit passed `scripts/ui-parity.sh` 11/11 (`MUSTER_FLEET=local`). Keep this runbook for the next review of the UI.
+
 Budget about two hours, most of it builds. Part A is the most important; Part B can wait for another sitting.
 
 ## Already checked (nothing for you to do)
