@@ -1,12 +1,12 @@
 # Runbook: try everything — two instances, one machine
 
-**As of 2026-09-30 (main after #195); Part 6i, the XMR request, added 2026-10-09.** Two instances on one machine, driven by you,
+**As of 2026-10-14 (main after #293): rewritten for the redesigned UI (epic exo-720).** Part 6i, the XMR request, added 2026-10-09. Two instances on one machine, driven by you,
 through everything the client can do today. Two scripts do all the setup:
 `scripts/try-infra.sh` brings up every local chain the tour uses, already funded, and
 `scripts/try-peer.sh` launches each peer seeded for it. After that, every part is
 clicking.
 
-Every label, command and setting below was read from the code on 2026-09-30. The code
+Every label, command and setting below was read from the code on 2026-10-14. The code
 wins over this page. If a label differs, note it: that is a finding too. **Known rough
 edges** are listed where you will meet them, so you can tell a known issue from a new one.
 Steps nobody has yet done on screen are marked **first on screen**; what you see there is
@@ -25,13 +25,22 @@ the finding.
 | [6i](#6i-request-xmr) | Request a payment in XMR | Basecamp 0.3.2 with Monero Wallet; a stagenet wallet | 30 min |
 | [7](#7-the-lez-multisig-on-the-public-testnet) | The LEZ multisig on the public testnet | internet; ~40 s blocks | 20 min |
 | [8](#8-lez-frost) | LEZ FROST | internet | 10 min |
-| [9](#9-wallet-and-send-λ) | Wallet and Send λ | — | 5 min |
-| [10](#10-the-walkthrough-and-the-atlas) | The walkthrough and the atlas | a browser | 5 min |
+| [9](#9-the-wallet) | The Wallet: balances and Send on LEZ | — | 5 min |
+| [10](#10-learn-and-the-atlas) | Learn and the atlas | a browser | 5 min |
 | [11](#11-preview-the-ui-in-a-nim-host) | Preview: the UI in a Nim host (no C++) | — | 5 min |
 
 Every action here has a page in the atlas, <https://corpetty.github.io/muster/atlas/>
 (**Actions**): what it signs, who learns what, what it refuses, and its tests. Each
 built action there links back to its part of this tour.
+
+**Where things are.** A sidebar on the left: **Needs you**, your **Rooms**, **Join with a
+room code**, and at the bottom **Wallet**, **Contacts**, **Learn** and **Settings**. In a
+room, **+** beside the message bar proposes something; a proposal is a compact card,
+and its **Details** button opens the rest (the status path, **How this account works**,
+**What this needs**, the verify box, **How do I know this?**, **Download audit trail**).
+Everything about the room itself is in the **room details** drawer, opened by the panel
+icon at the right of the room header: tabs **People**, **Accounts**, **History** and
+**Privacy**. A card's **Who sees this?** opens **Privacy** on that one proposal.
 
 Older runbooks cover what this one skips. [`../manual-test-runbook.md`](../manual-test-runbook.md)
 covers multi-room, the dashboard and Settings in depth.
@@ -123,9 +132,12 @@ first minted, and a saved Setting beats the seeding.
 - Alice is anvil account 0 and Bob account 1: each is a Safe owner, and each Bitcoin key
   pays from its funded payer address. Each already has the other, and Carol, as named
   contacts.
-- **Settings** shows **RPC endpoint · now: http://127.0.0.1:8555** and **Bitcoin node ·
-  now: http://muster:muster@127.0.0.1:18453**.
-- The nav bar reads **Home · Room · Account · Walkthrough · Settings · Contacts · Send λ**.
+- **Settings → Advanced** shows **RPC endpoint · now: http://127.0.0.1:8555** and
+  **Bitcoin node · now: http://muster:muster@127.0.0.1:18453**. (**Basic** shows only your
+  contact link, the mixnet and your Ethereum accounts.)
+- The sidebar reads **Muster**, **Jump to… Ctrl K**, **Needs you**, **Rooms**, **Join with
+  a room code**, and at the bottom **Wallet**, **Contacts**, **Learn**, **Settings** and
+  **You**.
 
 `scripts/try-peer.sh carol --fresh` in a third terminal adds a third member. Nothing in
 the tour needs her, but a split among three is more interesting, and settling up among
@@ -134,7 +146,7 @@ three nets more.
 Each peer's log is `.run/try/<peer>.log`. `make run-fleet PEER=alice` still works, but it
 points at port 8545 and at no Bitcoin node; this tour assumes `try-peer.sh`.
 
-**Saving in Settings.** One **Save** stores every value on the page, and from then on
+**Saving in Settings.** One **Save** (under **Advanced**) stores every value on the page, and from then on
 the saved values beat what `try-peer.sh` passes in. `--fresh` resets that.
 
 ---
@@ -154,62 +166,74 @@ None of it is there now.
 
 **Steps**
 
-1. **Alice:** **Start something** → **Just talk**. Under *Who's doing it with you?* pick
-   the **Bob** chip, then **Open the room with them**.
-2. **Alice:** look at the room header. It reads `Room · /muster/1/muster.room.<16 hex>/proto`.
+1. **Alice:** **Rooms +** (or **Start something** on Needs you) → **Just talk**. Under
+   *Who's doing it with you?* pick the **Bob** chip, then **Open the room with them**.
+2. **Alice:** the room opens and is called **Just you** until Bob is in. Click **Invite**
+   in the header: under **Room code** it shows `/muster/1/muster.room.<16 hex>/proto`.
    ✓ Expect: random bits only — no "talk", no piece of Bob's id, no time.
-3. **Alice:** go **Home**. ✓ Expect: the row is titled **talk · with** followed by the
-   first 8 hex of Bob's id and "…". That title lives in this session only; the topic
-   names nothing.
-4. **Bob:** on **Home**, under **Invitations**, expect **Alice invited you to a room ·
-   talk**. Click **Join**.
-5. **Both:** watch the right-hand panel. Bob asks automatically. Alice admits him
-   automatically, because she named him in step 1.
-   ✓ Expect: both show **2 in the room**, typically within 15–20 s. Bob's Home title is
-   **talk · from Alice**.
+3. **Bob:** on **Needs you**, under **Invitations**, expect **Alice invited you to a room**
+   with *talk* under it. Click **Join**.
+   ✓ Expect **Opening the room…** for a moment (longer the first time, while the node
+   connects), then the room, named **Alice**.
+4. **Both:** the invite admits Bob, so he never asks (exo-dcc.29).
+   ✓ Expect within a few seconds: the header shows two faces and **2**, the line under
+   the message bar reads **end-to-end · 2 can read · …**, and Alice's room is now named
+   **Bob**. Room details → **People** lists both, under **In the room 2**.
+
+Names follow the people: a room nobody named is called after who is in it ("Bob", "Bob
+and Carol", "Bob and 1 other" while someone is still unnamed). A room for a decision, a
+payment or a split is named for it ("A payment with Bob"), and clicking the room's title
+renames it on your side. Names are kept across a relaunch.
 
 What happens underneath:
 
-- Bob's first ask may find no room join key yet. It then asks the room to announce one,
-  and the next retry, 3 s later, sends the sealed request.
-- Alice's key grants are sealed whole to each member.
-- The store node sees *that* someone asked, and that an admit re-keyed two members.
-  It never sees who.
+- Alice's invite is sealed to Bob's chat id and admits him before it is sent, so the
+  room's key grant is in the store before he looks for it.
+- Key grants are sealed whole to each member.
+- The store node sees *that* an admit re-keyed two members. It never sees who.
 - `module/tests/store_node_view_test.nim` proves this frame by frame.
 
-**Also try the manual path.**
+**Also try the ask-and-admit path.** Someone who joins with the room code, rather than an
+invite, asks to join, and a member decides.
 
-1. **Alice:** **Start something** → **Just talk** → **Bob** → **Open the room with
-   them**.
-2. **Alice:** go **Home** at once, then back into the new room by its row. Re-entering
-   clears the auto-admit.
-3. **Bob:** **Join** the new invitation.
-4. **Alice:** under **Waiting to join**, Bob appears by alias. His request names his
-   encryption identity and nothing else, so nothing says whether he holds an account
-   (exo-a87). Click **Admit**.
-5. If Bob's ask ever stalls, **Ask to join this room** (Bob's scope panel) re-sends it.
+1. **Alice:** a second room, so Carol stays out of the one the tour uses: **Rooms +** →
+   **Just talk**, nobody under *Who's doing it with you?*, **Open the room with them**.
+   Then **Invite** → **Copy** the room code.
+2. **Carol** (`scripts/try-peer.sh carol --fresh` in a third terminal): on **Needs you**,
+   paste it beside *Have a room code?* → **Join**.
+3. **Alice:** a notice in the thread, **Carol asks to join**, with **Admit** and **Not
+   now** (also under room details → **People**). Her request names her encryption
+   identity and nothing else, so nothing says whether she holds an account (exo-a87).
+   Click **Admit**.
+4. ✓ Expect Carol's room details → **People** to say *Asked. Someone here can let you
+   in.* until Alice admits her; then the thread from that point on, never before it. Had
+   Carol not been in Alice's contacts, Alice's room would ask **Someone new is here. Who is
+   it?**: a name typed there and saved replaces her id everywhere on Alice's side.
 
-While Bob's ask waits for the room's join key, his scope panel says so: *Waiting for
-someone in the room to announce its join key…*. Once it's sealed and sent, the panel reads
-*Your ask is sealed and sent*.
+While an ask waits for the room's join key, the asker's **People** tab says *Waiting for
+someone in the room to come online. Asking again in a moment.*
 
-Use the first room for the rest of the tour.
+**Contact links.** Instead of picking a contact, anyone can share **Settings → Your
+contact link** (or **Getting started → Share** on a fresh install): `muster:contact/<chat
+id>?name=…`, with a QR code. Paste one under *Who's doing it with you?*, into
+**Contacts → Add someone**, or into a room's **Invite → Invite someone**.
 
-**Known rough edges**
-- Titles are session-only; after a restart, Home and the header show the topic.
-- Auto-admit works only while Alice stays in the room she just composed. After she
-  re-opens it from Home, admit by hand.
+Use the first room, Alice and Bob's, for the rest of the tour.
 
 ---
 
 ## 2. Chat and who said it
 
-In the shared room, type in **Say something** and press **Send**, from each side.
+In the shared room, type in the message bar (**Message Bob**) and press **Enter**, from
+each side.
 
 **✓ Expect**
-- Your own messages are labelled **you**.
-- The other side's messages carry the contact alias, then the timestamp (raw unix
-  seconds).
+- Your line shows at once with **Sending…** under it, which goes when it lands.
+- Your own messages are labelled **you**, the other side's by contact name.
+- Times read **just now**, **4 min ago**; hover one for the full time. A divider names
+  the day, and several lines from one person in a row sit under one name.
+- When you are elsewhere (say **Settings**) and a message arrives, the room's row in the
+  sidebar turns bold with a dot.
 
 What changed (exo-f76). Messages, declines, material shares, account disclosures and
 FROST joins carry their author's signature. An event whose signature doesn't verify is
@@ -226,31 +250,40 @@ record anyone can check.
 
 1. **Alice:** click **+** → **Statement** → *Endorse with* **Threshold**. Type something in
    **what the room ratifies…**, then **Propose**.
-   - The card reads **Proposed a statement**, headed **Statement · 2 of 2**, with the
-     status rail proposed · collecting · ready · final.
-2. **Open "What this needs".**
+   - The compact card reads **Proposed a statement**, headed **Statement · 2 of 2**,
+     with a pill in words: **Needs you** where you can approve, **Waiting for 1 more**
+     where you have.
+   - Under the slots: **✓ Checked on your device · … traced to where it came from**,
+     with **Why?** (it opens **Learn** at *Propose the transaction*).
+   - A bar under the room header names the live proposal, with **Review**.
+2. **Details → open "What this needs".** **Details** also shows the status path
+   proposed · collecting · ready · final.
    ✓ Expect:
    - **✓ you have everything this needs**, from one need: **authority: roster-member**.
    - *Who will see what*: the store node sees only **timing, topic**.
    - The agreement line ends with **final in the room**.
-3. **Alice: Approve.** ✓ Expect: the slots show **1 of 2**, the first slot carries **Y**,
-   and a line under them reads **by you**. **Approve** is gone from Alice's card: the
+3. **Alice: Approve.** ✓ Expect: the button gives way to **Sending your approval…** at
+   once; then the slots show **1 of 2**, the first slot is Alice's face, and a line under
+   them reads **by you**. **Approve** is gone from Alice's card: the
    module proves from the log and her keys that she approved. On Bob's side the same line
-   reads **by Alice**.
+   reads **by Alice**, and Bob's window shows a toast **Alice approved**.
 4. **Bob: Approve.** ✓ Expect **2 of 2**, **by Alice, you** on Bob's side, then the ready
    box: **✓ Endorsed — a signed group decision. Nothing settles on-chain.** A member
    counts once however many times they sign; `distinct_signer_test` proves it.
-5. **Room history** (right column) reads *Approved by Alice*, *Approved by you*. Open **Who can
-   see what** and try **Show per-action rows**: each row is one field reaching one
-   observer, and the store node is on every one.
+5. Room details → **History** reads *Approved by Alice*, *Approved by you*. The
+   **Privacy** tab is who can see what: try **Show per-action rows**: each row is one
+   field reaching one observer, and the store node is on every one. A card's **Who sees
+   this?** opens **Privacy** on that proposal alone.
 6. Propose a second statement. **Bob: Deny.**
-   ✓ Expect the card to show **1 declined: Bob** (on Bob's side, **you**). The history line
-   reads *Declined by Bob — chose not to take part — the threshold is unchanged*.
+   ✓ Expect the pill **Declined** on both sides and *Declined: it can no longer reach 2 of
+   2. 1 declined: Bob* (on Bob's side, **you**). A decline is final: Bob can't approve
+   it afterwards, and with only two signers it can't reach 2 of 2. The history line reads
+   *Declined by Bob — chose not to take part — the threshold is unchanged*.
 7. **Governance.** In *Endorse with*, click **＋ Propose unanimous** and approve it on both
    sides. ✓ Expect a **Unanimous** button to appear. The room admitted a new policy by
    vote. (The payment and split kinds need no such vote: each is usable from the start.)
 
-**The audit trail.** On any card, click **Download audit trail**. ✓ Expect: *Saved …
+**The audit trail.** On any card, **Details → Download audit trail**. ✓ Expect: *Saved …
 (verifies on its own) and a readable report beside it*, written to `.run/try/<peer>-audit`.
 Check it with nothing but the file. Build the verifier once:
 
@@ -271,7 +304,7 @@ and the verifier refuses it (exit 1).
 
 The Safe is already deployed and funded (Part 0).
 
-1. **Alice:** in **Accounts** (right column), click **Disclose the local test Safe**.
+1. **Alice:** room details → **Accounts** → **Disclose the local test Safe**.
    ✓ Expect the row **Local test Safe (anvil) · 2 of 3**, then `evm.safe · eip155:31337 · …`,
    **the chain agrees**, and the whole address with **Copy address**.
 2. **Bob:** within 10 s the Safe appears under Accounts too. Other members' accounts
@@ -281,11 +314,11 @@ The Safe is already deployed and funded (Part 0).
    ✓ Expect the context box: *you act as … ✓ a Safe owner — your approval counts*.
 4. Enter recipient `0x90F79bf6EB2c4f870365E785982E1f101E93b906` (anvil account 3) and
    amount `1000000000000000` (wei). Click **Propose**.
-5. **On the card, open ▸ How this account works.**
+5. **On the card, Details → ▸ How this account works.**
    ✓ Expect ten rows: *Where the rule lives · What you sign · Only valid on · Ordering ·
    Expiry · Collecting · What the chain learns · Approving costs you · Changing signers ·
    Ways around the rule*.
-6. **Open "What this needs".**
+6. **Open "What this needs"** (also under Details).
    ✓ Expect the needs:
    - `environment: eip155:31337`
    - `infra: rpc`
@@ -300,9 +333,11 @@ The Safe is already deployed and funded (Part 0).
 
    ✓ Expect *anyone reading the chain* to see **to, value, data, operation, nonce, gas,
    payer, policy, signers**, and *your RPC provider* the **signed-tx**.
-7. **Approve on both.** ✓ Expect **✓ Ready — the approvals are collected.** and
-   **Settle on-chain**.
-8. **Settle on-chain.** ✓ Expect **✓ Settled on-chain (final)**. Confirm with the chain
+7. **Approve on both.** ✓ Expect the pill **Ready to settle**, and under the card
+   **✓ Ready — the approvals are collected.** with **Settle on-chain**.
+8. **Settle on-chain.** ✓ Expect the pill **Sent to the chain**, then **Settled**, and
+   **✓ Settled on-chain (final)** with the transaction hash, which you can select or
+   copy. Confirm with the chain
    itself:
 
    ```bash
@@ -312,7 +347,7 @@ The Safe is already deployed and funded (Part 0).
    ✓ Expect `10000001000000000000000`: anvil's 10000 ETH plus your 0.001, in wei.
 
 **Optional:** *Endorse with* **Attest** (EIP-191) acts from the same Safe.
-✓ Expect *✓ a recognized attester (a Safe owner)*.
+✓ Expect *✓ the room recognizes this account (a Safe owner) — your approval counts*.
 
 The history reads *Submitted on-chain — the Safe execTransaction was sent through your
 RPC*, then *Settled on-chain — final — the payment landed*.
@@ -327,7 +362,7 @@ Two ways to hold Bitcoin together:
   muster.
 - **5b**, a FROST key made by a ceremony, whose spend settles as one 64-byte signature.
 
-Both peers already point at the node (Settings → **Bitcoin node**). A payment confirms
+Both peers already point at the node (**Settings → Advanced → Bitcoin node**). A payment confirms
 within about 10 s, because the miner is running.
 
 For a recipient, take a fresh address from the node's miner wallet:
@@ -344,8 +379,8 @@ scripts/try-infra.sh btc -rpcwallet=miner getnewaddress
    grep TRY_KEY_ .run/try/env
    ```
 
-   Alice's and Bob's are also in their own **Settings → YOUR BITCOIN KEY**.
-2. **Alice:** **Accounts → Bitcoin multisig**.
+   Alice's and Bob's are also in their own **Settings → Advanced → Your Bitcoin key**.
+2. **Alice:** room details → **Accounts** → **Bitcoin multisig**.
    - Pick **P2WSH**.
    - Set **k** `2`, network `regtest`.
    - Paste the three keys, comma-separated, then **Disclose this Bitcoin multisig**.
@@ -388,7 +423,7 @@ Or skip Carol and have **Bob: Approve**: any two of the three settle it.
 ### 5b. A FROST key
 
 **The ceremony**
-1. **Alice:** in **Accounts → FROST key ceremony (Bitcoin taproot)**, fill in:
+1. **Alice:** in room details → **Accounts** → **FROST key ceremony**, fill in:
    - name `vault`
    - **t** `2`, **n** `2`
    - network `regtest`
@@ -397,7 +432,7 @@ Or skip Carol and have **Bob: Approve**: any two of the three settle it.
 2. **Bob:** the ceremony row appears (`vault · 2 of 2 · 1 joined · …`). Click **Join**.
 3. Watch the row advance through its steps, driven by each instance's 1 s tick.
    ✓ Expect a **FROST 2 of 2** account (`btc.frost-bip445 · bip122:0f9188f1… · bcrt1p…`).
-   If it doesn't show, go Home and click the room row.
+   If it doesn't show, open another room or **Needs you** and come back.
 
 **Fund it.** Click **Copy address** on the FROST account. Then:
 
@@ -410,7 +445,7 @@ scripts/try-infra.sh btc -rpcwallet=miner sendtoaddress <paste the FROST address
    account under *From*.
 2. Recipient: a fresh miner address, as above.
 3. **amount (sat)** `40000000`, **fee (sat/vB)** `2`, then **Propose**.
-4. On the card, ✓ expect **round 1 of 2**.
+4. On the card, ✓ expect the pill **Needs you** and, in Details, **round 1 of 2**.
    - **Open "What this needs"**: expect `environment: bip122:0f9188f13cb7b2c71f2a335e3a4fc328`,
      `infra: bitcoind-rpc` and `authority: frost-share`. Touches name each coin spent as
      `utxo:<txid>:<vout>`.
@@ -439,7 +474,7 @@ that the address is theirs, and then each person pays their own share from their
 wallet. The one who fronted it confirms each payment from their own read of the chain.
 Nothing on the chain says who was at dinner.
 
-**Where it starts.** In a room, **+** → **Split**. A new room can start as one too:
+**Where it starts.** In a room, **+** → **Split a bill**. A new room can start as one too:
 **Start something** → **Split a bill**. The row under the total says where it settles,
 **Settles on**:
 
@@ -458,7 +493,7 @@ before a payment shows **✓ received** and the report waits until you come back
 
 ### 6a. A bill in ETH
 
-1. **Alice:** **+** → **Split** → *Settles on* **Split (Ethereum)**.
+1. **Alice:** **+** → **Split a bill** → *Settles on* **Split (Ethereum)**.
    - **total (ETH)** `0.02`; **what for (only the room sees this)** `dinner`.
    - Under *Who owes you a share — tap to leave someone out:*, Bob's chip is in.
    - **✓ I'm in it too** is on.
@@ -466,11 +501,13 @@ before a payment shows **✓ received** and the report waits until you come back
      absorbs any rounding). They pay from their own wallet — the payment is public on
      the chain.*
    - **Propose.**
-2. ✓ Expect the card **Proposed a split**, headed **Split · 2 of 2**: every party must
-   agree, and the slots already show one, because proposing was Alice's own agreement.
+2. ✓ Expect the card **Proposed a split**, headed **Split · 2 of 2**, with the pill
+   **Waiting for Bob**: every party must agree, and the slots already show one, because
+   proposing was Alice's own agreement.
    Bob's row reads **to agree**, and Alice's line ends *Paid to 0xf39f…*, her own
    address.
-3. **Bob:** **Home** reads **1 waiting on you**, with a row **Needs your agreement**. In the
+3. **Bob:** **Needs you** reads **1 waiting on you**, with a row **Needs your agreement**;
+   the sidebar counts it too. In the
    room, his card reads *Your share: 0.01 ETH → 0xf39f…, from your own wallet. Muster
    builds the payment from this split — nothing to type, and nothing else can be sent.*
    - **Open "What this needs"**: the payer's needs are marked *(each person who pays
@@ -478,8 +515,9 @@ before a payment shows **✓ received** and the report waits until you come back
    - **Agree to my share.** ✓ Expect *✓ Agreed — each person now pays their own share.*
 4. **Bob:** **Pay my share — 0.01 ETH**.
    ✓ Expect *Sent 0.01 ETH from your wallet (…) — it shows as paid once it settles.*
-   Bob's row moves **paying…** → **paid (…) — Alice has not seen it yet** →
-   **✓ received**. Alice clicks nothing: her client confirms from her own RPC read.
+   Bob's row moves **paying…** → **paid — waiting for Alice to see it** →
+   **✓ received**, and the pill **Paid**. Alice clicks nothing: her client confirms
+   from her own RPC read, and she gets a toast **Bob's payment arrived**.
 5. ✓ Expect *✓ Settled — every share confirmed by who it was owed to.* on both.
 
 **Mark received** on the creditor's card is for money that arrived outside muster: it
@@ -493,7 +531,7 @@ The tour's anvil has **MTD**, 6 decimals, 1000 each. Its address is `TRY_TOKEN`:
 grep TRY_TOKEN .run/try/env
 ```
 
-1. **Alice:** **+** → **Split** → **Split (Ethereum)**. Paste the token address into
+1. **Alice:** **+** → **Split a bill** → **Split (Ethereum)**. Paste the token address into
    **pay in a token instead of ETH: its address (0x…), or leave empty**.
    ✓ Expect *MTD — the token at 0x… says so; 6 decimals. A token names itself: check the
    address.*, and the total field reads **total (MTD)**.
@@ -518,7 +556,7 @@ into the room, and nobody pays until Alice agrees that address is hers.
      ✓ Expect a card **Asked for an address**.
    - **Alice:** on that card, **Share an address**. ✓ Expect a card **Shared an address** ·
      ETH · *public account · 0xf39f…*.
-2. **Bob:** **+** → **Split** → **Split (Ethereum)** → under **Who paid the bill?** pick
+2. **Bob:** **+** → **Split a bill** → **Split (Ethereum)** → under **Who paid the bill?** pick
    **Alice**.
    - ✓ Expect *Paid to 0xf39f…, the address Alice shared. Nobody pays until Alice agrees
      it is theirs.*
@@ -535,7 +573,7 @@ Alice's, her card would say so and offer no Agree.
 
 ### 6d. A bill in another currency
 
-1. **Alice:** **+** → **Split** → **Split (Ethereum)** → **The bill is in another
+1. **Alice:** **+** → **Split a bill** → **Split (Ethereum)** → **The bill is in another
    currency**.
    - The currency field reads `EUR`.
    - **total (EUR)** `36`.
@@ -560,10 +598,10 @@ owing them agreed.
 
 1. You need at least two open shares. Bob owes Alice 0.0072 ETH from 6d. Now the other
    way:
-   - **Bob:** **+** → **Split** → **Split (Ethereum)**, total `0.006`, memo `taxi`,
+   - **Bob:** **+** → **Split a bill** → **Split (Ethereum)**, total `0.006`, memo `taxi`,
      **✓ I'm in it too**, Alice in. **Propose.**
    - **Alice:** **Agree to my share**, and don't pay it. She owes Bob 0.003 ETH.
-2. **Alice:** **+** → **Split** → **Split (Ethereum)**, with the token field empty →
+2. **Alice:** **+** → **Split a bill** → **Split (Ethereum)**, with the token field empty →
    **Settle up the room's open splits instead**. No total is needed. It nets the shares
    on the chain and asset the composer is set to: ETH here.
 3. ✓ Expect a card **Proposed to settle up**: *Settle up — 1 payment instead of 2 shares
@@ -581,7 +619,7 @@ never nets the private split: its shares are told apart by amount.
 Alice's and Bob's payer addresses already hold 0.05 BTC each (`TRY_ALICE_BTC`,
 `TRY_BOB_BTC`). A payer pays from `wpkh(<their muster key>)`, through their own node.
 
-1. **Alice:** **+** → **Split** → **Split (Bitcoin)**. **total (BTC)** `0.02`,
+1. **Alice:** **+** → **Split a bill** → **Split (Bitcoin)**. **total (BTC)** `0.02`,
    **✓ I'm in it too**, Bob in. ✓ Expect the preview to end *Each share is exactly
    1000000 sat.*: a Bitcoin share is paid and confirmed in satoshis. **Propose.**
    ✓ Expect the card to pay Alice's own wpkh address, `TRY_ALICE_BTC`.
@@ -611,13 +649,13 @@ settle-up of its unpaid shares under a fresh expiry, and everyone who still owes
 again. To see it without waiting a week, give Alice's proposals a two-minute expiry.
 
 1. Close Alice's window and relaunch her with the short expiry, without `--fresh`, then
-   open the room from **Home**:
+   open the room from the sidebar:
 
    ```bash
    MUSTER_INTENT_TTL_S=120 scripts/try-peer.sh alice
    ```
 
-2. **Alice:** **+** → **Split** → **Split (Ethereum)**, total `0.002`, **✓ I'm in it
+2. **Alice:** **+** → **Split a bill** → **Split (Ethereum)**, total `0.002`, **✓ I'm in it
    too**, Bob in, then **Propose**. **Bob:** **Agree to my share**, and don't pay it.
 3. Wait two minutes. ✓ Expect on both cards: *Expired: no share of it can be paid now.
    Renewing asks everyone who still owes a share to agree again, under a new expiry;
@@ -662,8 +700,7 @@ in all.
 > was last run on v0.2.4.
 
 1. Close both windows, then relaunch, without `--fresh` (keep the identities and the
-   room). Back in each window, open the room from **Home**: after a restart its row is
-   titled by its topic.
+   room). Back in each window, open the room from the sidebar: it keeps its name.
 
    ```bash
    scripts/try-peer.sh alice --lez
@@ -683,7 +720,7 @@ in all.
    someone sends native LEZ there), `LEZFUND public balance …`, `LEZFUND shield`, and
    ends at `LEZFUND funded`: about 10 minutes once funded, most of it the shield's proof
    and a first scan from block 0.
-3. **Alice:** **+** → **Split** → **Split privately (LEZ)**. **total (LEZ)** `0.0000001`
+3. **Alice:** **+** → **Split a bill** → **Split privately (LEZ)**. **total (LEZ)** `0.0000001`
    (100 base units: LEZ has 9 decimals, and the faucet pays little). **✓ I'm in it too**,
    Bob in.
    - ✓ Expect *1 person owes you about 0.00000005 LEZ. They pay privately from their own
@@ -724,15 +761,16 @@ there are first on screen.
 ## 7. The LEZ multisig on the public testnet
 
 This is a Squads-style program on Logos's own chain, already deployed on the public
-testnet. The defaults already point there: Settings shows **LEZ sequencer · now:
-https://testnet.lez.logos.co (lez:testnet)**. Blocks take about 40 s, so expect waits.
+testnet. The defaults already point there: **Settings → Advanced** shows **LEZ sequencer ·
+now: https://testnet.lez.logos.co (lez:testnet)**. Blocks take about 40 s, so expect waits.
 
-1. **Both:** in **Accounts → LEZ multisig**, click **My LEZ member account**. Copy the id,
+1. **Both:** in room details → **Accounts** → **LEZ multisig**, click **My LEZ member
+   account**. Copy the id,
    and paste Bob's into the chat for Alice.
 2. **Alice:** set **k** `2`, and in *members' LEZ accounts, comma-separated* enter both
    ids. Click **Create this LEZ multisig on chain**.
    ✓ Expect *⏳ Sent to … (tx …) — it is disclosed here once a block includes it.*
-   After inclusion the account discloses itself. Refresh via Home → the room row.
+   After inclusion the account discloses itself under **Accounts**.
 3. **Alice:** **+** → **Payment** → *Settles via* **LEZ multisig**. Fill in *recipient
    token holding* and *amount (token units)*, then **Propose**.
    ✓ Expect *⏳ Proposal #N is on its way to the chain*. Your Propose counts as your vote.
@@ -767,11 +805,14 @@ key then owns a LEZ public account directly, with no tweak.
 
 ---
 
-## 9. Wallet and Send λ
+## 9. The Wallet
 
-- **Account → WALLET:** **Refresh balances**. Alice's ETH is read from the tour's anvil.
-  The badge reads *attested*: the verified read isn't wired to this card yet.
-- **Send λ:** under *YOUR ADDRESSES — SHARE ONE TO BE PAID*, **Copy** one. Use it (or
+**Wallet** in the sidebar, two tabs:
+
+- **Balances:** **Refresh balances**. While the chains are asked it reads **Reading your
+  balances…**. Alice's ETH is read from the tour's anvil. The badge reads *attested*: the
+  verified read isn't wired to this card yet.
+- **Send on LEZ:** under *Your addresses — share one to be paid*, **Copy** one. Use it (or
   one of the other peer's) as the recipient with an amount, then click **Preview** and
   **Send**.
   - ✓ Expect *Rail: … · public record: …*, then *✓ sent on the … rail*.
@@ -783,9 +824,9 @@ key then owns a LEZ public account directly, with no tweak.
 
 ---
 
-## 10. The walkthrough and the atlas
+## 10. Learn and the atlas
 
-- **Walkthrough → Open the room.**
+- **Learn → Open the room.** (Any **Why?** link in the app lands here, at its step.)
   - PROTECTS: **Nothing on the room's topic says who is in it** (FS-7,
     `store_node_view_test`, imperative).
   - The store-node GAP claim says exactly what remains visible: topic, timing, size,
@@ -828,7 +869,6 @@ for the handshake (Part 1), the chain waits (Parts 5–8) and the private split'
 **Known rough edges** (so you can skip reporting these):
 - Nothing mints a LEZ token or funds a vault or group account (`exo-2752`), so the LEZ
   settles in Parts 7–8 are expected to be rejected.
-- Room titles last only for the session.
 - A FROST card offers **Sign outside muster (PSBT)** with nothing to export.
 - A split agreement can reach the other side before the proposal's context does, over
   the fleet: the agreement is refused and has to be tried again (`exo-ca3`; #187 makes
