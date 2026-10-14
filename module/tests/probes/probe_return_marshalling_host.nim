@@ -7,9 +7,10 @@
 ## The reported defect (`logoscore --call muster_module.health()` returning
 ## `Result: false`) lives on the Nim -> C++ -> host-client return-marshalling
 ## path, not inside the Nim core (which returns "ok"). So this probe does NOT
-## stop at logos_module_dispatch: it links the module's Nim staticlib into a C++
-## host harness (tests/probes/host_return_harness.cpp) that reproduces the shipped
-## cdylib marshalling — dispatch -> nlohmann::json::parse ->
+## stop at logos_module_dispatch: it builds the module into a host harness
+## (tests/probes/host_return_harness.nim) that calls its logos_module_* C ABI, supplies
+## the lp_* ABI a host supplies, and reproduces the shipped cdylib marshalling —
+## dispatch -> nlohmann::json::parse ->
 ## logos::nlohmannToQVariant -> the CLI's `QVariant::toString()` — and reads the
 ## value a CLIENT would observe. A JSON string surfaces as a typed QString; a
 ## JSON bool surfaces as QVariant(bool) and prints "false" (the exact regression);
@@ -26,8 +27,7 @@ import ./oracle_emit
 
 const
   moduleRoot = currentSourcePath().parentDir().parentDir().parentDir()  # module/
-  nimLibMain = moduleRoot / "nim-lib" / "muster_module.nim"
-  harnessCpp = moduleRoot / "tests" / "probes" / "host_return_harness.cpp"
+  harnessNim = moduleRoot / "tests" / "probes" / "host_return_harness.nim"
 
 proc fail(msg: string) =
   ## A build/link/run failure is INCONCLUSIVE, never a silent pass: emit a loud
@@ -107,41 +107,26 @@ proc closurePaths(): seq[string] =
 # makes their `ar` steps collide (seen 2026-09-28)
 let tmp = getTempDir() / ("muster_exo526_host_" & $getCurrentProcessId())
 createDir(tmp)
-let staticLib = tmp / "libmuster_module_probe.a"
 let harnessBin = tmp / "host_return_harness"
 
-# 1. Build the module as a Nim STATICLIB — exactly the shape the real cdylib
-#    build produces (codegen.nim.staticlib), so the harness links the same
-#    logos_module_* C ABI the shipped host loads.
-block buildStatic:
+# 1. Build the host harness with the module compiled in (tests/probes/host_return_harness.nim,
+#    exo-607 T7; it was C++ linked against the module's staticlib). It reaches the same
+#    logos_module_* C ABI the shipped host loads, from the same nim-lib/muster_module.nim,
+#    through importc calls, and supplies the lp_* ABI a host supplies. This is the real
+#    host -> module boundary; no module internals are mocked.
+block buildHarness:
   var args = @[
-    "c", "-d:release", "--app:staticlib", "--noMain:on",
+    "c", "-d:release", "--hints:off", "--noMain:on",   # the module's ctor runs NimMain
     "--nimcache:" & (tmp / "nc"),
-    "-o:" & staticLib,
+    "-o:" & harnessBin,
   ]
   for tok in secpTokens(): args.add "--passL:" & tok
+  for tok in sodiumTokens(): args.add "--passL:" & tok
   args.add closurePaths()
-  args.add nimLibMain
+  args.add harnessNim
   let (o, c) = run("nim", args)
-  if c != 0 or not fileExists(staticLib):
-    fail("nim staticlib build failed:\n" & o)
-
-# 2. Compile + link the C++ host harness against the staticlib (+ secp256k1).
-#    This is the real Nim -> C++ boundary; no module internals are mocked.
-block buildHarness:
-  var args = @[harnessCpp, staticLib, "-O2", "-o", harnessBin]
-  args.add secpTokens()
-  args.add sodiumTokens()
-  # the grader's allowlisted PATH may hold no g++, or only the host's, which links the host's
-  # glibc against nixpkgs' libsodium: grade-specs.sh links the matching one here (exo-a7b,
-  # exo-56a). run-suite.sh (MUSTER_NIMPKGS set) puts its own on PATH.
-  let linkedCxx = moduleRoot / ".probe-env" / "g++"
-  let cxx = (if fileExists(linkedCxx) and
-                 (getEnv("MUSTER_NIMPKGS").len == 0 or findExe("g++").len == 0): linkedCxx
-             else: "g++")
-  let (o, c) = run(cxx, args)
   if c != 0 or not fileExists(harnessBin):
-    fail("g++ harness link failed:\n" & o)
+    fail("nim harness build failed:\n" & o)
 
 # 3. Run the harness — a real host client reading client-observed returns.
 let (harnessOut, code) = run(harnessBin, @[])

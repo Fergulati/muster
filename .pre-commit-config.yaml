@@ -103,6 +103,14 @@ repos:
     pass_filenames: false
     verbose: true
     files: ^(Makefile|ui/flake\.nix|README\.md)$
+- repo: local
+  hooks:
+  - id: no-cpp
+    name: No C/C++ in the repo outside ui/ and demo/ (exo-607, ADR-019)
+    entry: scripts/check-no-cpp.py
+    language: system
+    pass_filenames: false
+    always_run: true
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.6.0
   hooks:

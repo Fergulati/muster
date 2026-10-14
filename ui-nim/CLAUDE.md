@@ -23,6 +23,7 @@ This is the port of the UI backend from C++ (`ui/src/muster_ui_backend.cpp`) to 
   - **`muster_app.nim`**: the host. It runs the real `ui/src/qml/Main.qml`, with a Nim `logos` shim providing `module()`, `isViewModuleReady()` and `viewModuleReadyChanged`. With `--modules <dir>` it starts logos-core itself, as logos-standalone-app does (`--user-dir` / `LOGOS_USER_DIR`, `capability_module`, then `ui/metadata.json`'s dependencies), registers the view's token with `capability_module`, and runs the backend's startup.
   - **`backend.nim`**: every SLOT of the contract and the `MUSTER_AUTO*` autopilot (T5), slot for slot with `ui/src/muster_ui_backend.cpp`. It calls `muster_module` only through `mm.<method>Async`, the async twin of the client generated from `muster.lidl`, so the view never blocks. Included into `muster_app.nim`, because nimside wants each Impl in the module that declares the contract.
   - **`sched.nim`**: `after` / `every` / `barrier` on one QTimer.
+- **`headless/`**: the headless host (T7), logos-core and a module driven from stdin; see its README. It shares `app/logos_core.nim`'s `startCore` with the app.
 - **`nix/muster-client.nix`**: the typed `muster_module` client, generated at build time from `module/src/api/muster.lidl` by the pinned SDK's `lidl-gen`. Never committed.
 - **The runner**: `scripts/build-runner-nim.sh` (`make build-nim`) writes `.run/runner-nim/bin/muster-ui`, the app on the C++ runner's modules. `MUSTER_UI=nim` selects it in the self-tests and in `make run` / `run-fleet`.
 
@@ -37,6 +38,7 @@ cd ui-nim && nix build .#checks.x86_64-linux.muster-app-view   # T4a: the real M
 cd ui-nim && nix build .#logos-core .#logos-protocol-lib     # T1b: the in-process Logos libraries, on the app's Qt
 scripts/nim-app-core-probe.sh                          # T4a: + logos-core and muster_module.health() over lp_* (needs make build)
 scripts/build-runner-nim.sh                            # T6: .run/runner-nim (needs make build: it uses the C++ runner's modules)
+scripts/nim-headless-probe.sh                          # T7: the headless host drives muster_module from stdin (needs make build)
 MUSTER_UI=nim scripts/ui-parity.sh                     # the parity oracle: every offscreen self-test on the Nim build
 ```
 

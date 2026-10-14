@@ -152,6 +152,19 @@
           # The design system's icons are SVG: without qtsvg's image plugin they draw blank.
           extraBuildInputs = [ pkgs.qt6.qtsvg ];
         };
+        # T7: the headless host (the port of module/tools/headless-host's C++): the core
+        # and muster_module in-process, a stdin REPL over lp_*. headless/drive.py drives it.
+        headless-host = let runner = logosRunner pkgs.stdenv.hostPlatform.system; core = logosCore pkgs.stdenv.hostPlatform.system; lp = logosProtocol pkgs.stdenv.hostPlatform.system; in seaqtApp pkgs {
+          pname = "muster-headless-host";
+          src = ./.;
+          main = "headless/muster_headless_host.nim";
+          nimFlags = [
+            "--path:${logos-nim-sdk}/src"
+            "--passL:-L${core}/lib -llogos_core -Wl,-rpath,${core}/lib"
+            "--passL:-L${lp}/lib -llogos_protocol -Wl,-rpath,${lp}/lib"
+          ];
+          extraAttrs.qtWrapperArgs = [ "--set-default" "LOGOS_HOST_PATH" "${runner}/bin/logos_host" ];
+        };
         # T3: nim-seaqt with QtRemoteObjects, and its proof (checks.ro): a nimside source
         # remoted over local:, acquired as a dynamic replica, driven both ways.
         seaqt-ro = seaqtRO pkgs;

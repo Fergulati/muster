@@ -54,19 +54,13 @@ else
   export PATH="$NIXGCC/bin:$PATH"
 fi
 [ -f "$SODIUM/lib/libsodium.so" ] || { echo "libsodium not found (set MUSTER_SODIUM)"; exit 1; }
-# probe_return_marshalling_host links the module into a C++ harness against a system
+# probe_return_marshalling_host builds the module into a host harness against a system
 # libsecp256k1; supply nixpkgs' unless the caller already pointed it somewhere.
 if [ -z "${MUSTER_SECP256K1_LIB:-}" ] && ! pkg-config --exists libsecp256k1 2>/dev/null; then
   SECPLIB="$(nix build nixpkgs#secp256k1 --no-link --print-out-paths 2>/dev/null | tail -1)"
   [ -d "$SECPLIB/lib" ] && export MUSTER_SECP256K1_LIB="-L$SECPLIB/lib -lsecp256k1 -Wl,-rpath,$SECPLIB/lib"
 fi
 export MUSTER_SODIUM_LIB="${MUSTER_SODIUM_LIB:--L$SODIUM/lib -lsodium -Wl,-rpath,$SODIUM/lib}"
-# ...and compiles that harness with g++: nixpkgs' (on PATH above) or the host's; borrow
-# nixpkgs' when MUSTER_SODIUM kept the host's compiler and the host has none.
-if ! command -v g++ >/dev/null; then
-  GCC="$(nix build nixpkgs#gcc --no-link --print-out-paths 2>/dev/null | tail -1)"
-  [ -x "$GCC/bin/g++" ] && export PATH="$GCC/bin:$PATH"
-fi
 # The same probe's inner `nim c` reads the closure from here (metadata.json's pins).
 export MUSTER_NIMPKGS="$NIMPKGS"
 

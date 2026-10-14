@@ -18,10 +18,10 @@
 ##   muster-app --self-test-core --modules <dir> --user-dir <dir>
 ##                                                    offscreen: + muster_module.health()
 
-import std/[os, strutils, json, sysrand, times]
+import std/[os, strutils, json, times]
 import nimside, seaqt/[qguiapplication, qcoreapplication, qquickview, qqmlengine,
   qqmlcontext, qqmlerror, qurl, qvariant, qwindow]
-import logos_sdk, logos_sdk/ffi
+import logos_sdk
 import muster_client          # generated at build time from muster.lidl (nix/muster-client.nix)
 import ../contract/repcontract, ./logos_core
 
@@ -50,39 +50,12 @@ proc onSlot[T](o: T, name: string) = calls.add name   ## repContract calls it fi
 repContract(MusterUi, musterRep)
 include ./backend
 
-proc startCore(modulesDir, userDir: string): string =
-  ## Start logos-core in this process and connect as muster_ui. "" on success, else why not.
-  logos_core_add_modules_dir(modulesDir.cstring)
-  logos_core_set_persistence_base_path(cstring(userDir / "module_data"))
-  logos_core_start()
-  if logos_core_load_module("capability_module", false) == 0:
-    return "capability_module did not load"
-  # As logos-standalone-app does for a ui_qml module: every dependency the view's
-  # metadata.json declares, with its own, in order. A failure warns; only
-  # muster_module is required.
-  for dep in uiDependencies:
-    if logos_core_load_module(dep.cstring, true) != 0:
-      info "Loaded dependency (with transitive deps): " & dep
-    elif dep == "muster_module":
-      return "muster_module did not load"
-    else:
-      info "Failed to load dependency: " & dep
-  let capToken = hostToken("capability_module")
-  if capToken.len == 0:
-    return "the core holds no capability_module token"
-  # Register this view with capability_module, as the Logos host does for a view
-  # module (logos-standalone-app's informModuleToken): the core's capability
-  # token vouches for a fresh token that this process then presents as muster_ui.
-  discard lp_token_save("capability_module", capToken.cstring)
-  let cap = lp_client_create("capability_module", "core", nil, nil)
-  if cap == nil:
-    return "no capability_module client"
-  var uiToken = ""
-  for b in urandom(16): uiToken.add b.toHex(2).toLowerAscii
-  if lp_inform_module_token(cap, capToken.cstring, "muster_ui", uiToken.cstring) != LP_OK:
-    return "capability_module refused the view's token"
-  discard lp_token_save("core", uiToken.cstring)
-  discard lp_token_save("capability_module", uiToken.cstring)
+proc startMusterCore(modulesDir, userDir: string): string =
+  ## logos-core in this process, the view's modules loaded, and muster_module reachable
+  ## as muster_ui. "" on success, else why not.
+  let err = startCore(modulesDir, userDir / "module_data", "muster_ui", uiDependencies,
+                      "muster_module", proc (m: string) = info m)
+  if err.len > 0: return err
   if mm.proxy.client() == nil:
     return "no muster_module client"
   coreUp = true
@@ -158,7 +131,7 @@ proc main(): int =
       quit "Session directory exists but is not a directory: " & userDir, 1
     createDir(userDir)
     info "Session directory: " & qs(userDir)
-    let err = startCore(modulesDir, userDir)
+    let err = startMusterCore(modulesDir, userDir)
     check err.len == 0, "logos-core started in this process; muster_module loaded; " &
       "the view's token registered with capability_module" & (if err.len > 0: " (" & err & ")" else: "")
     if err.len > 0:

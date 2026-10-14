@@ -68,7 +68,7 @@ module/          Nim core behind the muster.lidl contract → muster-module.lgx
   src/monero/    Monero for the XMR request (exo-dcc.5), pure, no keys: address (Monero's block-wise base58, the network tags, standard/subaddress/integrated, CAIP-2 by genesis-hash prefix, `acceptablePayTo`, the `monero:` URI) · point (the subgroup check wallet2's `check_address` makes) — held to monero-project's own vectors
   src/plugins/   plugin sandbox (inv 3)
   nim-lib/       muster_gen.nim (generated) + muster_module.nim (hosted surface)
-  tools/         regen.sh (fetches the SDK's lidl-gen at the pinned rev + regenerates muster_gen.nim) · muster_audit_verify.nim (standalone audit-file verifier, exo-403) · headless-host/
+  tools/         regen.sh (fetches the SDK's lidl-gen at the pinned rev + regenerates muster_gen.nim) · muster_audit_verify.nim (standalone audit-file verifier, exo-403)
   tests/         lifecycle/safe/crypto/transport/coordination tests + tests/probes/ (75 invariant probes — each an oracle of a typed spec in contracts/specs/) · run-suite.sh (the whole suite, one command)
 ui/              QML view + C++ backend → muster-ui.lgx (Logos.Theme, ADR-011)
   src/qml/       Main.qml · src/muster_ui_backend.{cpp,h} · muster_ui.rep
@@ -85,7 +85,7 @@ contracts/families/ the multisig family registry · actions/ the action corpus (
 ui/prototype/    coordination-prototype-v2.html — the standalone HTML reference build · desktop-v3.html — the desktop layout reference (exo-720)
 catalog/         Muster's own Basecamp catalogue (exo-dcc.3): logos-repo.json, and index.json + icons/ once a release is up; publishes only muster_module and muster_ui, every dependency from Logos Official; `.lgx` files are `muster-v<version>` release assets (catalog/README.md)
 site/            index.html — the Pages landing page (https://corpetty.github.io/muster/); scripts/build-site.sh assembles it with docs/diagrams/ at /diagrams/ and the atlas at /atlas/, and checks every relative link
-ui-nim/          the UI in Nim on nim-seaqt + nimside (epic exo-607, docs/design/seaqt-ui.md): flake.nix pins seaqt qt-6.11 on nixos-unstable's Qt 6.11.2 and rebuilds liblogos_core + liblogos_protocol on it (T1b, ADR-019; nix/nixpkgs-app — the module processes keep Logos's Qt 6.9.2) · nix/seaqt-app.nix · hello/ (T1) · contract/ (T2: repContract, the .rep → nimside qobject: macro, checked index for index against repc) · app/ (T4a–T6: muster-app, the standalone Nim UI — the real QML, every SLOT and the autopilot in backend.nim, muster_module through the client generated from muster.lidl, async; parity 11/11) · nix/seaqt-ro.nix + nix/seaqt-gen-patches/ + ro/ (T3: QtRemoteObjects bindings generated at build time, never committed)
+ui-nim/          the UI in Nim on nim-seaqt + nimside (epic exo-607, docs/design/seaqt-ui.md): flake.nix pins seaqt qt-6.11 on nixos-unstable's Qt 6.11.2 and rebuilds liblogos_core + liblogos_protocol on it (T1b, ADR-019; nix/nixpkgs-app — the module processes keep Logos's Qt 6.9.2) · nix/seaqt-app.nix · hello/ (T1) · contract/ (T2: repContract, the .rep → nimside qobject: macro, checked index for index against repc) · app/ + headless/ (T4a–T7: muster-app, the standalone Nim UI — the real QML, every SLOT and the autopilot in backend.nim, muster_module through the client generated from muster.lidl, async; parity 11/11) · nix/seaqt-ro.nix + nix/seaqt-gen-patches/ + ro/ (T3: QtRemoteObjects bindings generated at build time, never committed)
 scripts/         git hooks
 ```
 
@@ -118,6 +118,8 @@ scripts/release-appimage.sh --lgx-dir .run/catalog-release/muster-v<version>   #
 scripts/ui-parity.sh                            # the UI parity suite: every offscreen self-test above, one at a time, green/red table (MUSTER_UI=cpp|nim, exo-607 T0); MUSTER_FLEET=local runs it on a network the instances make on this host, no fleet (exo-eb6.7)
 cd ui-nim && nix build .#checks.x86_64-linux.hello   # the seaqt toolchain gate: nimside qobject: ↔ QML, against the runner's own Qt 6.9.2 (exo-607 T1)
 scripts/nim-app-core-probe.sh                   # exo-607 T4a (option B): the real QML in a Nim host that starts logos-core itself and calls muster_module over lp_* (needs make build)
+scripts/nim-headless-probe.sh                   # exo-607 T7: the Nim headless host (ui-nim/headless, stdin → lp_* calls) drives muster_module (needs make build)
+python3 scripts/check-no-cpp.py                 # no C/C++ outside ui/ (the frozen Basecamp build) and demo/ (exo-607, ADR-019; pre-commit)
 make build-nim                                  # exo-607 T6: the Nim UI's runner, .run/runner-nim (the C++ runner's modules; needs make build); then MUSTER_UI=nim make run, or MUSTER_UI=nim scripts/ui-parity.sh (11/11, as C++)
 scripts/grade-specs.sh [exo-xxx]                 # grade the typed specs with exophial's own oracle (links the probes' closure into module/.probe-env, exo-a7b)
 python3 docs/diagrams/tools/check-manifest.py   # figure-provenance gate (--update, --stamp)

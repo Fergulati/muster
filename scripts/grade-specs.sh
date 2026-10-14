@@ -51,17 +51,9 @@ fi
 [ -f "$SODIUM/lib/libsodium.so" ] && ln -sfn "$SODIUM/lib" "$PROBE_ENV/sodium" \
   || echo "warning: libsodium not found (set MUSTER_SODIUM); probes that need it will not build" >&2
 if [ -n "$NIXGCC" ] && [ -x "$NIXGCC/bin/gcc" ]; then ln -sfn "$NIXGCC/bin" "$PROBE_ENV/cc"; else rm -f "$PROBE_ENV/cc"; fi
-# exo-526's probe compiles a C++ host harness, linked where the probe looks for it: the g++
-# beside that gcc, else the host's, else nixpkgs'.
-CXX=""
-[ -n "$NIXGCC" ] && [ -x "$NIXGCC/bin/g++" ] && CXX="$NIXGCC/bin/g++"
-[ -z "$CXX" ] && CXX="$(command -v g++ || true)"
-if [ -z "$CXX" ]; then
-  GCC="$(nix build nixpkgs#gcc --no-link --print-out-paths 2>/dev/null | tail -1)"
-  [ -x "$GCC/bin/g++" ] && CXX="$GCC/bin/g++"
-fi
-[ -n "$CXX" ] && ln -sfn "$CXX" "$PROBE_ENV/g++" \
-  || echo "warning: no g++ (nor nixpkgs#gcc); exo-526's host harness will not build" >&2
+# exo-526's host harness was C++ and needed a g++ here; it is Nim since exo-607 T7, built
+# by the probe's own nim with the cc above.
+rm -f "$PROBE_ENV/g++"
 
 cd "$REPO"
 "$EXO_PY" - "${1:-}" <<'PY'

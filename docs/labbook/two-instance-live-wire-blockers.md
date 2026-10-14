@@ -95,7 +95,7 @@
 ---
 
 
-The coherent headless host (`module/tools/headless-host/`) drives muster's full method
+The coherent headless host (`module/tools/headless-host/`, now `ui-nim/headless/` in Nim) drives muster's full method
 surface headless, including the **single-instance** coordinate fold (join → propose →
 `coordinate_intents` returns the proposal with a re-derived `safeTxHash`, threshold 2).
 Attempting the **two-instance live wire** — two real hosts converging on an intent over a
