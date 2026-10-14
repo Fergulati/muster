@@ -143,8 +143,8 @@
       "try": [
         {
           "path": "docs/runbooks/client-tour.md",
-          "anchor": "9-wallet-and-send-λ",
-          "what": "Part 9: wallet and Send λ"
+          "anchor": "9-the-wallet",
+          "what": "Part 9: the Wallet"
         }
       ]
     },

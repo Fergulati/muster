@@ -127,7 +127,7 @@ grep -aE 'qrc:/.*(Error|error)|TypeError|ReferenceError|is not a type|Cannot ass
 
 ✓ Expect no output. Stop both peers with **Ctrl-C**, then run `scripts/try-infra.sh down`.
 
-**Where the old right panel's contents went.** `docs/runbooks/client-tour.md` still says "right column" in places; read it as the room-details drawer:
+**Where the old right panel's contents went.** `docs/runbooks/client-tour.md` was rewritten for the redesign on 2026-10-14 (exo-720.13); this table is kept for older notes that still say "right column":
 
 | The tour says | Now |
 |---|---|
