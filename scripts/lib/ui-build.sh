@@ -3,8 +3,9 @@
 # that build's instances (exo-607 T0). Sourced by the self-tests; never executed.
 #
 #   MUSTER_UI=cpp   (default) the C++ backend, `make build` → .run/runner
-#   MUSTER_UI=nim   the Nim (seaqt) backend → .run/runner-nim — nothing builds it
-#                   until exo-607 T6, so every self-test is red on it by design
+#   MUSTER_UI=nim   the Nim (seaqt) app → .run/runner-nim, built by
+#                   scripts/build-runner-nim.sh (make build-nim) on the C++ runner's
+#                   modules (exo-607 T6, ADR-019)
 #
 # THE CONTRACT a UI build must meet to be driven by these tests — the Nim build
 # inherits it unchanged, which is what makes the self-tests its parity oracle:
@@ -13,7 +14,7 @@
 #   * it hosts muster_module (with delivery_module and lez_core), whose
 #     MUSTER_LP_DEBUG lines ("MUSTER-LP …") land on its stdout/stderr;
 #   * it runs the MUSTER_AUTO* autopilot (ui/src/muster_ui_backend.cpp
-#     onContextReady), since offscreen nothing can click;
+#     onContextReady; ui-nim/app/backend.nim contextReady), since offscreen nothing can click;
 #   * a QML load error reaches the same log.
 #
 # To see the C++ backend's own lines (its [muster_ui] qInfo, the autopilot's decisions)

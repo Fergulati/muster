@@ -65,10 +65,12 @@
       url = "github:seaqt/nimside/38406061afd5d24a57d8f6cb8cdcc5930bb67bc8";
       flake = false;
     };
-    # logos_sdk: the lp_* binding (and later the client generated from muster.lidl), at
-    # the SAME rev module/metadata.json pins, so the view and the module speak one SDK.
+    # logos_sdk: the lp_* binding and the generator of the typed muster_module client
+    # (nix/muster-client.nix). Ahead of module/metadata.json's pin (6077eb7) by the async
+    # client twins (branch feat/async-client), which only a consumer uses; the module
+    # moves to the same rev once that lands upstream.
     logos-nim-sdk = {
-      url = "github:corpetty/logos-nim-sdk/6077eb70a8709dccf3d60601121dbf66e794b89c";
+      url = "github:corpetty/logos-nim-sdk/e0a13ac76b2eca1c6ed67b0bd7c8a609974f9873";
       flake = false;
     };
     # T3: seaqt-gen, the generator that produced nim-seaqt qt-6.8@7d40abd7 and
@@ -94,11 +96,20 @@
       # nim-seaqt + QtRemoteObjects, generated at build time (T3).
       seaqtRO = pkgs: import ./nix/seaqt-ro.nix {
         inherit pkgs nim-seaqt seaqt-gen;
-        clang14 = nixpkgs-clang14.legacyPackages.${pkgs.system}.llvmPackages_14.clang;
+        clang14 = nixpkgs-clang14.legacyPackages.${pkgs.stdenv.hostPlatform.system}.llvmPackages_14.clang;
       };
       # The view contract and the QML that uses it, shared with the C++ build (ui/).
       viewContract = ../ui/src/muster_ui.rep;
       viewQml = ../ui/src/qml;
+      # The module's contract, from which the app's typed muster_module client is
+      # generated at build time (T5).
+      musterLidl = ../module/src/api/muster.lidl;
+      logosLidl = system: logos-module-builder.inputs.logos-cpp-sdk.inputs.logos-lidl.packages.${system}.logos-lidl;
+      musterClient = pkgs: import ./nix/muster-client.nix {
+        inherit pkgs logos-nim-sdk;
+        lidl = logosLidl pkgs.stdenv.hostPlatform.system;
+        contract = musterLidl;
+      };
       # Option B's Logos pieces, split by process (T1b, ADR-019).
       #   In the app's process, on the app's Qt: liblogos_core (the core's C API) and
       #   liblogos_protocol (the lp_* consumer ABI), rebuilt from the runner's revs.
@@ -125,18 +136,21 @@
         # T4a: muster's real QML in a Nim host (option B). `--self-test` loads the view
         # against stub Impls; `--self-test-core --modules <dir> --user-dir <dir>` also
         # starts logos-core and calls muster_module (scripts/nim-app-core-probe.sh).
-        muster-app = let runner = logosRunner pkgs.system; core = logosCore pkgs.system; lp = logosProtocol pkgs.system; in seaqtApp pkgs {
+        muster-app = let runner = logosRunner pkgs.stdenv.hostPlatform.system; core = logosCore pkgs.stdenv.hostPlatform.system; lp = logosProtocol pkgs.stdenv.hostPlatform.system; in seaqtApp pkgs {
           pname = "muster-app";
           src = ./.;
           main = "app/muster_app.nim";
           nimFlags = [
-            "-d:musterRep=${viewContract}" "-d:musterQml=${viewQml}"
+            "-d:musterRep=${viewContract}" "-d:musterQml=${viewQml}" "-d:musterMetadata=${../ui/metadata.json}"
             "-d:logosQmlImports=${runner}/lib" "--path:${logos-nim-sdk}/src"
+            "--path:${musterClient pkgs}"
             "--passL:-L${core}/lib -llogos_core -Wl,-rpath,${core}/lib"
             "--passL:-L${lp}/lib -llogos_protocol -Wl,-rpath,${lp}/lib"
           ];
           # The runner's logos_host: the module processes stay on Logos's Qt.
           extraAttrs.qtWrapperArgs = [ "--set-default" "LOGOS_HOST_PATH" "${runner}/bin/logos_host" ];
+          # The design system's icons are SVG: without qtsvg's image plugin they draw blank.
+          extraBuildInputs = [ pkgs.qt6.qtsvg ];
         };
         # T3: nim-seaqt with QtRemoteObjects, and its proof (checks.ro): a nimside source
         # remoted over local:, acquired as a dynamic replica, driven both ways.
@@ -148,9 +162,11 @@
           seaqt = seaqtRO pkgs;
           extraBuildInputs = [ pkgs.qt6.qtremoteobjects ];
         };
+        # T5: muster_module's typed client, generated from muster.lidl.
+        muster-client = musterClient pkgs;
         # T1b: the two Logos libraries the app loads in-process, on the app's Qt.
-        logos-core = logosCore pkgs.system;
-        logos-protocol-lib = logosProtocol pkgs.system;
+        logos-core = logosCore pkgs.stdenv.hostPlatform.system;
+        logos-protocol-lib = logosProtocol pkgs.stdenv.hostPlatform.system;
         default = hello;
       });
 
@@ -159,25 +175,25 @@
         # self-test offscreen. `nix flake check` / `nix build .#checks.<system>.hello`.
         hello = pkgs.runCommand "seaqt-hello-self-test" { } ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software
-          ${self.packages.${pkgs.system}.hello}/bin/seaqt-hello --self-test | tee $out
+          ${self.packages.${pkgs.stdenv.hostPlatform.system}.hello}/bin/seaqt-hello --self-test | tee $out
         '';
         # T4a's view half, in the sandbox: the real Main.qml loads in the Nim host and
         # binds to the contract (no core; scripts/nim-app-core-probe.sh adds muster_module).
         muster-app-view = pkgs.runCommand "muster-app-view-check" { } ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software
-          ${self.packages.${pkgs.system}.muster-app}/bin/muster-app --self-test | tee $out
+          ${self.packages.${pkgs.stdenv.hostPlatform.system}.muster-app}/bin/muster-app --self-test | tee $out
         '';
         # The T2 gate: repc (the pinned qtremoteobjects) generates the typed source from the
         # view contract; the nimside declaration must present QtRO the same API, index for
         # index, and every backend.<name> in the real QML must be in it.
         ro = pkgs.runCommand "seaqt-ro-check" { } ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen XDG_RUNTIME_DIR=$TMPDIR
-          ${self.packages.${pkgs.system}.ro-test}/bin/seaqt-ro-test | tee $out
+          ${self.packages.${pkgs.stdenv.hostPlatform.system}.ro-test}/bin/seaqt-ro-test | tee $out
         '';
         contract = pkgs.runCommand "muster-contract-check" { } ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen
           ${pkgs.qt6.qtremoteobjects}/libexec/repc -o source ${viewContract} $TMPDIR/rep_source.h
-          ${self.packages.${pkgs.system}.contract-test}/bin/muster-contract-test \
+          ${self.packages.${pkgs.stdenv.hostPlatform.system}.contract-test}/bin/muster-contract-test \
             --repc $TMPDIR/rep_source.h --qml ${viewQml} | tee $out
         '';
       });
