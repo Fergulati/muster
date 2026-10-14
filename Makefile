@@ -14,8 +14,6 @@
 
 UI       := ui
 RUN_DIR  ?= $(CURDIR)/.run/muster
-# Local logos-basecamp checkout (with the muster bake-in) — for `make appimage`.
-BASECAMP ?= $(HOME)/Github/logos-co/logos-basecamp
 
 # cache.nix.logos.co as a substituter (the invoking user is not a trusted nix
 # user, so pass it explicitly); --accept-flake-config takes the flake's own.
@@ -62,7 +60,7 @@ help:
 	@echo "make run-fleet PEER=x     launch a peer on the Logos delivery fleet (two-instance)"
 	@echo "make build               pre-build the runner — the slow first build; do this once ($(CAP_NOTE))"
 	@echo "make build-lgx           build muster-ui.lgx (to load into logos-basecamp instead; $(CAP_NOTE))"
-	@echo "make appimage            build the download-and-run AppImage (see RELEASING.md; $(CAP_NOTE))"
+	@echo "make appimage            Basecamp's release AppImage with Muster baked in, from the committed tree (RELEASING.md; $(CAP_NOTE))"
 	@echo "make clean               remove local run state (.run/)"
 	@echo "make clean-peer PEER=x   wipe one peer's identity+wallet (to re-seed owner keys)"
 	@echo ""
@@ -139,13 +137,12 @@ build-lgx:
 	@$(CAP_CHECK)
 	cd $(UI) && $(CAPPED) nix build 'path:.#lgx' $(CACHE) || $(CAP_KILLED)
 
-# The download-and-run release artifact: a logos-basecamp AppImage with muster
-# baked in. Needs the local basecamp bake-in (ui/tests/README.md); see RELEASING.md.
+# The download-and-run release artifact: Basecamp's released AppImage with Muster and its
+# Logos Official dependencies installed inside, repacked (scripts/release-appimage.sh,
+# RELEASING.md). No Basecamp checkout needed.
 appimage:
 	@$(CAP_CHECK)
-	$(CAPPED) nix build '$(BASECAMP)#bin-appimage' $(CACHE) --out-link $(CURDIR)/result-appimage || $(CAP_KILLED)
-	@echo "AppImage: $(CURDIR)/result-appimage/logos-basecamp.AppImage"
-	@echo "Run: APPIMAGE_EXTRACT_AND_RUN=1 $(CURDIR)/result-appimage/logos-basecamp.AppImage  (then click Muster)"
+	$(CAPPED) scripts/release-appimage.sh || $(CAP_KILLED)
 
 clean:
 	rm -rf $(CURDIR)/.run

@@ -11,12 +11,14 @@
 #   scripts/demo-peer.sh alice                 # seed as anvil owner 0, real $HOME
 #   scripts/demo-peer.sh bob   --isolate       # seed as owner 1, isolated $HOME
 #   scripts/demo-peer.sh carol                 # seed as owner 2
-#   scripts/demo-peer.sh alice --appimage /path/to/logos-basecamp.AppImage
+#   scripts/demo-peer.sh alice --appimage /path/to/Muster-0.3.0-Basecamp-0.3.2-linux-x86_64.AppImage
 #
 #   --isolate      run under a per-role $HOME (…/.cache/muster-demo/<role>) so TWO
 #                  peers on ONE machine get separate basecamp data dirs + identities.
 #                  Omit on a two-machine demo (each machine already has its own $HOME).
-#   --appimage P   AppImage path (default: <repo>/result-appimage/logos-basecamp.AppImage).
+#   --appimage P   AppImage path (default: the newest Muster-*-linux-x86_64.AppImage in
+#                  <repo>/.run/appimage/ — `make appimage` — then in ~/Downloads/, where the
+#                  release download lands; see RELEASING.md).
 #   --fresh        wipe this role's isolated $HOME first (start from a clean identity).
 #
 # The FROST/threshold track needs NO seeding and NO anvil — any two peers who join the
@@ -27,7 +29,7 @@ set -euo pipefail
 ROLE="${1:-}"; shift || true
 ISOLATE=0; FRESH=0
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-APPIMAGE="$REPO/result-appimage/logos-basecamp.AppImage"
+APPIMAGE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -47,25 +49,27 @@ case "$ROLE" in
   *) echo "usage: $0 <alice|bob|carol> [--isolate] [--fresh] [--appimage PATH]" >&2; exit 2 ;;
 esac
 
-# Fall back to a stable release-named copy if the repo out-link isn't there (a fresh
-# clone, or the nix result-* link was cleaned): whichever exists and is current works.
-if [ ! -e "$APPIMAGE" ] && [ -f "$HOME/Downloads/Muster-demo-linux-x86_64.AppImage" ]; then
-  APPIMAGE="$HOME/Downloads/Muster-demo-linux-x86_64.AppImage"
+# The release AppImage (RELEASING.md): a local build first, then a downloaded one.
+if [ -z "$APPIMAGE" ]; then
+  APPIMAGE=$(ls -t "$REPO"/.run/appimage/Muster-*-linux-x86_64.AppImage "$HOME"/Downloads/Muster-*-linux-x86_64.AppImage 2>/dev/null | head -1 || true)
 fi
-if [ ! -e "$APPIMAGE" ]; then
-  echo "AppImage not found: $APPIMAGE" >&2
-  echo "build it first (bounded so it can't exhaust RAM — plain 'make appimage' can freeze):" >&2
-  echo "  cd $HOME/Github/logos-co/logos-basecamp && nix build '.#bin-appimage' --accept-flake-config \\" >&2
-  echo "    --extra-substituters https://cache.nix.logos.co/public \\" >&2
-  echo "    --extra-trusted-public-keys public:l4HrXgL4nw246+LBh2SOJyhz64BoGegOYLheT/iIAPU= \\" >&2
-  echo "    --max-jobs 1 --cores 1 --out-link $REPO/result-appimage" >&2
-  echo "…or pass --appimage PATH." >&2
+if [ -z "$APPIMAGE" ] || [ ! -e "$APPIMAGE" ]; then
+  echo "AppImage not found${APPIMAGE:+: $APPIMAGE}" >&2
+  echo "download Muster-<version>-Basecamp-<tag>-linux-x86_64.AppImage from" >&2
+  echo "  https://github.com/corpetty/muster/releases/latest  (into ~/Downloads)" >&2
+  echo "or build it: make appimage   …or pass --appimage PATH." >&2
   exit 1
 fi
 echo "→ AppImage: $(readlink -f "$APPIMAGE")"
 
 export MUSTER_DEV_SECP_KEY="$KEY"
 export MUSTER_KEY_PASSPHRASE="muster-demo"      # stable dev passphrase for the keyfile
+# The demo approves with that seeded key and reads the anvil chain through MUSTER_RPC. The
+# release AppImage also carries the platform's keystore_module and eth_rpc_module, which
+# muster prefers under Basecamp (exo-d4d); keep it on its own key and URL for the demo.
+export MUSTER_KEYSTORE_BACKEND=off
+export MUSTER_EVM_CHAINS=url
+export MUSTER_RPC="${MUSTER_RPC:-http://127.0.0.1:8545}"
 export APPIMAGE_EXTRACT_AND_RUN=1
 # Scale the whole UI up so text is legible in a screen recording. muster sizes text in
 # font.pixelSize (from the Logos theme), which QT_SCALE_FACTOR scales (unlike QT_FONT_DPI,
@@ -114,5 +118,5 @@ fi
 
 echo "→ $ROLE : seeded as anvil owner (MUSTER_DEV_SECP_KEY set), launching AppImage"
 echo "  RPC defaults to http://127.0.0.1:8545 (local anvil). For a two-machine Safe"
-echo "  settle, point this peer's RPC at the anvil host in Settings → Infrastructure."
+echo "  settle, set MUSTER_RPC=http://<anvil host>:8545, or Settings → Advanced → RPC endpoint."
 exec "$APPIMAGE"

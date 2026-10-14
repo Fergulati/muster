@@ -197,7 +197,7 @@ What happens underneath:
 invite, asks to join, and a member decides.
 
 1. **Alice:** a second room, so Carol stays out of the one the tour uses: **Rooms +** →
-   **Just talk**, nobody under *Who's doing it with you?*, **Open the room with them**.
+   **Just talk**, nobody under *Who's doing it with you?*, **Open the room — just you**.
    Then **Invite** → **Copy** the room code.
 2. **Carol** (`scripts/try-peer.sh carol --fresh` in a third terminal): on **Needs you**,
    paste it beside *Have a room code?* → **Join**.

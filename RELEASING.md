@@ -1,67 +1,49 @@
-# Releasing — a download-and-run AppImage
+# Releasing Muster
 
-Until the build dependencies are upstream (see the caveat below), other people
-can't `make run` from a clone — but they *can* download a self-contained
-**AppImage** and run it. This is how you cut one.
+A release is one GitHub release, `muster-v<version>`, carrying two ways to run Muster. People pick one:
 
-The artifact is a `logos-basecamp` AppImage with `muster_module` + `muster_ui`
-baked in: one ~270 MB file, no Nix, no build, no basecamp checkout on the user's
-side. They download it, `chmod +x`, run it, and click **Muster** in the sidebar.
+| Asset | For whom | What it is |
+|---|---|---|
+| `Muster-<version>-Basecamp-<tag>-linux-x86_64.AppImage` | someone who wants to download one file and run it | Basecamp's own released AppImage with Muster and the Logos Official modules it needs already installed inside. `chmod +x`, run, click **Muster**. |
+| `muster_module-<version>-linux-amd64.lgx`, `muster_ui-<version>-linux-amd64.lgx` | someone who already runs Basecamp, or `logoscore` | the two portable packages. Basecamp installs them from Muster's catalogue (`catalog/`, [`docs/runbooks/install-from-catalogue.md`](docs/runbooks/install-from-catalogue.md)) and fetches the dependencies from Logos Official; `lgpm install --file` installs them by hand. |
 
-## Build it
+Both are built from the same commit, and the AppImage contains exactly the two `.lgx` files the release publishes.
 
-```bash
-make appimage        # nix build <basecamp>#bin-appimage → result-appimage/
-```
+## Cut one
 
-`make appimage` uses `BASECAMP` (defaults to `~/Github/logos-co/logos-basecamp`);
-override it if your checkout is elsewhere: `make appimage BASECAMP=/path/to/logos-basecamp`.
+1. **Version.** Bump `"version"` in `module/metadata.json` and `ui/metadata.json` (both the same), merge it, and update a clean local `main`.
+2. **Green.** `module/tests/run-suite.sh` and `scripts/ui-parity.sh` (`MUSTER_FLEET=local` needs no fleet; the split test needs foundry on `PATH`, e.g. `nix shell nixpkgs#foundry`).
+3. **The packages and the catalogue.** `scripts/catalog-release.sh`. It builds both `.#lgx-portable` from the committed tree into `.run/catalog-release/muster-v<version>/` and writes `catalog/index.json` and `catalog/icons/`. The release targets this commit, so it must be on GitHub.
+4. **The AppImage, from those same files.**
 
-It produces `result-appimage/logos-basecamp.AppImage`. Verify it before shipping:
+   ```bash
+   scripts/release-appimage.sh --lgx-dir .run/catalog-release/muster-v<version>
+   ```
 
-```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./result-appimage/logos-basecamp.AppImage
-# then click "Muster" → the lifecycle dashboard and the walkthrough should render
-```
+   It downloads the Basecamp release named in `infra/basecamp/release-<tag>.env` and checks its sha256. It then installs the two `.lgx` files and the Logos Official packages pinned in `infra/basecamp/bundle-<tag>.tsv`, each checked against its sha256, into the release's built-in module and plugin directories, with the `lgpm` that release links. Finally it repacks the image behind the release's own AppImage runtime, as `.run/appimage/Muster-<version>-Basecamp-<tag>-linux-x86_64.AppImage`.
+5. **Look at it.** Run it with a fresh profile, on a display or under Xvfb:
 
-(`APPIMAGE_EXTRACT_AND_RUN=1` avoids needing FUSE; drop it if FUSE is available.)
+   ```bash
+   .run/appimage/Muster-*.AppImage --user-dir "$(mktemp -d)"
+   ```
 
-## Publish it
+   ✓ Muster is in Basecamp's app list with nothing to install. Launch it: Needs you renders, **Start something** opens a room, and the log has `Successfully loaded UI module: muster_ui` and no `muster_ui` QML errors. `APPIMAGE_EXTRACT_AND_RUN=1` avoids needing FUSE.
+6. **Publish.** This is outward-facing: it puts binaries on the public repo.
 
-```bash
-gh release create v0.1.0-preview \
-  result-appimage/logos-basecamp.AppImage#muster-linux-x86_64.AppImage \
-  --repo corpetty/muster \
-  --title "Muster preview (Linux x86_64)" \
-  --notes "logos-basecamp + muster baked in. Download, chmod +x, run, click Muster."
-```
+   ```bash
+   gh release create muster-v<version> --target <commit> --title "Muster <version>" --notes-file <notes> \
+     .run/catalog-release/muster-v<version>/*.lgx \
+     .run/appimage/Muster-<version>-Basecamp-<tag>-linux-x86_64.AppImage
+   ```
 
-Publishing is outward-facing — it puts a binary on the public repo — so do it
-deliberately, and only after the click-test above passes on a real display.
+7. **Catalogue.** Commit `catalog/index.json` and `catalog/icons/` to `main` only after the assets are up, because Basecamp offers whatever the index names.
 
-## What builds this (the bake-in)
+## Moving to a newer Basecamp
 
-The AppImage comes from `logos-basecamp`'s own `bin-appimage` pipeline
-(`appDistributed` → `dirBundler` → `mkAppImage`), with muster added to the
-**distributed** app. Those edits live in your local `logos-basecamp/flake.nix`
-(LOCAL-ONLY, not committed there) and are documented in
-[`ui/tests/README.md`](ui/tests/README.md) § "Producing the app-under-test" —
-both the dev bake-in (for the test harness) and the portable bake-in (for this
-AppImage). A `git pull` in that checkout wipes them; re-apply from that doc.
+Add `infra/basecamp/release-<tag>.env` (the AppImage URL and sha256, the design-system rev, and the `lgpm` rev from that release's `flake.lock`). Add `infra/basecamp/bundle-<tag>.tsv`: the dependencies Basecamp's Package Manager would install for Muster from the Logos Official index, closed over their own dependencies, each with its sha256. Then point `scripts/release-appimage.sh` and `scripts/ui-lint.sh` at the new env file.
 
-## Honest caveats
+## Caveats
 
-- **The build needs a contributor's machine**, not a clone: it depends on the
-  local `logos-basecamp` bake-in and the local `logos-module-builder` fork
-  commits (the `nim.packages` hook + RUNPATH fix). The *AppImage itself* is
-  self-contained once built — that's the whole point — so the person running it
-  needs none of that. This asymmetry is why the AppImage exists.
-- **Portability is verified-to-launch, not verified-on-a-clean-machine.** The
-  AppImage builds, launches, and bundles muster (`muster_module` + `muster_ui`
-  with `libsecp256k1.so.5` co-located, confirmed by extracting it). Whether it
-  runs on a machine with no Nix store has to be checked on a second machine — the
-  one thing the build box can't prove about itself.
-- **It ships all of basecamp, not just muster.** A lighter *standalone* AppImage
-  (just the muster app, like `make run`) is a follow-up: it needs
-  `mkLogosQmlModule` to expose the runner's app derivation so `dirBundler` can
-  bundle it, which it does not today.
+- **What is checked where.** The AppImage was run on the build machine (bugger), with a fresh profile under Xvfb. Its portability is Basecamp's: Muster adds only portable packages, the same ones a catalogue install puts in a profile.
+- **Updating inside the AppImage.** The baked-in Muster is part of the image. A newer Muster from the catalogue installs into the profile beside it; to move a person to a new Muster, ship a new AppImage.
+- **Retired:** the `v0.1.0-demo` and `v0.2.0-demo` AppImages were built from a local Basecamp checkout with uncommitted bake-in edits (`make appimage`). They cannot share a room with today's builds.

@@ -1,0 +1,13 @@
+# The Logos Official packages Muster needs, baked into the release AppImage beside it
+# (scripts/release-appimage.sh): muster_module's and muster_ui's dependencies, closed over
+# their own, at the newest version each range admits in the Logos Official index of
+# 2026-10-14 — what Basecamp 0.3.2's Package Manager would install for Muster 0.3.0.
+# name<TAB>url<TAB>sha256
+delivery_module	https://github.com/logos-co/logos-modules-release/releases/download/delivery_module-v0.3.2/delivery_module-0.3.2.lgx	9b856418fcf816961f1118f34b395bb6a399e5523166be51f4eca6a7aaf76867
+lez_core	https://github.com/logos-co/logos-modules-release/releases/download/lez_core-v0.5.1/lez_core-0.5.1.lgx	1f19bbb1ee8e64206497ce9e61e1990c2e289f405847d678d1172ed08d6b0fd0
+keystore_module	https://github.com/logos-co/logos-modules-release/releases/download/keystore_module-v0.1.0/keystore_module-0.1.0.lgx	25e657ed66b495ef027b97f7d4e5e8d0e2e5f0f3cdd481ff47ddeb0905064a24
+eth_rpc_module	https://github.com/logos-co/logos-modules-release/releases/download/eth_rpc_module-v0.1.0/eth_rpc_module-0.1.0.lgx	0d6300f5b314d8e09861513bb157f544f736a3dd91fd62c884facd646b2f58e9
+fee_module	https://github.com/logos-co/logos-modules-release/releases/download/fee_module-v0.1.0/fee_module-0.1.0.lgx	f921dc481e65f630faacf786923ac3005144a396609a3c5d6ce7f8f13c7890dd
+tx_sender_module	https://github.com/logos-co/logos-modules-release/releases/download/tx_sender_module-v0.1.0/tx_sender_module-0.1.0.lgx	30715396a84df0eeddd9ab79fa61e4a30c6e1e1beea2073c51b44dc924315598
+liblogos_lez_rln_module	https://github.com/logos-co/logos-modules-release/releases/download/liblogos_lez_rln_module-v4.2.1/liblogos_lez_rln_module-4.2.1.lgx	4d61669f73374007c455047359d9c1e71bd118f82538c6d554def850548324b6
+liblogos_rln_module	https://github.com/logos-co/logos-modules-release/releases/download/liblogos_rln_module-v0.10.0/liblogos_rln_module-0.10.0.lgx	5dd755bc1b0977f115f1f73f00bb59c38392e3d42ab2dce197039202466eb8c3
