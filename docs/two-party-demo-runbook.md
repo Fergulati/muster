@@ -17,15 +17,19 @@ statement the roster endorses. The composer enforces this: pick the **kind** and
 only the policies that fit it, so "an ethereum payment via FROST" — which never meant
 anything — can't be built.)
 
-Everything below uses the **public AppImage** (`result-appimage/logos-basecamp.AppImage`,
-built with `make appimage`). Nothing here needs the nix build toolchain, so a colleague
-only needs the AppImage file.
+Everything below uses the **release AppImage**: Basecamp with Muster baked in,
+`Muster-<version>-Basecamp-<tag>-linux-x86_64.AppImage` from the
+[latest release](https://github.com/corpetty/muster/releases/latest) (or `make appimage`,
+`RELEASING.md`). Nothing here needs the nix build toolchain, so a colleague only needs the
+AppImage file. `scripts/demo-peer.sh` finds it in `~/Downloads/`. For the click-by-click
+labels of today's UI, `docs/runbooks/client-tour.md` is the reference; this runbook is the
+two-machine story around it.
 
 ---
 
 ## Why seeding is needed (Safe track only)
 
-The room's Safe is the real Safe v1.4.1 on anvil (`infra/anvil/devnet.sh`), **disclosed into the room by a member** (Accounts → **Disclose the local test Safe**; accounts live in the room, exo-a50.1.3): **2-of-3, owners = anvil accounts 0/1/2**,
+The room's Safe is the real Safe v1.4.1 on anvil (`infra/anvil/devnet.sh`), **disclosed into the room by a member** (room details → **Accounts** → **Disclose the local test Safe**; accounts live in the room, exo-a50.1.3): **2-of-3, owners = anvil accounts 0/1/2**,
 at `0xEb4520E32862D2adFa2aF042f0B5eA2041dEE841` (hardcoded in
 `module/nim-lib/muster_module.nim`). In-app approval reaches **executable** for any room
 member, but the on-chain `execTransaction` only accepts signatures that recover to the
@@ -114,7 +118,7 @@ Discovery is the public fleet, so **the FROST track works with zero shared infra
    It prints `LAN_RPC=http://<host-LAN-IP>:8545`. (Firewall must allow 8545.)
 2. The chain host runs `scripts/demo-peer.sh alice` (RPC default `127.0.0.1:8545` is fine
    for it). The **other** machine runs `scripts/demo-peer.sh bob`, then in Muster opens
-   **Settings → Infrastructure → RPC endpoint**, pastes the `LAN_RPC` URL, and clicks
+   **Settings → Advanced → RPC endpoint**, pastes the `LAN_RPC` URL, and clicks
    **Save** (it persists). Now both peers act on the same Safe.
 3. Run the Safe track below.
 
@@ -224,7 +228,7 @@ settle.
   does not match` line in the terminal instead of silently blanking the account.
 - **Peers never reach 2 members.** They must use the **same room name** and both be on the
   same delivery config (default `logos.dev` — leave it). Cross-host receive rides store
-  catchup (~1s), so allow a few seconds. Check Settings → Infrastructure shows the same
+  catchup (~1s), so allow a few seconds. Check Settings → Advanced shows the same
   delivery config on both.
 - **Safe Submit fails / card stuck at executable.** The signatures didn't recover to real
   owners: either a peer wasn't seeded (relaunch with `--fresh` so the seed mints a new

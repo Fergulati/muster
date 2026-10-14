@@ -124,9 +124,11 @@ app = import ./nix/app.nix { …; installedModules = installedDev ++ musterInsta
 > `qml/Main.qml not found` (a bundler-version skew); the standalone install is
 > self-consistent.
 
-**For the release AppImage** (`../RELEASING.md`), also bake muster into the
-**distributed** app — `appDistributed` uses portable-keyed modules, so use the
-`install-portable` outputs, and append them there too:
+**The release AppImage no longer comes from this bake-in** (since 0.3.0):
+`scripts/release-appimage.sh` installs Muster into Basecamp's own released AppImage, no
+checkout needed (`../RELEASING.md`). The distributed-app bake-in below is kept for a dev
+build of Basecamp that needs Muster inside — `appDistributed` uses portable-keyed modules,
+so use the `install-portable` outputs, and append them there too:
 
 ```nix
 musterUiInstallPortable     = muster_ui.packages.${system}.install-portable;
