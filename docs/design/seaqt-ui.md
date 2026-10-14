@@ -1,6 +1,6 @@
 # Muster's UI on nim-seaqt: no C++ in the repo
 
-**Status:** T0–T4 landed 2026-09-29 (§9). Both hosting probes have answered, and the gate awaits Jacek (§8). The hosting gate awaits Jacek (§8). Code: branch `feat/seaqt-ui`, [corpetty/muster#181](https://github.com/corpetty/muster/pull/181). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
+**Status:** T0–T4 landed 2026-09-29 (§9). The gate was decided on 2026-10-14: a standalone app (option B), on the newest Qt and seaqt, with the Basecamp UI kept until Basecamp can take a Nim one (§8, ADR-019). Next is T1b, the move to Qt 6.11. Code: branch `feat/seaqt-ui`, [corpetty/muster#181](https://github.com/corpetty/muster/pull/181). Epic `exo-607` (pebbles; `pb dep tree exo-607` for live status).
 **Reads with:** `docs/02-implementation-plan.md` (ADR-008 builder, ADR-013 the coherent UI builder, ADR-014 Nimbus/Status Nim reuse), `CLAUDE.md` working agreements (the UI reaches the module only through the logos API), `ui/tests/README.md`.
 **Reference projects:** [`seaqt/nim-seaqt`](https://github.com/seaqt/nim-seaqt) (Qt bindings), `seaqt/nimside` (the `qobject:` DSL and plugin macros), [`arnetheduck/nora-poc`](https://github.com/arnetheduck/nora-poc) (the pilot where nimside's DSL was designed), `status-im/status-desktop` (the production consumer).
 
@@ -8,8 +8,8 @@
 
 Muster's UI backend is 1,151 lines of C++ in a Qt plugin. It is a thin pass-through: 67 slots and 50 JSON-string properties, feeding QML from `muster_module`. Moving it to Nim on nim-seaqt is mechanical. The real work is at two boundaries:
 
-- **Qt version.** Logos ships Qt 6.9.2, so the seaqt branch that loads in a Logos process is `qt-6.8`, not `qt-6.11` (§5).
-- **The Basecamp plugin boundary** is C++ by construction. It can be generated at build time, but it cannot be written in Nim (§3, §5).
+- **Qt version.** Logos ships Qt 6.9.2, so the seaqt branch that loads in a Logos process is `qt-6.8`, not `qt-6.11` (§5). Decided since then: the app moves to Qt 6.11 and seaqt `qt-6.11`, and rebuilds the two Logos libraries it loads in-process on that Qt (§8, Q1).
+- **The Basecamp plugin boundary** is C++ by construction. It can be generated at build time, but it cannot be written in Nim (§3, §5). Decided since then: muster builds the standalone app, and the C++ Basecamp UI stays, frozen, until Basecamp can take a Nim one (§8, Q2).
 
 | Slice | Status | Result |
 |---|---|---|
@@ -19,11 +19,12 @@ Muster's UI backend is 1,151 lines of C++ in a Qt plugin. It is a thin pass-thro
 | T3: seaqt RemoteObjects | done | QtRemoteObjects bindings, generated at build time by the pinned seaqt-gen plus four patches, so no C++ is committed. A nimside source is remoted and driven through a dynamic replica both ways. |
 | T4a: probe B, a standalone seaqt app | done | The real `Main.qml` runs in a Nim host, which starts logos-core itself and calls `muster_module` over `lp_*`. `health()` reaches the view as `ok`. No C++ of ours, no chronos worker. |
 | T4b: probe A, a Nim plugin in Basecamp | done | A Nim `.so` works in the real `ui-host`, both ways through the builder's typed replica. That only happens once the object is registered under the replica's name, which today takes an ABI hack. It cannot reach the capability token without the C++ SDK. Two small `ui-host` changes would make A clean. |
-| Gate | ready, needs Jacek | Both probes have answered. The five questions in §8. |
+| Gate | decided, 2026-10-14 | B, written as if Basecamp did not exist. Newest Qt and seaqt. C++ generated at build time is fine. The Basecamp UI stays, frozen. ADR-019. |
+| T1b: newest everything | next | Qt 6.11, seaqt `qt-6.11` with RemoteObjects, liblogos and logos-protocol rebuilt on it, and the QtRO check across Qt versions. |
 
 **For Jacek:**
 
-- **The questions that decide the hosting path** are in [§8](#8-open-questions-for-jacek-and-the-operator).
+- **Your answers, and what they decided,** are in [§8](#8-open-questions-for-jacek-and-the-operator). Q5 (what the DSL is) is still yours.
 - **What muster asked of nimside that it could not say directly** is the gap list at the end of [§9, T2](#t2-the-view-contract-in-the-dsl-exo-6073-2026-09-29).
   T3 and T4b add to that list.
 - **What would make the Basecamp path (A) clean** is two small `ui-host` changes, in [§9, T4b](#t4b-probe-a-a-nim-plugin-inside-basecamps-host-exo-6076-2026-09-29).
@@ -38,11 +39,11 @@ So there are two deliverables. The first is a working muster UI whose native cod
 
 | Where | Lines | What it is | Fate |
 |---|---|---|---|
-| `ui/src/muster_ui_backend.{cpp,h}` | 1,151 + 109 | The UI backend. It implements 67 slots and feeds 50 properties (all `QString`, all JSON) from 68 `muster_module` methods, plus the `MUSTER_AUTO*` autopilot the offscreen self-tests drive. | Port to Nim: the main job. |
+| `ui/src/muster_ui_backend.{cpp,h}` | 1,151 + 109 | The UI backend. It implements 67 slots and feeds 50 properties (all `QString`, all JSON) from 68 `muster_module` methods, plus the `MUSTER_AUTO*` autopilot the offscreen self-tests drive. | Port to Nim: the main job. The C++ stays, frozen, as the Basecamp build until Basecamp can take a Nim UI (§8, Q2). |
 | `ui/src/muster_ui.rep` | 420 | The view contract. repc turns it into C++, and it is not C++ itself. | Becomes the DSL declaration, or stays as the generated contract (§5). |
 | `module/tools/headless-host/muster_headless_host.cpp` | 148 | A headless logos-core host that drives muster over raw QtRO dynamic replicas. | Port to Nim (needs QtRO bindings, §4). |
 | `module/tests/probes/host_return_harness.cpp` | 232 | A probe harness that reimplements the C++ host's return marshalling. | Port to Nim. It is already a reimplementation. |
-| `demo/muster-ui/` | ~5,500 | The speed build, a fork of logos-chat-ui. It is deliberately not the specified client. | Decide: delete, or move out of the repo (§8, Q4). |
+| `demo/muster-ui/` | ~5,500 | The speed build, a fork of logos-chat-ui. It is deliberately not the specified client. | Exempt from the gate, as not the client (§8, Q4). |
 
 Unaffected: the QML (~8,900 lines in `ui/src/qml/`), the Nim core (`module/`), and the design system (`Logos.Theme` / `Logos.Controls` are pure QML, so any Qt host can import them).
 
@@ -85,6 +86,8 @@ We write only the backend class and the `.rep`. The builder generates everything
 - **`qt-6.8` is the branch that fits Qt 6.9.2.** It is also what Status Desktop's master vendors today: `vendor/nim-seaqt` is at `7d40abd7`, the `qt-6.8` head, running on Qt 6.11 through a small compat shim.
 - **Moving to `qt-6.11` is a one-line pin bump** once Logos moves to Qt 6.11, or for a process that loads no Logos Qt libraries.
 
+**Update (2026-10-14):** the app moves to Qt 6.11 anyway (§8, Q1). Under option B the only Logos Qt code in the app's process is `liblogos_core` and `liblogos_protocol`. Both link Qt 6.9.2, so the app builds them itself against its own Qt. The module processes keep Logos's Qt, and QtRemoteObjects speaks the same protocol (`QtRO 2.0`) on both sides (§9, the gate).
+
 **The Basecamp plugin boundary is C++ by construction.** QPluginLoader needs plugin entry points. The host casts to C++ interfaces. The typed replica expects the repc source layout, because QtRO binds properties and slots **by index**. All of that can be *generated at build time*, but it cannot be written in Nim. So "no C++ in the repo" inside Basecamp means a generator must emit that shim, either nimside or the builder.
 
 ## 6. Options
@@ -111,6 +114,8 @@ Two small `ui-host` changes would remove both (§9, T4b).
 
 **Code sharing**, Jacek's second point, comes the same way in A and B. The UI's `muster_module` client becomes the **logos-nim-sdk consumer client generated from `muster.lidl`**, the same generator and contract the module is built from. Its typed Nim calls replace the C++ `LogosModules` client and the stringly-typed glue, and the UI can decode results into the module's own record types. Linking the Nim core into the UI process would **not** be code sharing. It would break the working agreement that the UI reaches the module only through the logos API, and the plan does not do it.
 
+**Decision (2026-10-14, ADR-019): B.** Jacek: "write this as if basecamp didn't exist". The operator: the C++ Basecamp UI stays, frozen, until Basecamp can take a Nim UI, because the catalogue release, the platform Signer and the Monero campaign ship through it. A is not pursued in muster. Its two `ui-host` asks (§9, T4b) remain the way the frozen C++ goes away.
+
 **Recommendation, after the probes (2026-09-29):**
 
 - **Choose B** unless Basecamp hosting is required now. It works end to end with no hacks: the real QML, logos-core, and `lp_*` calls on the GUI thread.
@@ -132,10 +137,11 @@ The slices are tracked under epic `exo-607`. T1–T3 are needed whatever the hos
 | **T3** (exo-607.4) | **seaqt RemoteObjects.** Add `RemoteObjects` to a seaqt-gen fork and generate the bindings (`QRemoteObjectNode`, `acquireDynamic`, `enableRemoting(QObject*)`). Needed by A, by B's likely module-call path, and by the headless-host port. Offer it upstream. | M | T1 | done |
 | **T4a** (exo-607.5) | **Probe B.** `muster-app` loads `Main.qml` with a Nim `logos` shim (`module()`, `isViewModuleReady()`), stands up logos-core, and makes an **async** `muster_module` call from Nim. It follows nora-poc's chronos worker + ThreadChannel pattern for results. | M | T2, T3 | done |
 | **T4b** (exo-607.6) | **Probe A.** `ui-host` loads a Nim `.so`. nimside `plugingen` is extended to emit the `PluginInterface` / `LogosViewPlugin` shim, the T2 object is remoted, and the builder's typed replica reads a property and invokes a slot correctly. The capability token is forwarded from `initLogos` to `lp_*`. | L | T2, T3 | done |
-| **Gate** (exo-607.7) | Choose A or B with Jacek (Q1–Q5). Record it as an ADR in `02-implementation-plan.md`. Skip whichever probe the answer makes moot. | — | T4a or T4b | ready: needs Jacek |
-| **T5** (exo-607.8) | **Port the backend logic.** All 67 slots, the autopilot, the retry timers and the audit download, calling `muster_module` through the logos-nim-sdk consumer client generated from `muster.lidl`. | M | Gate, T0 | — |
-| **T6** (exo-607.9) | **Hosting integration.** For A: a Nim `ui_qml` path in logos-module-builder (an upstream PR, like #202/#226) and the `ui/` flake. For B: a `muster-app` flake app, with `make run` / `run-fleet` and the AppImage switched over. T0 goes green on the Nim build. | M (B) / L (A) | T5 | — |
-| **T7** (exo-607.10) | **Delete the C++.** Remove `ui/src/*.{cpp,h}` (and the `.rep` + CMakeLists under B), port the headless host and the probe harness to Nim, act on the `demo/muster-ui` decision, and add a `scripts/check-no-cpp.py` gate so C++ cannot come back unnoticed. | S–M | T6 | — |
+| **Gate** (exo-607.7) | Choose A or B with Jacek (Q1–Q5). Record it as an ADR in `02-implementation-plan.md`. Skip whichever probe the answer makes moot. | — | T4a or T4b | done: B, ADR-019 |
+| **T1b** (exo-607.13) | **Newest everything.** Qt 6.11 from a pinned nixpkgs, seaqt `qt-6.11` with RemoteObjects regenerated on it, nimside and seaqt-gen at their heads. `liblogos_core` and `liblogos_protocol` are rebuilt on that Qt from the revisions the builder pins. The checks so far (`hello`, `contract`, `ro`, `muster-app-view`, `nim-app-core-probe.sh`) stay green. The probe adds one check: a 6.11 app calls a module process on Logos's 6.9.2 over QtRO. | M | Gate | next |
+| **T5** (exo-607.8) | **Port the backend logic.** All 67 slots, the autopilot, the retry timers and the audit download, calling `muster_module` through the logos-nim-sdk consumer client generated from `muster.lidl`. | M | Gate, T0, T1b | — |
+| **T6** (exo-607.9) | **Hosting integration (B).** A `muster-app` flake app that takes `--user-dir` and meets `scripts/lib/ui-build.sh`'s contract, built into `.run/runner-nim`, with `make run` / `run-fleet` able to choose it. T0 goes green on the Nim build. The Basecamp build (`ui/`) stays the catalogue's. | M | T5 | — |
+| **T7** (exo-607.10) | **Delete the C++ that has no Basecamp role.** Port the headless host and the probe harness to Nim. Add a `scripts/check-no-cpp.py` gate that exempts `ui/` (until Basecamp can take a Nim UI) and `demo/` (not the client) by name. `ui/src/*.{cpp,h}` and the `.rep` go when the `ui/` exemption ends. | S–M | T6 | — |
 | **T8** (exo-607.11) | **The DSL payoff.** Write up for Jacek what muster needed from nimside and seaqt. Optionally make the playground genuinely complex: replace the JSON-string properties for intents, messages and members with typed list models, with nested objects, signals with arguments and cross-thread updates. | open | T5 | — |
 
 ## 8. Open questions (for Jacek and the operator)
@@ -145,6 +151,14 @@ The slices are tracked under epic `exo-607`. T1–T3 are needed whatever the hos
 3. **Is C++ generated at build time acceptable?** seaqt's own wrappers are exactly that, so presumably yes. The plugin shim in A depends on it.
 4. **`demo/muster-ui` (~5,500 lines of C++):** delete, move to its own repo, or exempt as "not the client"?
 5. **What is the DSL:** nimside's `qobject:` layer (as in nora-poc), or something higher, such as declaring views as well? Should muster's contract move from JSON strings to typed models, to make the playground "sufficiently complex" (T8)?
+
+**The answers (2026-10-14).** Jacek answered Q1–Q3, and the operator answered Q2's Basecamp half and Q4. The decision is ADR-019.
+
+1. **Qt: the newest.** Jacek: "6.11 is fine, 6.8 bindings 'should' work with that version too (doesn't have to be exact match)". On Status Desktop: "they 'should' upgrade their bindings as well soon … use newest everything". So the app moves to Qt 6.11 and seaqt `qt-6.11` (slice T1b). What still holds is one Qt per process. The two Logos libraries the app loads are rebuilt on its Qt, and the module processes keep Logos's (§5, §9).
+2. **Standalone.** Jacek: "standalone - write this as if basecamp didn't exist". So option B. The operator: the C++ Basecamp UI stays, frozen, because the catalogue, the platform Signer and the Monero campaign ship through it. It is deleted when `ui-host` can load a Nim plugin cleanly.
+3. **Generated C++: yes.** Jacek: "the aim is to get to a point where we can make a commodity of what the generated c++ would be, by extending seaqt-gen (it can run on any c++ code, not just qt itself)". So C++ glue generated at build time is acceptable, as seaqt's wrappers already are. Pointing seaqt-gen at the Logos C++ SDK, for example, would also give a clean route to the token that blocked option A.
+4. **`demo/muster-ui`: exempt** (operator). It stays as "not the client", outside the "no C++" gate.
+5. **Open.** Still Jacek's. T8 waits on it.
 
 ## 9. Progress
 
@@ -386,3 +400,15 @@ With both, a Nim UI plugin would call `muster_module` exactly as the T4a host do
 - Reading the token in Nim.
 - Whether an `lp_*` client inside `ui-host` could obtain a `muster_module` token.
 - Shutdown with the impersonated interface: `ui-host` deletes the plugin object while Nim holds a ref.
+
+### The gate (exo-607.7, 2026-10-14)
+
+**Decided:** option B, with the newest Qt and seaqt (§8, ADR-019). These facts were checked that day, and slice T1b builds on them:
+
+- **What links Qt in the app's process.** `liblogos_core.so` (logos-standalone-app `44f5zpbl…`) and `liblogos_protocol.so` (logos-protocol-lib 0.2.0) both list `libQt6Core`, `libQt6Network` and `libQt6RemoteObjects` as `NEEDED`, against Qt 6.9.2. A Qt 6.11 app therefore cannot take them from the builder's closure. It builds them from the same source revisions on its own Qt: `logos-liblogos` `64de644e` and `logos-protocol` `6401e30a`, the ones `ui-nim/flake.lock` reaches through logos-module-builder `4717b9af`.
+- **The module processes need nothing new.** `logos_host` and the modules it loads run in processes of their own, on Logos's Qt. The app reaches them over QtRemoteObjects. Its protocol string is `QtRO 2.0` in 6.9.2, 6.11.2 and 6.12.0 (`src/remoteobjects/qconnectionfactories_p.h` at each tag). A matching version string is necessary but not sufficient, so T1b's probe makes a real call from a 6.11 app into a 6.9.2 module process.
+- **What "newest" means today:**
+  - **Qt:** `nixos-unstable` ships 6.11.2. Qt 6.12.0 is tagged upstream, but it is in neither nixpkgs nor seaqt yet.
+  - **seaqt:** the `qt-6.11` branch is at `41a8f1b1` (2026-07-08). Its layout is the same as `qt-6.8`'s. It has no RemoteObjects, so T3's patches are applied to a regeneration on 6.11.
+  - **nimside** (`38406061`) and **seaqt-gen** (`56485e6d`) have not moved since the T1–T3 pins. T3's four patches therefore apply to the generator as it is.
+- **What did not change.** The UI still reaches `muster_module` only through the logos API (`lp_*`). The `.rep` is still the contract's source of truth: the frozen C++ build reads it with repc, and `repContract` reads it for Nim. So the two builds cannot drift while both exist.

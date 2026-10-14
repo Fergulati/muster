@@ -36,7 +36,8 @@ scripts/nim-app-core-probe.sh                          # T4a: + logos-core and m
 
 ## Rules
 
-- **The Qt must be the runner's, exactly.** seaqt compiles against Qt's private headers. It loads only on the Qt minor version it was generated for, or newer. One process cannot hold two Qt copies. Bump `logos-module-builder` here in the same change as `ui/flake.nix`. Move to seaqt `qt-6.11` only when Logos moves to Qt 6.11.
+- **One Qt per process.** seaqt compiles against Qt's private headers. It loads only on the Qt minor version it was generated for, or newer. One process cannot hold two Qt copies. Until T1b lands, that Qt is the runner's 6.9.2, exactly: bump `logos-module-builder` here in the same change as `ui/flake.nix`. From T1b (ADR-019, "newest everything") the app has its own, newer Qt. Then every library the app loads in-process, `liblogos_core` and `liblogos_protocol` included, is built here on that Qt, never taken from the builder's closure. The module processes keep Logos's Qt.
+- **The app is standalone** (ADR-019, option B). Write it as if Basecamp did not exist. The C++ Basecamp UI in `ui/` is frozen. It gets no feature of its own, but the QML and the `.rep` are shared, so a slot added to the contract is implemented in both backends. The compile fails on either side until it is.
 - **Pin seaqt and nimside by commit.** Their branches are rebased upstream.
 - **The UI reaches muster_module only through the logos API.** This applies here too. Code sharing means the client that logos-nim-sdk generates from `muster.lidl`. It never means linking the core into the UI process.
 - **Parity is judged by the self-tests.** A Nim UI build is ready when `MUSTER_UI=nim scripts/ui-parity.sh` is green, exactly as it is for `cpp`. See `scripts/lib/ui-build.sh` for the contract a build must meet.
