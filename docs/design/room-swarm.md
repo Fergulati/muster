@@ -121,14 +121,15 @@ show truthfully, with the observer who sees it.
 All sealed to the room under the epoch key like every event; the author-bearing ones join
 the `authorship.nim` list, so a forgery is dropped from the room's view (exo-f76).
 
-| Key | Author-signed | Body |
+| Key | Author-signed by | Body |
 |---|---|---|
-| `file/<fid>` | the sharer | name, size, mime, plaintext digest, ciphertext CID, file key, storage network |
-| `file/<fid>/seed/<who>` | the seeder | storage peer id, addresses, network, until (optional) |
-| `file/<fid>/unseed/<who>` | the seeder | — |
-| `file/<fid>/retract` | the sharer only | — (hides it from the panel; it cannot unshare what members already hold, and says so) |
+| `file/<fid>` | the sharer (`author`) | name, mime, size, plaintext digest, ciphertext CID, file key, seal scheme, storage network, `at` |
+| `file/<fid>/seed/<who>` | `who` | `on` (seeding or stopped), storage peer id, addresses, network, `at` |
+| `file/<fid>/retract` | the sharer only (`author`) | `at` — hides it from the list; it cannot unshare what members already hold, and says so |
 
-`fid` is the content id of the share event. `reduceSwarm(roomEvents(s))` folds them into
+`fid` is content-addressed over (sharer, CID) (`muster.swarm.file-id.v1`), so every member
+derives it and nobody can post under another's file id. A seeder's newest announce wins by
+(`at`, event id), the same on every member; a stop is an announce with `on: false`. `reduceSwarm(roomEvents(s))` folds them into
 files and their seeders: order-free, idempotent (invariant 4), and a seeder appears only
 because they announced (invariant 9). Muster never infers a holder from the storage node's
 own peer table.
@@ -149,10 +150,12 @@ effect and F-20 classes it as an external read at its log position.
    PEX), then `downloadToUrl` the ciphertext into the instance's temp directory.
 2. Open it, check the digest, write the plaintext where the person chose. A mismatch is a
    refusal naming the sharer and the CID, never a partial file.
-3. If the person keeps seeding (the default, §9), post `seed/<me>` and leave
-   the dataset advertised. "Private fetch" (a per-file choice): `isPrivate=true`,
-   `advertise=false`, no seed event — the fetch goes over Mix and this member serves
-   nothing afterwards.
+3. If the person keeps seeding (the default, §9), post `seed/<me>` and leave the dataset
+   advertised. "Private fetch" (a per-file choice): `isPrivate=true`, `advertise=false`,
+   no seed event — and **no direct dial in step 1**, because connecting to a seeder hands
+   them this node's address. The fetch finds the blob through the storage network over
+   Mix instead, and this member serves nothing afterwards (they can still choose to seed
+   later). Whether Storage's Mix path reaches a provider found this way is an S0 question.
 4. A pump on the intents tick drives progress, retries other seeders, and re-announces
    when this node's addresses change.
 
@@ -206,9 +209,10 @@ agreement). S3's spec goes through `discuss-issue` first.
 - **S1 — The storage seam.** `BlobStore`, `LocalBlobStore`, `LpStorage`; optional
   dependency, three-state readiness, install remedy. **Needs a runner rebuild** to bundle
   `storage_module` (ask first: `make build` is memory-capped and froze a workstation once).
-- **S2 — Sealed blobs.** `blob_seal.nim` with a round-trip test, a tamper test, a probe
-  that the uploaded manifest names nothing.
-- **S3 — The room as tracker.** The four event kinds, `reduceSwarm`, authorship. Spec
+- **S2 — Sealed blobs** (landed: `crypto/blob_seal.nim`, `blob_seal_test`). Round trip,
+  tamper and truncation refusals; the check that an uploaded manifest names nothing moves
+  to S1, which has a storage node. Padding is not built.
+- **S3 — The room as tracker.** The three event kinds, `reduceSwarm`, authorship (landed: `coordination/swarm.nim`, `swarm_test`). Spec
   `derived-exo-4d0.4` with probes: the fold is order-free and idempotent; a seeder is listed
   only by their own signed announce; a forged announce is dropped; a later-epoch member
   holds no key to an earlier file; a digest mismatch refuses.
