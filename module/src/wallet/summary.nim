@@ -110,3 +110,16 @@ proc walletSummary*(i: SummaryInputs): JsonNode =
                    "dev": true, "balances": demo}
 
   %*{"wallets": wallets, "connect": connect, "checking": checking}
+
+proc moneroViewFor*(moduleState: string, backend: proc(): MoneroBackend): MoneroView =
+  ## The Monero part of the summary's inputs: the host's grade of monero_wallet_backend
+  ## (`moduleState`, readiness's ModuleState as a string), and — only once that is "ready"
+  ## — the open wallet as the backend's cached pump reads it (never a wait). A module the
+  ## host does not report ready is never asked: `backend` is not even called.
+  result = MoneroView(module: moduleState)
+  if moduleState != "ready": return
+  let b = backend()
+  result.status = b.walletStatus(cmPump)
+  if result.status.read == rsAnswered and result.status.wallet.len > 0:
+    result.receive = b.receiveInfo(cmPump)
+    result.balances = b.balances(cmPump)
