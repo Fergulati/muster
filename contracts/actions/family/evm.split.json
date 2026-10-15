@@ -579,6 +579,176 @@
           "what": "Part 6g: renew an expired split"
         }
       ]
+    },
+    {
+      "id": "evm.split/send",
+      "name": "Send Ethereum (ETH or an ERC-20 token) to someone in the room, at an address they shared",
+      "area": "family",
+      "family": "evm.split",
+      "kind": "evm-split",
+      "status": "built",
+      "summary": "A send is a split on the payee's behalf with the sender its only payer (exo-dcc.33): the same agreement, settlement and confirmation as the split. It is paid at the address they shared (their Ethereum address), never one the sender typed; an address may back any number of sends: each payment is confirmed from its own transaction. Proposing is the sender's agreement (they are its only payer), and the payee's Accept is their word the address is theirs. The sender pays from their own wallet (client-side EIP-155, or tx_sender_module in Basecamp), and the payment is confirmed from the payment's own transaction receipt (for a token, its Transfer log) by the payee's own read.",
+      "generated": "evm-split/split",
+      "effect": {
+        "schema": "muster.effect.split.v1",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the CAIP-2 chain every share is paid on — the policy's qualifier (evm-split@<chain>)"
+          },
+          {
+            "name": "asset",
+            "means": "what is paid: ETH (native), or an ERC-20 token named erc20:<0x address>, lowercase — the token's own symbol and decimals are display-only reads, never signed"
+          },
+          {
+            "name": "total",
+            "means": "the bill, canonical decimal in the smallest unit (wei); the creditor's own share is total minus the shares"
+          },
+          {
+            "name": "creditor",
+            "means": "who fronted the bill and is owed: their room identity (64-byte encryption identity, hex)"
+          },
+          {
+            "name": "payTo",
+            "means": "the creditor's receiving address, lowercase — the creditor's own material, reviewed and signed: their own address when they propose, the address they last shared into the room when proposed on their behalf — and their agreement vouches for it"
+          },
+          {
+            "name": "shares",
+            "means": "[{who, amount}] sorted by who, each debtor once, never the creditor, every amount above zero, the sum at most the total"
+          },
+          {
+            "name": "memo",
+            "means": "room-only text, at most 280 bytes"
+          },
+          {
+            "name": "quote",
+            "means": "optional — a bill in another currency (exo-3a4): {currency, fiatTotal in its minor units, fiatDecimals, rateFiat, rateAsset, source, at}; the rate is the proposer's quote, recorded in the log as an external read before anyone agrees (\"sources\": {\"quote\": \"read\"}, invariant 10), and the total must be exactly its conversion"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "act",
+          "who": "the payee",
+          "does": "Shares an address for the rail into the room (Share an address / Share my Bitcoin address / Share my LEZ address); a sender's Ask for an address asks for one."
+        },
+        {
+          "step": "propose",
+          "who": "the sender",
+          "does": "Picks the payee, the rail and the amount; the module pays it at the payee's shared address (send.behalfPayTo), refusing none shared (no-shared-address). Proposing is the sender's agreement."
+        },
+        {
+          "step": "approve",
+          "who": "the payee",
+          "does": "Accept: their client agrees only for an address it holds (payto-not-mine otherwise)."
+        },
+        {
+          "step": "settle",
+          "who": "the sender",
+          "does": "Pays from their own wallet (client-side EIP-155, or tx_sender_module in Basecamp)."
+        },
+        {
+          "step": "final",
+          "who": "the payee's own client",
+          "does": "Confirmed from the payment's own transaction receipt (for a token, its Transfer log) by the payee's own read."
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a send to someone who shared no address for the rail and chain",
+          "why": "Muster never types or guesses a payee's address (no-shared-address)",
+          "evidence": [
+            "module/tests/send_any_asset_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_propose_split",
+        "coordinate_share_address",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_settle_part",
+        "coordinate_confirm_part"
+      ],
+      "ui": "Built (exo-dcc.33): Send money in the room's + picker and on Home; pick who and the rail (Settles on), type the amount; the form names the address it goes to or offers Ask <name> for an address. Not yet run live between two machines.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "You pay exactly the share you agreed, to the address in the split: the payment is derived from the agreed effect, never typed",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Only the people a split names can agree to it, and only each can agree to their own share",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing makes anyone pay: the room shows who has",
+          "credibility": "motivational",
+          "party": "each person who owes"
+        },
+        {
+          "claim": "Every payment is public on the chain — payer, payee, amount — and several payments to one address close together link the group",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "Who was at dinner stays in the room: muster never tags a payment on-chain with the split",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/send_any_asset_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/parts_fold_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/conformance_test.nim"
+        }
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6a-a-bill-in-eth",
+          "what": "Part 6a: a bill in ETH"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6b-in-a-token",
+          "what": "Part 6b: in a token"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6c-for-someone-else",
+          "what": "Part 6c: for someone else"
+        },
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6d-a-bill-in-another-currency",
+          "what": "Part 6d: a bill in another currency"
+        }
+      ],
+      "unverified": [
+        "a live send between two machines on this rail"
+      ]
     }
   ]
 }

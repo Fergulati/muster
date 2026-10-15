@@ -446,7 +446,7 @@
           ]
         }
       ],
-      "ui": "Built (exo-dcc.32). The room's + picker has Send Monero, and Home's Start something has a Send Monero verb: pick who, type the amount in XMR; the form says which address it goes to, or offers Ask <name> for a Monero address. The card reads 'You send … / … sends you …', and the payee's button is Accept — <address> is my address.",
+      "ui": "Built (exo-dcc.32). The room's + picker and Home's Start something have Send money, XMR by default: pick who, type the amount in XMR; the form says which address it goes to, or offers Ask <name> for a Monero address. The card reads 'You send … / … sends you …', and the payee's button is Accept — <address> is my address.",
       "invariants": [
         1,
         2,

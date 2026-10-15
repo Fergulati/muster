@@ -70,7 +70,8 @@ import ../src/intents/authorization    # muster-issued authorizations for the ho
 import ../src/coordination/lp_invoker  # LpInvoker — call the target module over lp_*
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
-import ../src/coordination/joined_rooms  # the rooms this member joined, re-entered on relaunch (exo-ecbe)
+import ../src/coordination/joined_rooms
+import ../src/coordination/send     # where a payment sent to someone is paid, by rail (exo-dcc.33)  # the rooms this member joined, re-entered on relaunch (exo-ecbe)
 import ../src/coordination/home        # the home surface: what waits on THIS member (F-18, exo-ed5)
 import ../src/coordination/effect_summary  # what an effect moves, in its family's words (exo-59c)
 import ../src/wallet/types             # chain-agnostic wallet types
@@ -1739,13 +1740,18 @@ proc musterCoordinateProposeSplitImpl(chain, total, sharesJson, memo: string): s
   # typed here; their own client checks it before agreeing (creditorAgreeRefusal).
   var payTo = myEvmPayAddress()
   if creditor != me:
-    if lez: return $(%*{"error": "on-behalf-private", "detail":
-                        "a private split is proposed by whoever fronted it: their shielded address is not shared in the room"})
-    if btc: return $(%*{"error": "on-behalf-bitcoin", "detail":
-                        "a Bitcoin split is proposed by whoever fronted it: the room's shared addresses are Ethereum ones"})
+    # on their behalf — a send when this member is its only payer (exo-dcc.32, .33): at the
+    # address they shared for this rail and chain (send.behalfPayTo); a LEZ key node never
+    # under another unpaid payment of the same amount
     gSession.poll()
-    payTo = sharedAddressOf(gSession.roomEvents(), creditor)
-    if payTo.len == 0: return $(%*{"error": "no-shared-address", "creditor": creditor})
+    let family = (if lez: LezSplitFamily elif btc: BtcSplitFamily else: EvmSplitFamily)
+    payTo = ""
+    for sh in shares:
+      let (a, why) = behalfPayTo(gSession.roomEvents(), driverFor, family, creditor, chain, sh.amount)
+      if why.len > 0:
+        return $(%*{"error": why.split(":")[0], "creditor": creditor, "chain": chain,
+                    "detail": why.split(": ", 1)[^1]})
+      payTo = a
   elif btc:
     # my own wpkh address on the split's network — where I pay from, and am paid at
     payTo = p2wpkhAddress(networkByCaip2(chain).hrp, moduleKeystore().btcPubKey())
@@ -2020,7 +2026,13 @@ proc musterCoordinateShareAddressImpl(chain: string): string =
   ## Post MY address for `chain` as an author-signed address-share card: my Ethereum
   ## address, or the Bitcoin address of my own key on that network.
   if gSession == nil: return $(%*{"error": "not-joined"})
-  let c = chain.strip()
+  var c = chain.strip()
+  # an ask may name only the rail (a send's "Ask for an address", exo-dcc.33): the network
+  # this member's own node serves, or the zone their LEZ wallet is on
+  if c in ["bip122", "lez"]:
+    let (ok, resolved, detail) = splitChainFor(if c == "lez": "lez-split" else: "btc-split")
+    if not ok: return $(%*{"error": (if c == "lez": "no-lez-wallet" else: "no-btc-node"), "detail": detail})
+    c = resolved
   var body: JsonNode
   if c.startsWith("bip122:"):
     var hrp = ""
@@ -2037,6 +2049,16 @@ proc musterCoordinateShareAddressImpl(chain: string): string =
     let r = xmrShareAddress(gSession, moduleKeystore(), moneroBackend(), c, gMsgSeq, int64(epochTime()))
     if not r.ok: return $xmrRefusalJson(r.why, c)
     return $(%*{"address": r.address, "asset": XmrAsset, "chain": c})
+  elif c.startsWith("lez:"):
+    # my shielded key node on that zone (exo-dcc.33): what a private payment sent to me is
+    # paid at — a note to it is found by my own scan
+    var keyNode = ""
+    try:
+      for r in splitLezAdapter().receiveAddresses(moduleKeystore()):
+        if r.form == "shielded": keyNode = r.address
+    except CatchableError as e: return $(%*{"error": "no-lez-wallet", "detail": e.msg})
+    if keyNode.len == 0: return $(%*{"error": "no-lez-wallet", "detail": "no shielded account to be paid at"})
+    body = %*{"kind": "address-share", "asset": "LEZ", "chain": c, "address": keyNode, "form": "shielded"}
   elif c.len == 0 or c.startsWith("eip155:"):
     body = %*{"kind": "address-share", "asset": "ETH", "address": myEvmPayAddress().toLowerAscii(), "form": 1}
   else: return $(%*{"error": "no-shared-address", "detail": "nothing is paid to a shared address on " & c})

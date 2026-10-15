@@ -61,8 +61,8 @@ ColumnLayout {
                             : room.composeType === "action" ? qsTr("Propose an action")
                             : room.composeType === "split" && room.splitRequest ? qsTr("Request a payment")
                             : room.composeType === "split" && room.splitSend
-                              ? (room.splitFor.length > 0 ? qsTr("Send Monero to %1").arg(room.memberLabel(room.splitFor))
-                                                          : qsTr("Send Monero"))
+                              ? (room.splitFor.length > 0 ? qsTr("Send %1 to %2").arg(room.splitUnit).arg(room.memberLabel(room.splitFor))
+                                                          : qsTr("Send money"))
                             : room.composeType === "split" ? (room.splitFor.length > 0
                                                               ? qsTr("Split a bill %1 paid").arg(room.memberLabel(room.splitFor))
                                                               : qsTr("Split a bill you paid"))
@@ -583,14 +583,14 @@ ColumnLayout {
                         // who fronted it (exo-770): you, or someone else — then it is paid at the
                         // address they shared, and nobody pays until they agree it is theirs
                         LogosText {
-                            visible: !room.splitPrivate && !room.splitBitcoin && !room.splitRequest
+                            visible: (room.splitSend || (!room.splitPrivate && !room.splitBitcoin && !room.splitRequest))
                                      && room.members.length > 1 && !room.acrossOpen
                             text: room.splitSend ? qsTr("Send to:") : qsTr("Who paid the bill?")
                             color: Theme.palette.textTertiary
                             font.pixelSize: MusterStyle.caption
                         }
                         Flow {
-                            visible: !room.splitPrivate && !room.splitBitcoin && !room.splitRequest
+                            visible: (room.splitSend || (!room.splitPrivate && !room.splitBitcoin && !room.splitRequest))
                                      && room.members.length > 1 && !room.acrossOpen
                             Layout.fillWidth: true
                             spacing: Theme.spacing.tiny
@@ -620,6 +620,8 @@ ColumnLayout {
                                      ? (room.splitSend
                                         ? qsTr("Sent to %1, the Monero address %2 shared from their own wallet. You pay once %2 agrees it is theirs, from any wallet; their wallet confirms it.")
                                         : qsTr("Paid to %1, the Monero address %2 shared from their own wallet. Nobody pays until %2 agrees it is theirs."))
+                                     : room.splitSend
+                                     ? qsTr("Sent to %1, the address %2 shared. You pay once %2 accepts it is theirs.")
                                      : qsTr("Paid to %1, the address %2 shared. Nobody pays until %2 agrees it is theirs."))
                                         .arg(addr).arg(room.memberLabel(room.splitFor))
                                   : room.splitMonero
@@ -627,6 +629,10 @@ ColumnLayout {
                                      ? qsTr("⚠ %1 hasn't shared a Monero address on %2: ask them for one, then send.")
                                      : qsTr("⚠ %1 hasn't shared a Monero address on %2: ask them for one, then split it for them."))
                                         .arg(room.memberLabel(room.splitFor)).arg(room.moneroChainLabel(room.splitMoneroChain))
+                                  : room.splitSend
+                                  ? qsTr("⚠ %1 hasn't shared %2 address in this room: ask them for one, then send.")
+                                        .arg(room.memberLabel(room.splitFor))
+                                        .arg(room.splitBitcoin ? qsTr("a Bitcoin") : room.splitPrivate ? qsTr("a LEZ") : qsTr("an Ethereum"))
                                   : qsTr("⚠ %1 hasn't shared an address in this room: ask them to share one (the Pay composer's “Ask the room”), then split it for them.")
                                         .arg(room.memberLabel(room.splitFor))
                             color: addr.length > 0 ? Theme.palette.textSecondary : Theme.palette.warning
@@ -649,6 +655,26 @@ ColumnLayout {
                                     purpose: (room.splitSend ? qsTr("Monero to be sent to you: an address on %1")
                                                              : qsTr("A Monero split to be paid to you: an address on %1")).arg(label)
                                 }));
+                            }
+                        }
+
+                        // a send on another rail: ask them for an address on it (exo-dcc.33) — the
+                        // rail only for Bitcoin and LEZ; their module answers with its own network
+                        ActionButton {
+                            objectName: "roomAskSendAddress"
+                            visible: room.splitSend && !room.splitMonero && room.splitFor.length > 0
+                                     && room.splitForAddress.length === 0 && !room.acrossOpen
+                            Layout.preferredWidth: 360
+                            text: qsTr("Ask %1 for an address").arg(room.memberLabel(room.splitFor))
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: {
+                                if (!room.backend) return;
+                                var asset = room.splitBitcoin ? "BTC" : room.splitPrivate ? "LEZ" : "ETH";
+                                var ask = { kind: "address-request", intent: "send", asset: asset, "for": room.splitFor,
+                                            purpose: qsTr("A payment to be sent to you: an address to send it to") };
+                                if (asset === "BTC") ask.chain = "bip122";
+                                if (asset === "LEZ") ask.chain = "lez";
+                                room.backend.postMessage(JSON.stringify(ask));
                             }
                         }
 
@@ -718,8 +744,14 @@ ColumnLayout {
                                   : room.splitSend
                                   ? (room.splitFor.length === 0
                                      ? qsTr("Pick who to send it to.")
-                                     : qsTr("You send %1 %2 XMR. Once they agree the address is theirs, pay from any Monero wallet with the link the room gives you; their own wallet confirms it.")
-                                           .arg(room.memberLabel(room.splitFor)).arg(room.weiToEth(pv.each)))
+                                     : room.splitMonero
+                                     ? qsTr("You send %1 %2 XMR. Once they accept the address is theirs, pay from any Monero wallet with the link the room gives you; their own wallet confirms it.")
+                                           .arg(room.memberLabel(room.splitFor)).arg(room.weiToEth(pv.each))
+                                     : room.splitPrivate
+                                     ? qsTr("You send %1 %2 LEZ privately, from your own wallet, once they accept: the chain learns only that a private transfer happened, and their scan finds it.")
+                                           .arg(room.memberLabel(room.splitFor)).arg(room.weiToEth(pv.each))
+                                     : qsTr("You send %1 %2 %3 from your own wallet once they accept; their own read confirms it. The payment is public on the chain.")
+                                           .arg(room.memberLabel(room.splitFor)).arg(room.weiToEth(pv.each)).arg(room.splitUnit))
                                   : room.splitRequest
                                   ? (room.splitMonero
                                      ? qsTr("%1 pays you %2 XMR from any Monero wallet, with a link the room gives them.")

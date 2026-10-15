@@ -27,7 +27,8 @@ Popup {
         picker.close();
     }
 
-    // "Send Monero" (exo-dcc.32): a split you alone pay, to one member, on the Monero kind
+    // "Send money" (exo-dcc.32, .33): a split you alone pay, to one member — XMR by default,
+    // any rail a split takes from the composer's "Settles on" row
     function pickSend() {
         picker.room.splitRequest = false;
         picker.room.splitSend = true;
@@ -125,8 +126,8 @@ Popup {
             }
             Tile {
                 objectName: "roomKindSendXmr"
-                title: qsTr("Send Monero"); glyph: "send"
-                detail: qsTr("Send XMR to someone here. They share an address from their own wallet; you pay from any wallet, and theirs confirms it.")
+                title: qsTr("Send money"); glyph: "send"
+                detail: qsTr("Send XMR, ETH or a token, BTC or LEZ to someone here, at an address they shared. XMR by default.")
                 current: picker.room.composeType === "split" && picker.room.splitSend
                 onClicked: picker.pickSend()
             }

@@ -16,8 +16,7 @@ RowLayout {
     required property var room
 
     // an action carries its own driver (invoke) — no policy choice to make.
-    // a send is Monero only (exo-dcc.32): no rail to pick
-    visible: room.composeType !== "action" && !(room.composeType === "split" && room.splitSend)
+    visible: room.composeType !== "action"
     Layout.fillWidth: true
     spacing: Theme.spacing.small
 
@@ -46,7 +45,12 @@ RowLayout {
         delegate: ActionButton {
             required property var modelData
             readonly property var info: room.kindInfo(modelData)
-            readonly property string label: info && info.label ? String(info.label) : String(modelData)
+            // on a send, the rail by its asset alone ("Bitcoin", not "Split (Bitcoin)", exo-dcc.33)
+            readonly property var sendNames: ({ "evm-split": qsTr("Ethereum or a token"), "lez-split": qsTr("LEZ, privately"),
+                                                "btc-split": qsTr("Bitcoin"), "monero-split": qsTr("Monero") })
+            readonly property string label: (room.composeType === "split" && room.splitSend && sendNames[String(modelData)])
+                                            ? sendNames[String(modelData)]
+                                            : info && info.label ? String(info.label) : String(modelData)
             objectName: "roomPolicy" + String(modelData).charAt(0).toUpperCase() + String(modelData).slice(1)
             text: room.hasDriver(modelData) ? label : qsTr("＋ Propose %1").arg(label.toLowerCase())
             variant: room.shownKind === modelData

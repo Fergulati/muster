@@ -263,6 +263,175 @@
           "what": "Part 6h: the private split on the LEZ testnet"
         }
       ]
+    },
+    {
+      "id": "lez.split/send",
+      "name": "Send LEZ, privately to someone in the room, at an address they shared",
+      "area": "family",
+      "family": "lez.split",
+      "kind": "lez-split",
+      "status": "built",
+      "summary": "A send is a split on the payee's behalf with the sender its only payer (exo-dcc.33): the same agreement, settlement and confirmation as the split. It is paid at the shielded key node they shared on that zone, never one the sender typed; never while another unpaid payment of the same amount waits on that key node (amount-in-flight): a note is matched by its amount. Proposing is the sender's agreement (they are its only payer), and the payee's Accept is their word the address is theirs. The sender pays shielded to shielded from their own wallet (a proof), and the payment is confirmed by the payee's own scan: a note of exactly the amount at the key node.",
+      "generated": "lez-split/split",
+      "effect": {
+        "schema": "muster.effect.split.v1",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the LEZ zone (CAIP-2) every share is paid on — the policy's qualifier (lez-split@<CAIP-2>)"
+          },
+          {
+            "name": "asset",
+            "means": "LEZ"
+          },
+          {
+            "name": "total",
+            "means": "the bill, canonical decimal in base units (9 decimals); the creditor's own share is total minus the shares"
+          },
+          {
+            "name": "creditor",
+            "means": "who fronted the bill and is owed: their room identity"
+          },
+          {
+            "name": "payTo",
+            "means": "the creditor's shielded key node, priv:<npk>:<vpk> — where each private note lands; never a public account"
+          },
+          {
+            "name": "shares",
+            "means": "[{who, amount}] sorted by who, each debtor once, never the creditor, and NO TWO AMOUNTS EQUAL — the amount is how a note is matched to its share"
+          },
+          {
+            "name": "memo",
+            "means": "room-only text"
+          },
+          {
+            "name": "quote",
+            "means": "optional — a bill in another currency (exo-3a4): {currency, fiatTotal in its minor units, fiatDecimals, rateFiat, rateAsset, source, at}; the rate is the proposer's quote, recorded in the log as an external read before anyone agrees (\"sources\": {\"quote\": \"read\"}, invariant 10), and the total must be exactly its conversion"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "act",
+          "who": "the payee",
+          "does": "Shares an address for the rail into the room (Share an address / Share my Bitcoin address / Share my LEZ address); a sender's Ask for an address asks for one."
+        },
+        {
+          "step": "propose",
+          "who": "the sender",
+          "does": "Picks the payee, the rail and the amount; the module pays it at the payee's shared address (send.behalfPayTo), refusing none shared (no-shared-address). Proposing is the sender's agreement."
+        },
+        {
+          "step": "approve",
+          "who": "the payee",
+          "does": "Accept: their client agrees only for an address it holds (payto-not-mine otherwise)."
+        },
+        {
+          "step": "settle",
+          "who": "the sender",
+          "does": "Pays shielded to shielded from their own wallet (a proof)."
+        },
+        {
+          "step": "final",
+          "who": "the payee's own client",
+          "does": "Confirmed by the payee's own scan: a note of exactly the amount at the key node."
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a send to someone who shared no address for the rail and chain",
+          "why": "Muster never types or guesses a payee's address (no-shared-address)",
+          "evidence": [
+            "module/tests/send_any_asset_test.nim"
+          ]
+        },
+        {
+          "what": "a second unpaid LEZ payment of the same amount to the same key node",
+          "why": "a private note is matched to its part by amount (amount-in-flight)",
+          "evidence": [
+            "module/tests/send_any_asset_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_propose_split",
+        "coordinate_share_address",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_settle_part",
+        "coordinate_confirm_part"
+      ],
+      "ui": "Built (exo-dcc.33): Send money in the room's + picker and on Home; pick who and the rail (Settles on), type the amount; the form names the address it goes to or offers Ask <name> for an address. Not yet run live between two machines.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The chain learns only that private transfers happened: no payer, no payee, no amount",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Each debtor pays from their own shielded account; a public source is refused, never quietly allowed",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A share is confirmed only by the creditor's own scan finding a note of exactly that amount — never by the payer's word",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "No payment is sent and no note matched on a wallet whose scan is behind the chain tip",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing makes anyone pay: the room shows who has",
+          "credibility": "motivational",
+          "party": "each person who owes"
+        },
+        {
+          "claim": "A private payment names no zone, but lands only where it was proven: each private input cites a commitment-set root the zone checks against its own history, and a debtor's payment spends their own private account there",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A zone that shares this one's commitment history — a fork or a replica — would accept the same transaction",
+          "credibility": "exposed",
+          "party": "a fork or replica of the zone"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/send_any_asset_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_lez_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/conformance_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/profile_test.nim"
+        }
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6h-the-private-split-on-the-lez-testnet",
+          "what": "Part 6h: the private split on the LEZ testnet"
+        }
+      ],
+      "unverified": [
+        "a live send between two machines on this rail"
+      ]
     }
   ]
 }

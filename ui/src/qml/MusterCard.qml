@@ -894,6 +894,7 @@ Rectangle {
                 visible: cardRoot.kind === "address-request" && cardRoot.askedOfMe && !cardRoot.answeredByMe
                 text: String((cardRoot.card && cardRoot.card.asset) || "ETH") === "BTC" ? qsTr("Share my Bitcoin address")
                       : String((cardRoot.card && cardRoot.card.asset) || "ETH") === "XMR" ? qsTr("Share my Monero address")
+                      : String((cardRoot.card && cardRoot.card.asset) || "ETH") === "LEZ" ? qsTr("Share my LEZ address")
                       : qsTr("Share an address")
                 onClicked: cardRoot.shareAddress()
             }

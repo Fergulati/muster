@@ -98,8 +98,8 @@ Item {
           note: qsTr("Ask one person to pay you, in XMR by default. Your own wallet confirms it.") },
         // send Monero (exo-dcc.32): one payment from you to one person, in XMR — they share an
         // address from their own wallet, you pay from any wallet, theirs confirms it
-        { id: "send", proposal: "split",    prefer: "monero-split", name: qsTr("Send Monero"),
-          note: qsTr("Send XMR to one person. They share an address from their own wallet; you pay from any wallet.") },
+        { id: "send", proposal: "split",    prefer: "monero-split", name: qsTr("Send money"),
+          note: qsTr("Send to one person, at an address they share: XMR by default, or ETH, a token, BTC or LEZ.") },
         { id: "talk",   proposal: "statement", name: qsTr("Just talk"),
           note: qsTr("A private conversation, readable only by the people in it.") }
     ]
@@ -356,7 +356,7 @@ Item {
                         text: composer.pickedPolicy === "safe"
                               ? qsTr("Settles on a shared Safe once the room signs off.")
                               : composer.pickedVerb === "send"
-                              ? qsTr("They share an address from their own wallet; you pay with a link, from any Monero wallet, and theirs confirms it. Muster never sends Monero.")
+                              ? qsTr("They share an address; you pay from your own wallet once they accept, and their side confirms it. Pick the asset in the room.")
                               : composer.pickedVerb === "request"
                               ? (composer.pickedPolicy === "monero-split"
                                  ? qsTr("They pay with a link, from any Monero wallet; yours confirms it. Muster never sends Monero.")

@@ -695,7 +695,7 @@ Rectangle {
                     onShareAddress: {
                         // a Bitcoin address is my own key's on that network: the module
                         // knows it, not this view (exo-a90.17)
-                        if (room.backend && ["BTC", "XMR"].indexOf(String((msg.parsedCard || {}).asset || "ETH")) >= 0) {
+                        if (room.backend && ["BTC", "XMR", "LEZ"].indexOf(String((msg.parsedCard || {}).asset || "ETH")) >= 0) {
                             room.backend.shareAddress(String((msg.parsedCard || {}).chain || ""));
                             return;
                         }
