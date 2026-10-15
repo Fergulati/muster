@@ -197,9 +197,35 @@ Item {
         root.balancesLoading = true;
         balancesGiveUp.restart();
         root.backend.loadAccount();
-        root.backend.loadBalances();
+        root.backend.loadWalletSummary();
     }
     onBalancesChanged: root.balancesLoading = false
+    // the Wallet page (exo-f37): only what this instance was given, read while it is open —
+    // a wallet opened or an account chosen elsewhere shows up without a click
+    readonly property var walletSummary: {
+        try { return JSON.parse(root.backend ? root.backend.walletSummaryJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    onWalletSummaryChanged: root.balancesLoading = false
+    Timer {
+        // a wallet asked about and not answered yet is asked again soon; otherwise every 10 s
+        interval: (root.walletSummary && Array.isArray(root.walletSummary.checking)
+                   && root.walletSummary.checking.length > 0) ? 2500 : 10000
+        repeat: true
+        running: root.backend !== null && root.view === "dashboard"
+        onTriggered: root.backend.loadWalletSummary()
+    }
+    function walletConnect(action, pkg) {
+        if (action === "settings") { root.view = "settings"; return; }
+        if (action === "install") { root.requestPackageInstall(pkg); return; }
+        if (action === "monero") { root.openMoneroWallet(""); return; }
+        if (action === "accounts") {
+            if (root.canRaiseIntents) {
+                try { logos.request("evm.accounts.manage", {}, function (res) { if (root.backend) root.backend.loadWalletSummary(); }); }
+                catch (x) { root.view = "settings"; }
+            } else root.view = "settings";
+        }
+    }
     Timer { id: balancesGiveUp; interval: 15000; onTriggered: root.balancesLoading = false }
 
     // Room state, aliased for the home fold.

@@ -26,13 +26,16 @@ const
   MoneroWalletApp* = "monero_wallet_ui"        ## the package that installs the stack and holds its roles
   MoneroUnlockIntent* = "monero.wallet.unlock" ## the wallet app's intent: it opens a wallet, the person types the password there
   MoneroReadMethods* = ["wallet_status", "receive_info", "create_subaddress", "history",
-                        "caller_identity", "list_networks", "address_valid", "list_wallets"]
+                        "caller_identity", "list_networks", "address_valid", "list_wallets",
+                        "balances"]
     ## Everything muster may ask the wallet backend: reads, and one mint
     ## (create_subaddress, which needs no role). Nothing that builds, signs or broadcasts
     ## a transfer, and nothing that changes the wallet's roles or opens a wallet.
     ## list_wallets (ungated: names and networks, no key) is read only to name the wallet a
     ## remedy asks Monero Wallet to open (monero.wallet.unlock needs {wallet}, exo-dcc.20) —
-    ## never on a request's own steps.
+    ## never on a request's own steps. balances (account 0's total and unlocked, a read the
+    ## engine serves without a role) is read only for the Wallet page, to show what the
+    ## person's open wallet holds — never to decide anything on a request.
   XmrConfirmDepth* = 10
     ## CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE (monero src/cryptonote_config.h): a received
     ## output unlocks after 10 blocks, and that is the depth a part is confirmed at.
@@ -89,6 +92,12 @@ type
     read*: ReadState
     detail*: string
     rows*: seq[HistoryRow]
+
+  Balances* = object
+    read*: ReadState
+    detail*: string
+    balance*: string          ## account 0's total, atomic units, canonical decimal
+    unlocked*: string         ## of which spendable now (10 confirmations), atomic units
 
   RegisteredWallet* = object
     name*: string             ## the registry name monero.wallet.unlock takes
@@ -285,6 +294,15 @@ proc history*(b: MoneroBackend, mode = cmNow): History =
                                amount: atomicOf(row{"amount"}), confirmations: intOf(row{"confirmations"}),
                                pending: row{"pending"}.getBool(false), failed: row{"failed"}.getBool(false),
                                account: int(intOf(row{"account"})), subaddrIndex: indicesOf(row{"subaddrIndex"}))
+
+proc balances*(b: MoneroBackend, mode = cmNow): Balances =
+  ## balances(0): account 0's total and unlocked amounts ({ok, balance, unlocked, …}).
+  let j = b.call("balances", %*[0], mode)
+  let (r, why) = unread(j, "balances")
+  if r != rsAnswered: return Balances(read: r, detail: why)
+  let bal = atomicOf(j{"balance"})
+  if bal.len == 0: return Balances(read: rsUnread, detail: "the Monero wallet backend's balance was unreadable")
+  Balances(read: rsAnswered, balance: bal, unlocked: atomicOf(j{"unlocked"}))
 
 proc listWallets*(b: MoneroBackend, mode = cmNow): WalletList =
   ## list_wallets(): every wallet the backend's registry knows, open or not

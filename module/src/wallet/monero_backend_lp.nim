@@ -13,7 +13,7 @@
 ##     750 ms or says busy; create_subaddress and receive_info take the wallet lock without
 ##     that deadline and can wait ~15 s behind a send being built (atlas monero-wallet §6a).
 ## Whatever a call answers is cached for cmPump too. History and receive_info name no wallet
-## or network, so a cached one is bound to the wallet_status replies around it
+## or network (nor do balances), so a cached one is bound to the wallet_status replies around it
 ## (monero_backend.WalletBoundCache): it is used only while the wallet the status named when
 ## it was asked is still the one named, and only once a status reply received AFTER it says
 ## so too — a reply about the wallet that was open before is never read as one about the
@@ -72,7 +72,7 @@ proc entry(b: LpMoneroBackend, key: string): Cached =
     GC_ref(result)            # the callback holds a pointer into it
     b.cache[key] = result
 
-const Bound = ["history", "receive_info"]   ## replies that name no wallet
+const Bound = ["history", "receive_info", "balances"]   ## replies that name no wallet
 
 proc forget(b: LpMoneroBackend, meth: string) =
   for k, c in b.cache:

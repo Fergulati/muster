@@ -35,6 +35,7 @@ public:
     void reset() override;
     void loadBalances() override;
     void loadWalletAccounts() override;
+    void loadWalletSummary() override;
     void previewLezSend(const QString &fromId, const QString &to, const QString &raw) override;
     void sendLez(const QString &fromId, const QString &to, const QString &raw) override;
 

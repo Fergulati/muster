@@ -110,6 +110,7 @@ import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's 
 import ../src/coordination/parts_lez    # …and privately on the LEZ, found by the creditor's scan (exo-a90.9)
 import ../src/coordination/xmr_request  # …and in XMR: a monero: link to pay from any wallet, the creditor's own wallet confirms (exo-dcc.5)
 import ../src/wallet/monero_backend_lp  # …monero_wallet_backend over lp_*: reads and one mint, never a spend
+import ../src/wallet/summary         # what the Wallet page shows: what this instance was given (exo-f37)
 import ../src/monero/address as xmraddr # the payTo rules and the CAIP-2 map (ADR-018)
 
 proc hexToBytes(s: string): seq[byte] =
@@ -1412,6 +1413,7 @@ proc tokenInfo(chain, token: string): tuple[symbol: string, decimals: int] =
       if dec >= 0: gTokenInfo[key] = result
   except CatchableError: discard
 
+var gLezIsFake = false   ## the wallet's LEZ is the in-process fake (no MUSTER_LEZ_REAL): shown as development
 var gMoneroBackend: LpMoneroBackend
 proc moneroBackend(): MoneroBackend =
   ## THIS member's Monero wallet: the platform's monero_wallet_backend over lp_*, asked only
@@ -4386,6 +4388,7 @@ proc moduleWallet(): Wallet =
     # Under the platform a fake chain's funded balance would sit beside the person's real
     # chains as though it were theirs (exo-d4d.6): there the fake is neither funded nor shown,
     # and only the real core (MUSTER_LEZ_REAL; real by default is exo-d4d.10) joins the wallet.
+    gLezIsFake = lezCore of FakeLezCore
     let fakeHidden = lezCore of FakeLezCore and evmPlatform()
     if lezCore of FakeLezCore and not fakeHidden:
       for acc in gLez.accounts(ks):
@@ -4432,15 +4435,16 @@ proc musterWalletAccounts(): string =
       arr.add %*{"chain": chain, "error": e.msg}
   $arr
 
-proc musterWalletBalances(): string =
-  ## Every account × asset, each entry a balance OR an error — never a false zero.
-  ## Per-chain resilient: a chain whose accounts can't be listed (the LEZ zone
-  ## unreachable) contributes an error entry, never empties the whole list.
+proc walletRows(keep: proc(chain: string): bool): JsonNode =
+  ## Every account × asset on the chains `keep` admits, each entry a balance OR an error —
+  ## never a false zero. Per-chain resilient: a chain whose accounts can't be listed (the
+  ## LEZ zone unreachable) contributes an error entry, never empties the whole list.
   let w = moduleWallet()
   let ks = moduleKeystore()
   var arr = newJArray()
   var accts: seq[Account]
   for desc in w.chains():
+    if not keep(desc.chain): continue
     try:
       for a in w.adapterFor(desc.chain).accounts(ks): accts.add a
     except CatchableError as e:
@@ -4461,7 +4465,47 @@ proc musterWalletBalances(): string =
       except CatchableError as e:
         entry["error"] = %e.msg
       arr.add entry
-  $arr
+  arr
+
+proc musterWalletBalances(): string =
+  $walletRows(proc(chain: string): bool = true)
+
+proc musterWalletSummary(): string =
+  ## The Wallet page (exo-f37): the wallets this instance has been given — under the
+  ## platform the keystore account chosen for Muster, the Monero wallet open in Monero
+  ## Wallet, the LEZ wallet — each with its balances, and how to connect the rest. Never
+  ## Muster's own key as though the person held it, and never a chain nobody set up
+  ## (wallet/summary.nim holds the rules).
+  let platform = keystoreAttested()
+  var inputs = SummaryInputs(platform: platform)
+  if platform:
+    inputs.evmAccount = gKeystoreAccount
+    try:
+      if gKeystoreProbe == nil: gKeystoreProbe = newKeystoreProbe()
+      inputs.keystoreAccounts = keystoreRow(gKeystoreProbe.read()){"accounts"}.len
+    except CatchableError: discard
+  else:
+    inputs.evmAccount = addrHex(myAddress())
+  # an Ethereum chain is read only for the account the person chose (or, without the
+  # platform, the instance's own development key)
+  let readEvm = inputs.evmAccount.len > 0
+  inputs.rows = walletRows(proc(chain: string): bool = readEvm or not chain.startsWith("evm:"))
+  inputs.lezDemo = gLez != nil and gLezIsFake
+  # the Monero wallet: asked only when the host reports its backend running, and through
+  # the pump (cached, never a wait on the module thread)
+  var mv = MoneroView(module: "unknown")
+  let rec = moduleFacts().moduleRecord
+  if rec != nil:
+    try: mv.module = $gradeModuleRecord(MoneroBackendModule, rec(MoneroBackendModule)).state
+    except CatchableError: discard
+  if mv.module == "ready":
+    let b = moneroBackend()
+    mv.status = b.walletStatus(cmPump)
+    if mv.status.read == rsAnswered and mv.status.wallet.len > 0:
+      mv.receive = b.receiveInfo(cmPump)
+      mv.balances = b.balances(cmPump)
+  result = $walletSummary(inputs)
+  lpDebugOnChange("wallet-summary", result)
 
 proc musterWalletEstimateFee(chain, to, assetSymbol, raw: string): string =
   let w = moduleWallet()
