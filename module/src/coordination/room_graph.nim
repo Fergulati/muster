@@ -330,6 +330,15 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       # author-signed kinds outside the provenance fold: the author is proven by authorship
       if p.len == 4 and p[0] == "account" and p[2] == "disclose": (basis = "author-signed"; author = p[3])
       elif p.len >= 4 and p[0] == "frost" and p[2] == "join": (basis = "author-signed"; author = p[3])
+      elif p.len >= 2 and p[0] == "file":
+        # the room swarm (exo-4d0.4): a seed names its member in the key, a share or a
+        # retract in the value's "author" (authorship.nim)
+        if p.len >= 4 and p[2] == "seed": (basis = "author-signed"; author = p[3])
+        else:
+          try:
+            let a = parseJson(e.value){"author"}.getStr()
+            if a.len > 0: (basis = "author-signed"; author = a)
+          except CatchableError: discard
       elif p.len >= 4 and p[0] == "intent" and p[2] == "proposer":
         basis = "author-signed"; author = p[3]; attrs["counted"] = %true
     attrs["basis"] = %basis
