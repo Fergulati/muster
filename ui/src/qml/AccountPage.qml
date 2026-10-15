@@ -23,15 +23,35 @@ Item {
         spacing: Theme.spacing.large
         width: Math.min(parent.width - 2 * Theme.spacing.xxlarge, 640)
 
+        // the wallets this instance was given, first (exo-f37)
+        WalletList {
+            objectName: "walletList"
+            Layout.fillWidth: true
+            summary: root.walletSummary
+            loading: root.balancesLoading
+            onConnectRequested: function (action, pkg) { root.walletConnect(action, pkg); }
+        }
+
+        ActionButton {
+            objectName: "walletRefresh"
+            Layout.alignment: Qt.AlignLeft
+            Layout.topMargin: Theme.spacing.small
+            quiet: true
+            text: root.balancesLoading ? qsTr("Reading…") : qsTr("Refresh")
+            enabled: !root.balancesLoading
+            onClicked: root.refreshBalances()
+        }
+
+        // the local test Safe, a development surface: only where its chain answers
         LogosText {
-            text: (root.account && root.account.available === false)
-                  ? qsTr("Your balances on the chains you have set up. To coordinate with people, open a Room.")
-                  : qsTr("The Safe you coordinate against — inspect it, act on it directly, "
-                         + "and settle on-chain. To coordinate with people, open a Room.")
+            visible: !root.account || root.account.available !== false
+            text: qsTr("The local test Safe — inspect it, act on it directly, and settle on-chain. "
+                       + "To coordinate with people, open a Room.")
             color: Theme.palette.textTertiary
             font.pixelSize: Theme.typography.secondaryText
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
+            Layout.topMargin: Theme.spacing.large
         }
 
         // ── the local test Safe (a suggestion) ─────────────────────────────────
@@ -529,106 +549,10 @@ Item {
             }
         }
 
-        // ── wallet: balances across chains, each with its F-10 grade badge ────
-        // The account-level view. A balance is shown with a badge saying whether
-        // it is "verified" (checked against a consensus state root) or "attested"
-        // (what the RPC returned, trusted) — the honesty rule made visible. A read
-        // that could not be answered shows "unavailable", never a false zero.
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: walletCol.implicitHeight + 2 * Theme.spacing.medium
-            radius: Theme.spacing.radiusMedium
-            color: Theme.palette.surface
-            border.width: 1
-            border.color: Theme.palette.borderSubtle
-
-            ColumnLayout {
-                id: walletCol
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.margins: Theme.spacing.medium
-                spacing: Theme.spacing.small
-
-                LogosText {
-                    text: qsTr("WALLET")
-                    color: Theme.palette.textTertiary
-                    font.family: MusterStyle.mono
-                    font.pixelSize: MusterStyle.caption
-                    font.weight: Theme.typography.weightMedium
-                }
-
-                Repeater {
-                    model: root.balances
-                    delegate: RowLayout {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        spacing: Theme.spacing.small
-
-                        LogosText {
-                            text: (modelData.asset || "?") + "  " + (modelData.chain || "")
-                            color: Theme.palette.text
-                            font.family: MusterStyle.mono
-                            font.pixelSize: Theme.typography.secondaryText
-                        }
-                        Item { Layout.fillWidth: true }
-                        LogosText {
-                            text: modelData.error ? qsTr("unavailable") : (modelData.display || "")
-                            color: modelData.error ? Theme.palette.warning : Theme.palette.text
-                            font.family: MusterStyle.mono
-                            font.pixelSize: Theme.typography.secondaryText
-                        }
-                        Rectangle {
-                            visible: !modelData.error
-                            implicitWidth: gradeText.implicitWidth + 2 * Theme.spacing.small
-                            implicitHeight: gradeText.implicitHeight + Theme.spacing.tiny
-                            radius: Theme.spacing.radiusMedium
-                            color: modelData.grade === "verified-locally"
-                                   ? Theme.palette.success : Theme.palette.warning
-                            LogosText {
-                                id: gradeText
-                                anchors.centerIn: parent
-                                text: modelData.grade === "verified-locally"
-                                      ? qsTr("verified") : qsTr("attested")
-                                color: Theme.palette.background
-                                font.family: MusterStyle.mono
-                                font.pixelSize: MusterStyle.caption
-                                font.weight: Theme.typography.weightMedium
-                            }
-                        }
-                    }
-                }
-
-                RowLayout {
-                    objectName: "balancesLoading"
-                    visible: root.balancesLoading && root.balances.length === 0
-                    spacing: Theme.spacing.small
-                    Loading { running: parent.visible }
-                    LogosText {
-                        text: qsTr("Reading your balances…")
-                        color: Theme.palette.textSecondary
-                        font.pixelSize: MusterStyle.caption
-                    }
-                }
-                LogosText {
-                    visible: !root.balancesLoading && root.balances.length === 0
-                    text: qsTr("No balances yet")
-                    color: Theme.palette.textTertiary
-                    font.pixelSize: MusterStyle.caption
-                }
-
-                ActionButton {
-                    Layout.fillWidth: true
-                    variant: LogosButton.Variant.Primary
-                    text: root.balancesLoading ? qsTr("Reading…") : qsTr("Refresh balances")
-                    enabled: !root.balancesLoading
-                    onClicked: root.refreshBalances()
-                }
-            }
-        }
-
         // ── health footer (the loading-spike smoke test, kept) ────────────────
+        // a development line: shown beside the local test Safe, never in a person's Wallet
         RowLayout {
+            visible: !root.account || root.account.available !== false
             Layout.topMargin: Theme.spacing.small
             Layout.alignment: Qt.AlignHCenter
             spacing: Theme.spacing.small
