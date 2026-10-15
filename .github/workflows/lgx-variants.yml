@@ -74,9 +74,11 @@ jobs:
           mkdir -p _out
           cp "$lgx" "_out/${name}-${{ matrix.variant }}.lgx"
           # the variant directory this build carries must be the one this leg is for
-          tar -tzf "_out/${name}-${{ matrix.variant }}.lgx" | grep -o '^variants/[^/]*/' | sort -u
-          tar -tzf "_out/${name}-${{ matrix.variant }}.lgx" | grep -q "^variants/${{ matrix.variant }}/" \
-            || { echo "::error::the build is not tagged ${{ matrix.variant }}"; exit 1; }
+          # (listed once into a variable: `tar | grep -q` would SIGPIPE tar, fatal under pipefail)
+          tagged=$(tar -tzf "_out/${name}-${{ matrix.variant }}.lgx" | grep -o '^variants/[^/]*/' | sort -u)
+          echo "$tagged"
+          [ "$tagged" = "variants/${{ matrix.variant }}/" ] \
+            || { echo "::error::the build is tagged '$tagged', not ${{ matrix.variant }}"; exit 1; }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: lgx-${{ matrix.package }}-${{ matrix.variant }}
