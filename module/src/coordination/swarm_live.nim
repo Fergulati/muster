@@ -77,14 +77,19 @@ proc fail(o: var SwarmOp, why: string) =
   o.state = opFailed
   o.error = why
 
+proc taken(path: string): bool =
+  ## Anything already at `path`: a file, a folder, or a symlink — dangling ones included,
+  ## which fileExists and dirExists miss because they follow the link (derived-exo-4d0.4 s5).
+  symlinkExists(path) or fileExists(path) or dirExists(path)
+
 proc freeName*(dir, name: string): string =
   ## `dir/name`, or `dir/name (1).ext`, `(2)`… — the first that is not taken.
   result = dir / name
-  if not fileExists(result) and not dirExists(result): return
+  if not taken(result): return
   let (_, stem, ext) = splitFile(name)
   for i in 1 .. 10_000:
     result = dir / (stem & " (" & $i & ")" & ext)
-    if not fileExists(result) and not dirExists(result): return
+    if not taken(result): return
   raise newException(IOError, "no free name for " & name & " in " & dir)
 
 proc fileOf(s: CoordinationSession, fid: string): (bool, SwarmFile) =

@@ -246,7 +246,8 @@ agreement). S3's spec goes through `discuss-issue` first.
 - **S2 — Sealed blobs** (landed: `crypto/blob_seal.nim`, `blob_seal_test`). Round trip,
   tamper and truncation refusals; the check that an uploaded manifest names nothing moves
   to S1, which has a storage node. Padding is not built.
-- **S3 — The room as tracker.** The three event kinds, `reduceSwarm`, authorship (landed: `coordination/swarm.nim`, `swarm_test`). Spec
+- **S3 — The room as tracker.** The three event kinds, `reduceSwarm`, authorship (landed: `coordination/swarm.nim`, `swarm_test`;
+  spec `derived-exo-4d0.4` graded 5/5, with safe file names as its s5). Spec
   `derived-exo-4d0.4` with probes: the fold is order-free and idempotent; a seeder is listed
   only by their own signed announce; a forged announce is dropped; a later-epoch member
   holds no key to an earlier file; a digest mismatch refuses.
