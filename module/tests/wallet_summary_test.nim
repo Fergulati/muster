@@ -6,6 +6,7 @@
 import std/[json, sequtils, strutils]
 import ../src/wallet/monero_backend
 import ../src/wallet/summary
+import ./probes/fake_monero
 
 let evmRows = %*[
   {"chain": "evm:11155111", "account": "0xaaaa", "asset": "ETH", "grade": "attested", "display": "0.5 ETH", "raw": "500000000000000000"},
@@ -106,5 +107,24 @@ block:
   doAssert not s.wallet("lez")["dev"].getBool(), "a real LEZ wallet is not: " & $s
   doAssert s.connects.len == 0, $s
   echo "7. the standalone runner: its own key and demo chain, marked as development OK"
+
+block hostedWiring:
+  # 8. the Monero view the hosted summary feeds in (seen on display in the 0.3.1 AppImage,
+  # 2026-10-15: the hosted code built the view and never passed it, so Basecamp's Wallet
+  # showed no Monero line at all). moneroViewFor builds it from the host's grade of the
+  # backend, and asks the backend only once that grade is ready.
+  var asked = 0
+  let w = newFakeMonero("wallet-alice", "stagenet")
+  let getter = proc(): MoneroBackend = (inc asked; w)
+  let missing = moneroViewFor("not-installed", getter)
+  doAssert asked == 0, "a module the host does not report ready is never asked"
+  let s1 = walletSummary(SummaryInputs(platform: true, rows: newJArray(), monero: missing))
+  doAssert "monero:install" in s1.connects, "not installed: Install Monero Wallet: " & $s1
+  let ready = moneroViewFor("ready", getter)
+  doAssert asked > 0, "ready: the backend is read"
+  let s2 = walletSummary(SummaryInputs(platform: true, rows: newJArray(), monero: ready))
+  doAssert s2.wallet("monero")["network"].getStr() == "stagenet" and
+           s2.wallet("monero")["account"].getStr() == w.primary(), "the open wallet is listed: " & $s2
+  echo "8. the hosted Monero view: graded first, read only when ready, listed or offered OK"
 
 echo "wallet_summary_test: OK"

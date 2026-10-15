@@ -4493,17 +4493,12 @@ proc musterWalletSummary(): string =
   inputs.lezDemo = gLez != nil and gLezIsFake
   # the Monero wallet: asked only when the host reports its backend running, and through
   # the pump (cached, never a wait on the module thread)
-  var mv = MoneroView(module: "unknown")
+  var state = "unknown"
   let rec = moduleFacts().moduleRecord
   if rec != nil:
-    try: mv.module = $gradeModuleRecord(MoneroBackendModule, rec(MoneroBackendModule)).state
+    try: state = $gradeModuleRecord(MoneroBackendModule, rec(MoneroBackendModule)).state
     except CatchableError: discard
-  if mv.module == "ready":
-    let b = moneroBackend()
-    mv.status = b.walletStatus(cmPump)
-    if mv.status.read == rsAnswered and mv.status.wallet.len > 0:
-      mv.receive = b.receiveInfo(cmPump)
-      mv.balances = b.balances(cmPump)
+  inputs.monero = moneroViewFor(state, proc(): MoneroBackend = moneroBackend())
   result = $walletSummary(inputs)
   lpDebugOnChange("wallet-summary", result)
 
