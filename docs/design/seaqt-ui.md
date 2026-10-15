@@ -472,7 +472,7 @@ Both runs were on `logos.dev`, minutes apart, on the same machine, with foundry 
   - The 1 s room tick skips a beat while its reads are in flight. The C++ ticks could not overlap, because their calls blocked.
   - The self-tests read only a few backend lines (`AUTOPOLICY ->`, `LEZFUND …`). They keep their text.
 - **`ui-nim/app/sched.nim`: one QTimer for every `after` and `every`.** So no closure outlives the QTimer it was connected to.
-- **logos-nim-sdk, branch `feat/async-client` (`e0a13ac`), [#7](https://github.com/corpetty/logos-nim-sdk/pull/7).** `genClient` emits `<method>Async(…, done)` beside the plain and raising twins, and `PluginProxy.callAsyncThen` carries a Nim closure across the C callback. It has tests for the twins, for the compile of a generated client, and for the callback seam. `ui-nim` pins it. The module stays at `6077eb7` until the branch lands, since only a consumer uses it.
+- **logos-nim-sdk [#7](https://github.com/corpetty/logos-nim-sdk/pull/7), merged as `a710a31`.** `genClient` emits `<method>Async(…, done)` beside the plain and raising twins, and `PluginProxy.callAsyncThen` carries a Nim closure across the C callback. It has tests for the twins, for the compile of a generated client, and for the callback seam. `ui-nim` pins it. The module stays at `6077eb7` until its pin next moves, since only a consumer uses the change.
 - **The runner.** `scripts/build-runner-nim.sh` (`make build-nim`) writes `.run/runner-nim/bin/muster-ui`. It is `muster-app` on the C++ runner's modules dir, and does what logos-standalone-app does:
   - `--user-dir` or `LOGOS_USER_DIR`, with `<dir>/module_data` the persistence base;
   - `capability_module`, then every dependency `ui/metadata.json` declares, each with its own;

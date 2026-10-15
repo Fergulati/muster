@@ -66,11 +66,11 @@
       flake = false;
     };
     # logos_sdk: the lp_* binding and the generator of the typed muster_module client
-    # (nix/muster-client.nix). Ahead of module/metadata.json's pin (6077eb7) by the async
-    # client twins (branch feat/async-client), which only a consumer uses; the module
-    # moves to the same rev once that lands upstream.
+    # (nix/muster-client.nix). main, with the async client twins merged (#7). Ahead of
+    # module/metadata.json's pin (6077eb7) by those twins only, which only a consumer
+    # uses; the module moves here when its pin next moves.
     logos-nim-sdk = {
-      url = "github:corpetty/logos-nim-sdk/e0a13ac76b2eca1c6ed67b0bd7c8a609974f9873";
+      url = "github:corpetty/logos-nim-sdk/a710a31a940c99b7d5ad811f7f31aa4913f5032a";
       flake = false;
     };
     # T3: seaqt-gen, the generator that produced nim-seaqt qt-6.8@7d40abd7 and

@@ -5614,17 +5614,17 @@
     "logos-nim-sdk": {
       "flake": false,
       "locked": {
-        "lastModified": 1792004943,
+        "lastModified": 1792072729,
         "narHash": "sha256-IkfBrQmL7zxFXOcfxYrdnsi1AHZwZf8aoYmJFGEF/bw=",
         "owner": "corpetty",
         "repo": "logos-nim-sdk",
-        "rev": "e0a13ac76b2eca1c6ed67b0bd7c8a609974f9873",
+        "rev": "a710a31a940c99b7d5ad811f7f31aa4913f5032a",
         "type": "github"
       },
       "original": {
         "owner": "corpetty",
         "repo": "logos-nim-sdk",
-        "rev": "e0a13ac76b2eca1c6ed67b0bd7c8a609974f9873",
+        "rev": "a710a31a940c99b7d5ad811f7f31aa4913f5032a",
         "type": "github"
       }
     },
