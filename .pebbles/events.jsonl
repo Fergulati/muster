@@ -2598,3 +2598,7 @@
 {"type":"dep_add","timestamp":"2026-10-15T21:19:28.568374426Z","issue_id":"exo-4d0.6","payload":{"dep_type":"blocks","depends_on":"exo-4d0.5"}}
 {"type":"dep_add","timestamp":"2026-10-15T21:19:28.809915264Z","issue_id":"exo-4d0.7","payload":{"dep_type":"blocks","depends_on":"exo-4d0.6"}}
 {"type":"dep_add","timestamp":"2026-10-15T21:19:29.090651541Z","issue_id":"exo-4d0.8","payload":{"dep_type":"blocks","depends_on":"exo-4d0.6"}}
+{"type":"dep_rm","timestamp":"2026-10-15T21:32:50.49270181Z","issue_id":"exo-4d0.3","payload":{"dep_type":"blocks","depends_on":"exo-4d0.1"}}
+{"type":"status_update","timestamp":"2026-10-15T21:32:50.71305039Z","issue_id":"exo-4d0.3","payload":{"status":"in_progress"}}
+{"type":"close","timestamp":"2026-10-15T21:35:30.887488894Z","issue_id":"exo-4d0.3","payload":{}}
+{"type":"comment","timestamp":"2026-10-15T21:35:31.158253697Z","issue_id":"exo-4d0.3","payload":{"body":"Landed: module/src/crypto/blob_seal.nim (secretstream 64 KiB chunks, no magic, neutral upload name, plaintext digest muster.blob.plaintext.v1 over size+sha256; open refuses on tamper/truncation/trailing/wrong key/size/digest and leaves nothing behind) + libsodium secretstream \u0026 streaming sha256 bindings in sodium.nim. blob_seal_test 6/6. Not built: Padmé padding (optional, off by default in the design). The 'uploaded manifest names nothing' check moves to S1 (needs storage_module)."}}
