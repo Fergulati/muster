@@ -175,6 +175,11 @@ block:
     result.sort()
   doAssert fields(obRoomMember) == @["file", "file-key", "storage-address"], $fields(obRoomMember)
   doAssert fields(obStoreNode) == @["timing", "topic"], "the store node sees envelopes only"
+  doAssert fields(obStorageDht) == @["ciphertext-cid", "provider"], $fields(obStorageDht)
+  doAssert fields(obStoragePeer) == @["ciphertext", "node-address"], $fields(obStoragePeer)
+  for r in rows:
+    if r.to in {obStorageDht, obStoragePeer}:
+      doAssert r.field notin ["file", "file-key", "name"], "Storage never sees the file or its key"
   let g = reduceRoomGraph(evs, stub, @[alice, bob], alice)
   var credited = 0
   for n in g.nodes:
@@ -182,6 +187,13 @@ block:
       doAssert n.attrs{"basis"}.getStr() == "author-signed", $n.attrs
       inc credited
   doAssert credited >= 4, "every file entry is credited to its signer (" & $credited & ")"
+  var toDht, toPeers = 0
+  for e in g.edges:
+    if e.kind == "leaves" and e.src.startsWith("e:"):
+      if e.dst == "o:storage-dht": inc toDht
+      if e.dst == "o:storage-peer": inc toPeers
+      doAssert "never the file or its key" in e.attrs{"mechanism"}.getStr(), $e.attrs
+  doAssert toDht >= 1 and toPeers >= 1, "the map shows what reached the storage network"
 echo "8. flow rows and room-map attribution for file entries OK"
 
 echo "swarm_test: all OK"

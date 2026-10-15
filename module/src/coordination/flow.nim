@@ -100,11 +100,21 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
       result.addRows(i, "ceremony", "", @[row("ceremony", obRoomMember)] & envelope, true)
       continue
     if p.len >= 2 and p[0] == "file":
-      # the room swarm (exo-4d0.4): a share tells the room the file (name, size, sharer)
-      # and its key; a seed tells it how to reach the seeder's storage node (peer id,
-      # addresses). What Storage itself sees is not a log entry's to say (§5.5).
-      let rows = (if p.len >= 4 and p[2] == "seed": @[row("storage-address", obRoomMember)]
-                  elif p.len == 2: @[row("file", obRoomMember), row("file-key", obRoomMember)]
+      # the room swarm (exo-4d0.4, room-swarm.md §5.5): a share tells the room the file
+      # (name, size, sharer) and its key; a seed tells it how to reach the seeder's storage
+      # node. Both mean a node now serves the sealed blob, so the storage network learns
+      # what a served dataset always shows it: the DHT, the ciphertext's CID and the peer
+      # providing it; a peer that fetches, the ciphertext and the serving node's address.
+      # A stop (on: false) and a retract tell Storage nothing new.
+      let serving = @[row("ciphertext-cid", obStorageDht), row("provider", obStorageDht),
+                      row("ciphertext", obStoragePeer), row("node-address", obStoragePeer)]
+      var on = false
+      if p.len >= 4 and p[2] == "seed":
+        try: on = parseJson(e.value){"on"}.getBool()
+        except CatchableError: discard
+      let rows = (if p.len >= 4 and p[2] == "seed":
+                    @[row("storage-address", obRoomMember)] & (if on: serving else: @[])
+                  elif p.len == 2: @[row("file", obRoomMember), row("file-key", obRoomMember)] & serving
                   else: @[row("file", obRoomMember)])
       result.addRows(i, "file", "", rows & envelope, true)
       continue
@@ -168,7 +178,8 @@ proc observerMatrix*(rows: seq[FlowRow], introduced: seq[Observer] = @[]): JsonN
   ## proposal INTRODUCES it — `introduced` (room_infra.introducedObservers) — or a row
   ## already names it. A room that only talks never lists an RPC provider (exo-428).
   var byObs = initOrderedTable[string, HashSet[string]]()
-  for o in [obRoomMember, obStoreNode, obRpcProvider, obChainObserver, obTargetModule]:
+  for o in [obRoomMember, obStoreNode, obRpcProvider, obChainObserver, obTargetModule,
+            obStoragePeer, obStorageDht]:
     if o in {obRoomMember, obStoreNode} or o in introduced:
       byObs[$o] = initHashSet[string]()
   for r in rows: byObs.mgetOrPut($r.to, initHashSet[string]()).incl r.field

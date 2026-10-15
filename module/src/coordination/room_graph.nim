@@ -165,7 +165,10 @@ proc facetsFor(kind, attestation, source: string, counted: bool, epoch: int): Js
 proc edgeCredibility(e: GraphEdge, obsLabel: proc (id: string): string): tuple[class, party, mechanism: string] =
   case e.kind
   of "leaves":
-    ("exposed", obsLabel(e.dst), "the driver's manifest declares it; it leaves when the room settles, and cannot be taken back")
+    if e.src.startsWith("e:"):
+      ("exposed", obsLabel(e.dst), "a member's storage node serves the sealed blob: the storage network sees what it always shows of a served dataset, never the file or its key")
+    else:
+      ("exposed", obsLabel(e.dst), "the driver's manifest declares it; it leaves when the room settles, and cannot be taken back")
   of "enters":
     ("motivational", "the source it came from", "an outside read, recorded so its origin is accountable; not proof the world agrees (F-10)")
   of "approved":
@@ -459,11 +462,19 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   addNode("o:" & $obStoreNode, "observer", -1, 0, newJObject())   # every envelope reaches it (FS-9)
   var leaves = initOrderedTable[string, tuple[src, obs: string, seq: int, fields: seq[string], declared: bool]]()
   for r in reduceFlow(events, driverFor, founders, sealedIn):
-    if r.to in {obRoomMember, obStoreNode} or r.intentId.len == 0: continue
-    if "i:" & r.intentId notin nodeAt: continue
+    if r.to in {obRoomMember, obStoreNode}: continue
     let at = pos(r.seq)
-    let k = r.intentId & "|" & $r.to & "|" & $at
-    if k notin leaves: leaves[k] = ("i:" & r.intentId, "o:" & $r.to, at, @[], r.declared)
+    var src = ""
+    if r.intentId.len > 0:
+      if "i:" & r.intentId notin nodeAt: continue
+      src = "i:" & r.intentId
+    elif r.to in {obStoragePeer, obStorageDht}:
+      # a room-swarm entry (exo-4d0.4): the blob it put on a storage node, from the entry itself
+      src = "e:" & eventId(ordered[at])
+      if src notin nodeAt: continue
+    else: continue
+    let k = src & "|" & $r.to & "|" & $at
+    if k notin leaves: leaves[k] = (src, "o:" & $r.to, at, @[], r.declared)
     if r.field notin leaves[k].fields: leaves[k].fields.add r.field
   for _, l in leaves:
     addNode(l.obs, "observer", l.seq, epochAt[l.seq], newJObject())
@@ -482,6 +493,8 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
     of "o:rpc-provider": "the RPC provider"
     of "o:chain-observer": "anyone reading the chain"
     of "o:target-module": "the module the call reaches"
+    of "o:storage-peer": "the storage nodes that serve or fetch it"
+    of "o:storage-dht": "anyone reading the storage network"
     else: id
   for e in result.edges.mitems:
     let c = edgeCredibility(e, obsLabel)

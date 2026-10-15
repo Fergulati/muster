@@ -19,6 +19,8 @@ type
     obRpcProvider   = "rpc-provider"    ## the user-configured RPC (sees a signed tx before the mempool)
     obChainObserver = "chain-observer"  ## anyone reading the public ledger
     obTargetModule  = "target-module"   ## the Logos module an invoke driver calls
+    obStoragePeer   = "storage-peer"    ## a Logos Storage node that serves or fetches a blob (room swarm)
+    obStorageDht    = "storage-dht"     ## anyone reading the storage network's DHT (room swarm)
 
   DisclosureRow* = object
     field*: string   ## what: "effect", "amount", "payer", "payee", "args", "timing", "topic"…
