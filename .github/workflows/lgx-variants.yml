@@ -48,7 +48,11 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 180
     steps:
+      # Full history: ui/flake.nix reads the module from this repository (git+file:../),
+      # and a shallow clone has no revCount for it.
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
       # Nix, reading the Logos caches (cache.nix.logos.co and its Attic): the Qt and
       # module closures for both platforms are already there, so a leg builds muster only.
       - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
@@ -59,7 +63,11 @@ jobs:
           # The PORTABLE bundle: self-contained, tagged with the canonical variant name
           # (linux-amd64, linux-arm64). The dev bundle (.#lgx) points into /nix/store and
           # tags its variant "-dev", which a release Basecamp refuses.
-          out=$(cd ${{ matrix.package }} && nix build .#lgx-portable --print-out-paths --no-link)
+          # the ui takes THIS checkout's module, as scripts/catalog-release.sh builds it
+          extra=()
+          [ "${{ matrix.package }}" = ui ] && extra=(--override-input muster_module "git+file://$PWD?dir=module")
+          out=$(nix build "git+file://$PWD?dir=${{ matrix.package }}#lgx-portable" "${extra[@]}" \
+                  --print-out-paths --no-link)
           lgx=$(find "$out" -maxdepth 2 -name '*.lgx' | head -n1)
           [ -n "$lgx" ] || { echo "::error::nix build produced no .lgx"; exit 1; }
           name=$(case "${{ matrix.package }}" in module) echo muster_module ;; ui) echo muster_ui ;; esac)
