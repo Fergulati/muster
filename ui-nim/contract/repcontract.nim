@@ -9,7 +9,10 @@
 ##   * every PROP as a notifying property that QML can read but not write, which is
 ##     repc's READONLY. Nim sets it with a generated `setX(o, v)` that emits
 ##     `xChanged` only when the value changes;
-##   * every SLOT as a nimside slot that forwards to `<slot>Impl(o, args…)`. Those are
+##   * every SLOT as a nimside slot that forwards to `<slot>Impl(o, args…)`. If the
+##     calling module declares `onSlot(o: T, name: string)` before the macro, each slot
+##     calls it first with the SLOT's name: one place to log or record every call the
+##     view makes (C++ would need a hook in each slot). Those Impls are
 ##     forward declarations the calling module must implement: leave one out and the
 ##     compile fails, like a pure virtual in C++. An exception from an Impl is caught
 ##     in the slot and reported, so it never unwinds into Qt's C++ frames;
@@ -77,7 +80,9 @@ proc contractSource(T: string, rep: RepClass): string =
       params.add ", " & q(p.name) & ": " & nimType(p.typ, "")
       args.add ", " & q(p.name)
     s.add "  proc " & q(sl.name) & "(" & params & ") {.slot, raises: [].} =\n"
-    s.add "    try: " & q(sl.name & "Impl") & "(" & args & ")\n"
+    s.add "    try:\n"
+    s.add "      when declared(onSlot): onSlot(o, " & escape(sl.name) & ")\n"
+    s.add "      " & q(sl.name & "Impl") & "(" & args & ")\n"
     s.add "    except Exception as e: reportSlotError(" & escape(sl.name) & ", e.msg)\n"
   # Nim-side setters: QML cannot write a READONLY PROP, the backend can.
   for p in rep.props:

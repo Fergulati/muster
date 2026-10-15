@@ -173,16 +173,18 @@ Which group a test needs:
 
 ### The host-return probe
 
-`probes/probe_return_marshalling_host.nim` (spec `derived-exo-526`) builds the module
-as a Nim staticlib (the shape the real cdylib build produces), links it into the C++
-host harness `probes/host_return_harness.cpp`, and reads what a CLIENT observes. Its
-inner `nim c` reads the closure from `$MUSTER_NIMPKGS` (default
-`~/.cache/muster/nimpkgs`), and the harness links secp256k1 and libsodium: an explicit
-`MUSTER_SECP256K1_LIB` / `MUSTER_SODIUM_LIB` wins, then `pkg-config`, then a
-filesystem glob over `/nix/store`. The harness defines the `lp_*` inter-module ABI as a
-host with no protocol stack and reports `lp_stub_calls` (0: nothing the probe calls
-reaches another module). It needs `g++`; the runner borrows nixpkgs' when the host has
-none.
+`probes/probe_return_marshalling_host.nim` (spec `derived-exo-526`) builds the host
+harness `probes/host_return_harness.nim` with the module compiled in, and reads what a
+CLIENT observes. The harness calls the module's `logos_module_*` C ABI through `importc`,
+and the module's own constructor (the one the generated surface installs, as in the plugin)
+initializes the one Nim runtime, so the harness is built `--noMain`. It was C++ linked
+against a staticlib until exo-607 T7; a Nim harness cannot link a second Nim runtime, and
+the port's trace is identical to the C++ one's. Its inner `nim c` reads the closure from
+`$MUSTER_NIMPKGS` (default `~/.cache/muster/nimpkgs`), and the harness links secp256k1 and
+libsodium: an explicit `MUSTER_SECP256K1_LIB` / `MUSTER_SODIUM_LIB` wins, then
+`pkg-config`, then a filesystem glob over `/nix/store`. The harness defines the `lp_*`
+inter-module ABI as a host with no protocol stack and reports `lp_stub_calls` (0: nothing
+the probe calls reaches another module).
 
 ```bash
 tests/run-suite.sh return_marshalling

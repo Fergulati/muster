@@ -86,7 +86,7 @@ named cause, not a shrug.
 
 Chosen path (over pinning to logoscore's SDK): **build our own headless host from a
 coherent logos-core**, in-process with the capability gate OFF — so there's no
-cross-process token skew. Landed as `module/tools/headless-host/` (see its README).
+cross-process token skew. Landed as `module/tools/headless-host/` (see its README). It is now `ui-nim/headless/`, in Nim over `lp_*` (exo-607 T7, 2026-10-14).
 
 **Result:** the host compiles against the standalone-app's own logos-core (the coherent
 one the runner uses with these `-dev` modules) and **loads `muster_module` +
@@ -104,7 +104,7 @@ from knowledge, not search.
 
 ## SOLVED: the coherent host now drives muster headless (2026-08-26)
 
-`module/tools/headless-host/` **works** — it loads muster + delivery in-process with the
+`module/tools/headless-host/` (now `ui-nim/headless/`, in Nim) **works** — it loads muster + delivery in-process with the
 gate off and invokes methods (`health`→`ok`, `identity`/`describe` return real JSON). The
 six things that had to line up (each a dead end until fixed) are in the host's README; the
 last two were the sharp ones: (5) `callRemoteMethod` is still ModuleProxy-gated, so a

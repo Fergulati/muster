@@ -53,12 +53,24 @@ ANVIL_KEY0 := 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ANVIL_KEY1 := 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 SEED      ?=
 
-.PHONY: help run run-fleet build build-lgx appimage clean clean-peer
+.PHONY: help run run-fleet build build-nim build-lgx appimage clean clean-peer
+
+# Which UI build run / run-fleet launch, as the self-tests choose it (scripts/lib/ui-build.sh):
+# cpp (default) the C++ backend in the standalone runner; nim the Nim UI on seaqt
+# (exo-607, ADR-019), after `make build-nim`. Both take the same --user-dir and environment.
+MUSTER_UI ?= cpp
+LAUNCH_cpp = cd $(UI) &&
+LAUNCH_nim =
+RUNNER_cpp = nix run 'path:.' $(CACHE) --
+RUNNER_nim = $(CURDIR)/.run/runner-nim/bin/muster-ui
+LAUNCH = $(LAUNCH_$(MUSTER_UI))
+RUNNER = $(RUNNER_$(MUSTER_UI))
 
 help:
 	@echo "make run                 launch the standalone muster app (dashboard + walkthrough)"
 	@echo "make run-fleet PEER=x     launch a peer on the Logos delivery fleet (two-instance)"
 	@echo "make build               pre-build the runner — the slow first build; do this once ($(CAP_NOTE))"
+	@echo "make build-nim           build the Nim UI's runner (.run/runner-nim) on the runner's modules; then MUSTER_UI=nim make run"
 	@echo "make build-lgx           build muster-ui.lgx (to load into logos-basecamp instead; $(CAP_NOTE))"
 	@echo "make appimage            Basecamp's release AppImage with Muster baked in, from the committed tree (RELEASING.md; $(CAP_NOTE))"
 	@echo "make clean               remove local run state (.run/)"
@@ -94,6 +106,11 @@ build:
 	  --out-link $(CURDIR)/.run/runner \
 	  || $(CAP_KILLED)
 
+# The Nim UI's runner (exo-607 T6): ui-nim#muster-app on the C++ runner's modules, so
+# it needs `make build` first. Small and separate from the runner's flake.
+build-nim:
+	scripts/build-runner-nim.sh
+
 # nix run resolves apps.default (the standalone runner), NOT packages.default
 # (the .lgx). Each --user-dir is one identity + wallet, so two dirs are two peers.
 # Seed this instance as anvil Safe owner 0 (like run-fleet does for alice), so YOUR
@@ -109,7 +126,7 @@ run:
 	@mkdir -p $(RUN_DIR)
 	@echo "launching muster (standalone) with user-dir $(RUN_DIR)"
 	@[ -n "$(RUN_SEED)" ] && echo "  seeding as anvil Safe owner 0 (in-app Approve/Attest counts; 'make clean' to re-mint)" || true
-	cd $(UI) && MUSTER_DEV_SECP_KEY="$(RUN_SEED)" nix run 'path:.' $(CACHE) -- --user-dir $(RUN_DIR)
+	$(LAUNCH) MUSTER_DEV_SECP_KEY="$(RUN_SEED)" $(RUNNER) --user-dir $(RUN_DIR)
 
 # Launch one peer already pointed at the Logos delivery fleet, so its transport
 # joins a network with real bootstrap peers (the bundled preset ships none — see
@@ -129,9 +146,9 @@ run-fleet:
 	  bob)   SEED_VAL=$(ANVIL_KEY1) ;; \
 	esac; fi; \
 	[ -n "$$SEED_VAL" ] && echo "  seeding '$(PEER)' as an anvil Safe owner (in-app Approve can settle on-chain)"; \
-	cd $(UI) && MUSTER_DELIVERY_CONFIG="$$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["delivery_createNode_config"]))' $(CURDIR)/$(FLEET_CFG))" \
+	$(LAUNCH) MUSTER_DELIVERY_CONFIG="$$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["delivery_createNode_config"]))' $(CURDIR)/$(FLEET_CFG))" \
 	  MUSTER_DEV_SECP_KEY="$$SEED_VAL" \
-	  nix run 'path:.' $(CACHE) -- --user-dir $(CURDIR)/.run/$(PEER)
+	  $(RUNNER) --user-dir $(CURDIR)/.run/$(PEER)
 
 build-lgx:
 	@$(CAP_CHECK)

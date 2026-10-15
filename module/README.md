@@ -132,7 +132,7 @@ src/
   plugins/      plugin sandbox (inv 3)
 nim-lib/        muster_gen.nim (generated) + muster_module.nim (hosted surface)
 tools/          regen.sh (fetches the SDK's lidl-gen + regenerates muster_gen.nim) · nim-closure.sh
-                (the pinned Nim closure) · muster_audit_verify.nim · headless-host/
+                (the pinned Nim closure) · muster_audit_verify.nim (the headless host is ui-nim/headless/)
 tests/          unit tests · run-suite.sh (all of them, one command) · vectors/ (BIP, FROST, LEZ)
   probes/       the probe_*.nim acceptance oracles named by the derived-exo-* specs
 ```
