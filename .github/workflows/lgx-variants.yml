@@ -1,0 +1,110 @@
+# Build muster_module and muster_ui for every Linux platform Basecamp ships on, and merge
+# each into ONE .lgx holding all of its variants (docs/design/platforms.md).
+#
+# A .lgx is a container of native builds, one directory per platform under variants/, and
+# Basecamp installs the one matching its own platform. Until 2026-10-15 Muster built only
+# linux-amd64, on whatever machine ran scripts/catalog-release.sh. This workflow builds each
+# variant natively on a GitHub-hosted runner of that platform (linux-arm64 on
+# ubuntu-24.04-arm, free for public repositories), the way the official catalogue does
+# (logos-co/logos-modules-release-action, release.yml@v1.9), then merges them with `lgx merge`.
+#
+# It publishes nothing. The merged packages are the run's `lgx-merged` artifact;
+# scripts/catalog-release.sh --from-run <id> takes them into a release.
+#
+# darwin-arm64 and windows-x86_64 are not built yet: docs/design/platforms.md says what each
+# needs. Adding one is a matrix row here once the flake builds it.
+name: lgx variants
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'module/**'
+      - 'ui/**'
+      - '.github/workflows/lgx-variants.yml'
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lgx-variants-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build ${{ matrix.package }} (${{ matrix.variant }})
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [linux-amd64, linux-arm64]
+        package: [module, ui]
+        include:
+          - variant: linux-amd64
+            runs-on: ubuntu-latest
+          - variant: linux-arm64
+            runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      # Nix, reading the Logos caches (cache.nix.logos.co and its Attic): the Qt and
+      # module closures for both platforms are already there, so a leg builds muster only.
+      - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      - name: Build ${{ matrix.package }} .#lgx-portable
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The PORTABLE bundle: self-contained, tagged with the canonical variant name
+          # (linux-amd64, linux-arm64). The dev bundle (.#lgx) points into /nix/store and
+          # tags its variant "-dev", which a release Basecamp refuses.
+          out=$(cd ${{ matrix.package }} && nix build .#lgx-portable --print-out-paths --no-link)
+          lgx=$(find "$out" -maxdepth 2 -name '*.lgx' | head -n1)
+          [ -n "$lgx" ] || { echo "::error::nix build produced no .lgx"; exit 1; }
+          name=$(case "${{ matrix.package }}" in module) echo muster_module ;; ui) echo muster_ui ;; esac)
+          mkdir -p _out
+          cp "$lgx" "_out/${name}-${{ matrix.variant }}.lgx"
+          # the variant directory this build carries must be the one this leg is for
+          tar -tzf "_out/${name}-${{ matrix.variant }}.lgx" | grep -o '^variants/[^/]*/' | sort -u
+          tar -tzf "_out/${name}-${{ matrix.variant }}.lgx" | grep -q "^variants/${{ matrix.variant }}/" \
+            || { echo "::error::the build is not tagged ${{ matrix.variant }}"; exit 1; }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lgx-${{ matrix.package }}-${{ matrix.variant }}
+          path: _out/*.lgx
+          if-no-files-found: error
+
+  merge:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      - name: Set up the lgx CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix build github:logos-co/logos-package#lgx --out-link "$RUNNER_TEMP/lgx-tool"
+          echo "$RUNNER_TEMP/lgx-tool/bin" >> "$GITHUB_PATH"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: _per-variant
+          pattern: lgx-*
+          merge-multiple: true
+      - name: Merge each package's variants into one .lgx
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _merged
+          for name in muster_module muster_ui; do
+            mapfile -t parts < <(find _per-variant -name "${name}-*.lgx" | sort)
+            [ "${#parts[@]}" -ge 2 ] || { echo "::error::${name}: ${#parts[@]} variant(s) built, expected 2"; exit 1; }
+            lgx merge "${parts[@]}" -o "_merged/${name}.lgx" -y
+            lgx verify "_merged/${name}.lgx"
+            echo "${name}: $(tar -tzf "_merged/${name}.lgx" | grep -o '^variants/[^/]*/' | sort -u | tr '\n' ' ')"
+          done
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: lgx-merged
+          path: _merged/*.lgx
+          if-no-files-found: error
