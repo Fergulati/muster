@@ -641,8 +641,8 @@ Item {
                && p !== "contributor" && p !== "payer" && p !== "counterparty";
     }
     readonly property var composeBlockers: room.composeNeeds.filter(function (n) { return room.needBlocks(n); })
-    // a send's payer needs no module of the kind's: they pay from any wallet (exo-dcc.32)
-    readonly property bool composeBlocked: (room.composeBlockers.length > 0 && !(room.composeType === "split" && room.splitSend))
+    // a Monero send's payer needs no module of the kind's: they pay from any wallet (exo-dcc.32)
+    readonly property bool composeBlocked: (room.composeBlockers.length > 0 && !(room.composeType === "split" && room.splitSend && room.splitMonero))
                                            || room.pickPending
     function composeNeedLine(n) {
         var info = room.kindInfo(room.policyKind);
@@ -1177,11 +1177,12 @@ Item {
     // A private split is proposed only by whoever fronted it (their shielded key node is
     // not shared in the room).
     property string splitCreditor: ""
-    readonly property string splitFor: (room.splitPrivate || room.splitBitcoin || room.splitRequest)
-                                       ? "" : room.splitSend ? room.sendTo : room.splitCreditor
-    // "Send Monero" (exo-dcc.32): one payment from you to one member — a Monero request on
-    // their behalf, with you its only payer. Paid at the address they shared from their own
-    // wallet; proposing it is your agreement, so it is payable once they agree.
+    readonly property string splitFor: room.splitRequest ? "" : room.splitSend ? room.sendTo
+                                       : (room.splitPrivate || room.splitBitcoin) ? "" : room.splitCreditor
+    // "Send" (exo-dcc.32, .33): one payment from you to one member, in any asset a split
+    // takes (XMR, ETH or a token, BTC, LEZ) — a split on their behalf with you its only
+    // payer. Paid at the address they shared; proposing it is your agreement, so it is
+    // payable once they accept.
     property bool splitSend: false
     // who you send to: the member picked, else the only other member
     readonly property string sendTo: {
@@ -1197,6 +1198,8 @@ Item {
     // subaddress their own wallet minted for this chain (exo-dcc.20)
     readonly property string splitForAddress: room.splitFor.length === 0 ? ""
                                             : room.splitMonero ? room.sharedMoneroAddressOf(room.splitFor, room.splitMoneroChain)
+                                            : room.splitBitcoin ? room.sharedBtcAddressOf(room.splitFor)
+                                            : room.splitPrivate ? room.sharedLezAddressOf(room.splitFor)
                                             : room.sharedAddressOf(room.splitFor)
     function memberLabel(identity) {
         var id = String(identity || "").toLowerCase();
@@ -1258,6 +1261,21 @@ Item {
             try { o = JSON.parse(msg.body); } catch (e) { o = null; }
             if (o && String(o.kind || "") === "address-share" && String(o.asset || "") === "XMR"
                 && String(o.chain || "") === String(chain) && String(o.address || "").length > 0) out = String(o.address);
+        }
+        return out;
+    }
+    function sharedLezAddressOf(identity) {
+        // the LEZ key node a member last shared (asset LEZ, exo-dcc.33): what a private
+        // payment sent to them is paid at; the module holds it to the zone
+        var bare = function (s) { return String(s || "").toLowerCase().replace(/^0x/, ""); };
+        var id = bare(identity), out = "";
+        for (var i = 0; i < room.messages.length; ++i) {
+            var msg = room.messages[i];
+            if (!msg || bare(msg.author) !== id) continue;
+            var o = null;
+            try { o = JSON.parse(msg.body); } catch (e) { o = null; }
+            if (o && String(o.kind || "") === "address-share" && String(o.asset || "") === "LEZ"
+                && String(o.address || "").length > 0) out = String(o.address);
         }
         return out;
     }

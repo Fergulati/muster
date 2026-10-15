@@ -506,6 +506,161 @@
           "what": "Part 6f: in Bitcoin"
         }
       ]
+    },
+    {
+      "id": "btc.split/send",
+      "name": "Send Bitcoin to someone in the room, at an address they shared",
+      "area": "family",
+      "family": "btc.split",
+      "kind": "btc-split",
+      "status": "built",
+      "summary": "A send is a split on the payee's behalf with the sender its only payer (exo-dcc.33): the same agreement, settlement and confirmation as the split. It is paid at the Bitcoin address they shared on that network (wpkh of their own muster key), never one the sender typed; an address may back any number of sends: each payment is confirmed by its txid. Proposing is the sender's agreement (they are its only payer), and the payee's Accept is their word the address is theirs. The sender pays from their own wpkh coins through their own node, and the payment is confirmed by the payee's own node: an output paying exactly the amount at the network's depth, in the txid the payer reported.",
+      "generated": "btc-split/split",
+      "effect": {
+        "schema": "muster.effect.split.v1",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the CAIP-2 Bitcoin chain every share is paid on, bip122:<genesis prefix> — the policy's qualifier (btc-split@<chain>)"
+          },
+          {
+            "name": "asset",
+            "means": "BTC — a Bitcoin split is paid in bitcoin, never a token"
+          },
+          {
+            "name": "total",
+            "means": "the bill, canonical decimal in satoshis; the creditor's own share is total minus the shares"
+          },
+          {
+            "name": "creditor",
+            "means": "who fronted the bill and is owed: their room identity (64-byte encryption identity, hex)"
+          },
+          {
+            "name": "payTo",
+            "means": "the creditor's receiving address: a segwit address of the chain's network, lowercase — their own wpkh address when they propose (a Bitcoin split is proposed only by whoever fronted it), reviewed and signed"
+          },
+          {
+            "name": "shares",
+            "means": "[{who, amount}] sorted by who, each debtor once, never the creditor, every amount at least Bitcoin's 546-sat dust limit, the sum at most the total"
+          },
+          {
+            "name": "memo",
+            "means": "room-only text, at most 280 bytes"
+          },
+          {
+            "name": "quote",
+            "means": "optional — a bill in another currency (exo-3a4): {currency, fiatTotal in its minor units, fiatDecimals, rateFiat, rateAsset, source, at}; the rate is the proposer's quote, recorded in the log as an external read before anyone agrees (\"sources\": {\"quote\": \"read\"}, invariant 10), and the total must be exactly its conversion"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "act",
+          "who": "the payee",
+          "does": "Shares an address for the rail into the room (Share an address / Share my Bitcoin address / Share my LEZ address); a sender's Ask for an address asks for one."
+        },
+        {
+          "step": "propose",
+          "who": "the sender",
+          "does": "Picks the payee, the rail and the amount; the module pays it at the payee's shared address (send.behalfPayTo), refusing none shared (no-shared-address). Proposing is the sender's agreement."
+        },
+        {
+          "step": "approve",
+          "who": "the payee",
+          "does": "Accept: their client agrees only for an address it holds (payto-not-mine otherwise)."
+        },
+        {
+          "step": "settle",
+          "who": "the sender",
+          "does": "Pays from their own wpkh coins through their own node."
+        },
+        {
+          "step": "final",
+          "who": "the payee's own client",
+          "does": "Confirmed by the payee's own node: an output paying exactly the amount at the network's depth, in the txid the payer reported."
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a send to someone who shared no address for the rail and chain",
+          "why": "Muster never types or guesses a payee's address (no-shared-address)",
+          "evidence": [
+            "module/tests/send_any_asset_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_propose_split",
+        "coordinate_share_address",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_settle_part",
+        "coordinate_confirm_part"
+      ],
+      "ui": "Built (exo-dcc.33): Send money in the room's + picker and on Home; pick who and the rail (Settles on), type the amount; the form names the address it goes to or offers Ask <name> for an address. Not yet run live between two machines.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "You pay exactly the share you agreed, to the address in the split: the payment is derived from the agreed effect, never typed",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Only the people a split names can agree to it, and only each can agree to their own share",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing makes anyone pay: the room shows who has",
+          "credibility": "motivational",
+          "party": "each person who owes"
+        },
+        {
+          "claim": "Every payment is public on the chain — payer, payee, amount — and several payments to one address close together link the group",
+          "credibility": "exposed",
+          "party": "anyone reading the chain"
+        },
+        {
+          "claim": "Who was at dinner stays in the room: muster never tags a payment on-chain with the split",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/send_any_asset_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_btc_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_btc_regtest_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/parts_fold_test.nim"
+        }
+      ],
+      "try": [
+        {
+          "path": "docs/runbooks/client-tour.md",
+          "anchor": "6f-in-bitcoin",
+          "what": "Part 6f: in Bitcoin"
+        }
+      ],
+      "unverified": [
+        "a live send between two machines on this rail"
+      ]
     }
   ]
 }
