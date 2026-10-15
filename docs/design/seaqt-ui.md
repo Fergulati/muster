@@ -489,7 +489,7 @@ Both runs were on `logos.dev`, minutes apart, on the same machine, with foundry 
 - **seaqt slot closures must be `{.closure, raises: [].}`**, written out (`QTimer.onTimeout`).
 - **QQuickStyle is not bound** (QtQuickControls2). The app sets `QT_QUICK_CONTROLS_STYLE=Basic` instead, before the application exists.
 - **Icons need GL.** The design system tints them through `MultiEffect`, so the software renderer draws them blank, as for C++. They also need `qtsvg` in the app's closure.
-- **Settings are not per `--user-dir`,** in either build: logos-standalone-app's are organization `Logos`, application `LogosStandalone`. The Nim app uses application `muster`.
+- **Settings were not per `--user-dir`,** in either build. logos-standalone-app's are organization `Logos`, application `LogosStandalone`: one file for every instance. Since 2026-10-15 the Nim app keeps them in `<user-dir>/settings/` (`QSettings.setPath`, before the QML loads), so two peers on one machine keep their view prefs apart. This is the one place the Nim build differs on purpose.
 
 **Not yet:**
 

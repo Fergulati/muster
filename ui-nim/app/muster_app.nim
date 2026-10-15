@@ -19,7 +19,7 @@
 ##                                                    offscreen: + muster_module.health()
 
 import std/[os, strutils, json, times]
-import nimside, seaqt/[qguiapplication, qcoreapplication, qquickview, qqmlengine,
+import nimside, seaqt/[qguiapplication, qcoreapplication, qsettings, qquickview, qqmlengine,
   qqmlcontext, qqmlerror, qurl, qvariant, qwindow]
 import logos_sdk
 import muster_client          # generated at build time from muster.lidl (nix/muster-client.nix)
@@ -118,6 +118,13 @@ proc main(): int =
   QCoreApplication.setOrganizationName("Logos")
   QCoreApplication.setOrganizationDomain("logos.co")
   QCoreApplication.setApplicationName("muster")
+  # The view's prefs (QML Settings) live in the session directory, so two instances
+  # with two --user-dirs keep them apart. logos-standalone-app shares one file across
+  # its instances (~/.config/Logos/LogosStandalone.conf); this is the one place the Nim
+  # build differs on purpose. Set before any QSettings exists, so before the QML loads.
+  if userDir.len > 0:
+    for format in [QSettingsFormatEnum.NativeFormat, QSettingsFormatEnum.IniFormat]:
+      QSettings.setPath(format.cint, QSettingsScopeEnum.UserScope.cint, userDir / "settings")
 
   var failed = 0
   template check(ok: bool, what: string) =
