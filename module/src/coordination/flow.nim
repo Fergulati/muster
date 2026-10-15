@@ -99,6 +99,15 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
       # a key ceremony's step: public ceremony data, inside the room
       result.addRows(i, "ceremony", "", @[row("ceremony", obRoomMember)] & envelope, true)
       continue
+    if p.len >= 2 and p[0] == "file":
+      # the room swarm (exo-4d0.4): a share tells the room the file (name, size, sharer)
+      # and its key; a seed tells it how to reach the seeder's storage node (peer id,
+      # addresses). What Storage itself sees is not a log entry's to say (§5.5).
+      let rows = (if p.len >= 4 and p[2] == "seed": @[row("storage-address", obRoomMember)]
+                  elif p.len == 2: @[row("file", obRoomMember), row("file-key", obRoomMember)]
+                  else: @[row("file", obRoomMember)])
+      result.addRows(i, "file", "", rows & envelope, true)
+      continue
     if p.len < 3 or p[0] != "intent":
       # an entry this fold does not know still reached the store node as an envelope
       result.addRows(i, (if p.len > 0: p[0] else: "entry"), "", envelope, true)
