@@ -383,12 +383,25 @@ Rectangle {
     // a payment request: one share, and the creditor's own share nothing
     readonly property bool isRequest: cardRoot.isSplit && cardRoot.parts.length === 1
                                       && String(cardRoot.split.creditorShare || "") === "0"
-    // a request's headline: who asks whom for what
+    // a send (exo-dcc.32): a request its own payer proposed — they send it, nobody asked
+    readonly property bool isSend: {
+        if (!cardRoot.isRequest) return false;
+        var ps = (cardRoot.card && Array.isArray(cardRoot.card.proposedBy)) ? cardRoot.card.proposedBy : [];
+        return ps.length > 0 && MusterStyle.personKey(ps[0].who) === MusterStyle.personKey(cardRoot.parts[0].who);
+    }
+    // a request's headline: who asks whom for what — or, for a send, who sends whom what
     function requestLine() {
         if (!cardRoot.isRequest) return "";
         var p = cardRoot.parts[0];
         var who = String(p.name || "").length > 0 ? String(p.name) : String(p.who || "").slice(0, 10) + "…";
         var memo = String(cardRoot.split.memo || "").length > 0 ? " · " + String(cardRoot.split.memo) : "";
+        if (cardRoot.isSend)
+            return cardRoot.iAmCreditor
+                   ? qsTr("%1 sends you %2 %3%4").arg(who).arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit).arg(memo)
+                   : cardRoot.iAmDebtor
+                   ? qsTr("You send %1 %2 %3%4").arg(cardRoot.creditorName).arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit).arg(memo)
+                   : qsTr("%1 sends %2 %3 %4%5").arg(who).arg(cardRoot.creditorName)
+                         .arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit).arg(memo);
         return cardRoot.iAmCreditor
                ? qsTr("You ask %1 for %2 %3%4").arg(who).arg(cardRoot.eth(cardRoot.split.total)).arg(cardRoot.unit).arg(memo)
                : qsTr("%1 asks %2 for %3 %4%5").arg(cardRoot.creditorName).arg(who)
@@ -898,6 +911,9 @@ Rectangle {
                 text: cardRoot.isSettleUp ? qsTr("Agree to settle up")
                     : !cardRoot.isSplit ? qsTr("Approve")
                     : cardRoot.iAmDebtor ? qsTr("Agree to my share")
+                    // a send's recipient: accepting is their word that the address is theirs
+                    : cardRoot.isSend ? qsTr("Accept — %1 is my address").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
+                    : cardRoot.isRequest ? qsTr("Agree — %1 is mine").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
                     : qsTr("Agree — I paid, and %1 is mine").arg(cardRoot.shortPayTo(String((cardRoot.split && cardRoot.split.payTo) || "")))
                 onClicked: { cardRoot.markSending("approve"); cardRoot.approve(); }
             }

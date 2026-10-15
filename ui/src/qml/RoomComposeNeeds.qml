@@ -15,7 +15,9 @@ ColumnLayout {
     required property var room
 
     objectName: "composeNeeds"
+    // a send's payer needs no Monero module: they pay from any wallet (exo-dcc.32)
     visible: room.composeType !== "action" && room.composeNeeds.length > 0
+             && !(room.composeType === "split" && room.splitSend)
     Layout.fillWidth: true
     spacing: Theme.spacing.tiny
 

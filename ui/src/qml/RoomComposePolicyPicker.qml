@@ -16,7 +16,8 @@ RowLayout {
     required property var room
 
     // an action carries its own driver (invoke) — no policy choice to make.
-    visible: room.composeType !== "action"
+    // a send is Monero only (exo-dcc.32): no rail to pick
+    visible: room.composeType !== "action" && !(room.composeType === "split" && room.splitSend)
     Layout.fillWidth: true
     spacing: Theme.spacing.small
 

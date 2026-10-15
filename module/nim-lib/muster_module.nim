@@ -1623,11 +1623,16 @@ proc proposeXmrRequest(chain, total, sharesJson, memo: string): string =
   inc gMsgSeq
   var payTo = ""
   if creditor != me:
+    # on their behalf — a send when this member is its only payer (exo-dcc.32): paid at the
+    # newest address they shared, never one already backing a Monero payment here
     gSession.poll()
-    payTo = sharedMoneroAddressOf(gSession.roomEvents(), creditor, chain)
-    if payTo.len == 0:
-      return $(%*{"error": "no-shared-address", "creditor": creditor, "chain": chain,
-                  "detail": "they have shared no Monero address for " & chainLabel(chain)})
+    let (a, why) = xmrBehalfPayTo(gSession.roomEvents(), creditor, chain)
+    if why.len > 0:
+      return $(%*{"error": why.split(":")[0], "creditor": creditor, "chain": chain,
+                  "detail": (if why.startsWith("no-shared-address"):
+                               "they have shared no Monero address for " & chainLabel(chain)
+                             else: why.split(": ", 1)[^1])})
+    payTo = a
   else:
     # the request is checked before a subaddress is minted for it: the driver's own rules,
     # with a stand-in address of the chain's own kind where payTo will go

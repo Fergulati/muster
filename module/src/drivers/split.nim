@@ -606,13 +606,16 @@ method describeFor*(d: SplitDriver, e: Effect): DriverDescriptor =
 
 method agreesByProposing*(d: SplitDriver, e: Effect, proposer: string): bool =
   ## The creditor proposing their own split agrees to it then — payTo is theirs to state. A
-  ## party proposing a settle-up agrees to it then: they composed it.
+  ## party proposing a settle-up agrees to it then: they composed it. And the ONLY payer a
+  ## split names agrees by proposing it (exo-dcc.32, a send): they wrote exactly what they
+  ## will pay; a payer among several still agrees by hand.
   let who = proposer.toLowerAscii().replace("0x", "")
   if e.isSettleUp:
     let (ok, su, _) = d.validSettle(e)
     return ok and who in settleParties(su)
   let (ok, sp, _) = d.validSplit(e)
-  ok and who == sp.creditor
+  ok and (who == sp.creditor or
+          (sp.shares.len == 1 and sp.shares[0].who.toLowerAscii().replace("0x", "") == who))
 
 method environment*(d: SplitDriver): string = d.chain
 
