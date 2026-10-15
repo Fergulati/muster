@@ -21,12 +21,13 @@ Muster's UI backend is 1,151 lines of C++ in a Qt plugin. It is a thin pass-thro
 | T4b: probe A, a Nim plugin in Basecamp | done | A Nim `.so` works in the real `ui-host`, both ways through the builder's typed replica. That only happens once the object is registered under the replica's name, which today takes an ABI hack. It cannot reach the capability token without the C++ SDK. Two small `ui-host` changes would make A clean. |
 | Gate | decided, 2026-10-14 | B, written as if Basecamp did not exist. Newest Qt and seaqt. C++ generated at build time is fine. The Basecamp UI stays, frozen. ADR-019. |
 | T1b: newest everything | done | Qt 6.11.2 and seaqt `qt-6.11`. `liblogos_core` and `liblogos_protocol` are rebuilt on it from the runner's revisions. Every check is green again, and a 6.11 app calls `muster_module` in a 6.9.2 module process. |
-| T5: the backend in Nim | done | All 80 slots and the `MUSTER_AUTO*` autopilot, through the client generated from `muster.lidl`, every call async. |
+| T5: the backend in Nim | done | All 79 slots and the `MUSTER_AUTO*` autopilot, through the client generated from `muster.lidl`, every call async. |
 | T6: the Nim runner | done | `.run/runner-nim` (`make build-nim`; `MUSTER_UI=nim make run`). `MUSTER_UI=nim scripts/ui-parity.sh`: 11/11 green, as C++ is. |
 | T7: the rest of the C++ | done | The headless host and the probe harness are Nim. `scripts/check-no-cpp.py` (pre-commit) allows C/C++ only in `ui/` and `demo/`. |
 
 **For Jacek:**
 
+- **What muster needed from nimside and seaqt**, consolidated from every slice with what the DSL could offer, is [`seaqt-dsl-feedback.md`](seaqt-dsl-feedback.md) (T8's write-up).
 - **Your answers, and what they decided,** are in [§8](#8-open-questions-for-jacek-and-the-operator). Q5 (what the DSL is) is still yours.
 - **What muster asked of nimside that it could not say directly** is the gap list at the end of [§9, T2](#t2-the-view-contract-in-the-dsl-exo-6073-2026-09-29).
   T3 and T4b add to that list.
@@ -142,10 +143,10 @@ The slices are tracked under epic `exo-607`. T1–T3 are needed whatever the hos
 | **T4b** (exo-607.6) | **Probe A.** `ui-host` loads a Nim `.so`. nimside `plugingen` is extended to emit the `PluginInterface` / `LogosViewPlugin` shim, the T2 object is remoted, and the builder's typed replica reads a property and invokes a slot correctly. The capability token is forwarded from `initLogos` to `lp_*`. | L | T2, T3 | done |
 | **Gate** (exo-607.7) | Choose A or B with Jacek (Q1–Q5). Record it as an ADR in `02-implementation-plan.md`. Skip whichever probe the answer makes moot. | — | T4a or T4b | done: B, ADR-019 |
 | **T1b** (exo-607.13) | **Newest everything.** Qt 6.11 from a pinned nixpkgs, seaqt `qt-6.11` with RemoteObjects regenerated on it, nimside and seaqt-gen at their heads. `liblogos_core` and `liblogos_protocol` are rebuilt on that Qt from the revisions the builder pins. The checks so far (`hello`, `contract`, `ro`, `muster-app-view`, `nim-app-core-probe.sh`) stay green. The probe adds one check: a 6.11 app calls a module process on Logos's 6.9.2 over QtRO. | M | Gate | done |
-| **T5** (exo-607.8) | **Port the backend logic.** All 67 slots (80 by now), the autopilot, the retry timers and the audit download, calling `muster_module` through the logos-nim-sdk consumer client generated from `muster.lidl`. | M | Gate, T0, T1b | done |
+| **T5** (exo-607.8) | **Port the backend logic.** All 67 slots (79 by now), the autopilot, the retry timers and the audit download, calling `muster_module` through the logos-nim-sdk consumer client generated from `muster.lidl`. | M | Gate, T0, T1b | done |
 | **T6** (exo-607.9) | **Hosting integration (B).** A `muster-app` flake app that takes `--user-dir` and meets `scripts/lib/ui-build.sh`'s contract, built into `.run/runner-nim`, with `make run` / `run-fleet` able to choose it. T0 goes green on the Nim build. The Basecamp build (`ui/`) stays the catalogue's. | M | T5 | done |
 | **T7** (exo-607.10) | **Delete the C++ that has no Basecamp role.** Port the headless host and the probe harness to Nim. Add a `scripts/check-no-cpp.py` gate that exempts `ui/` (until Basecamp can take a Nim UI) and `demo/` (not the client) by name. `ui/src/*.{cpp,h}` and the `.rep` go when the `ui/` exemption ends. | S–M | T6 | done |
-| **T8** (exo-607.11) | **The DSL payoff.** Write up for Jacek what muster needed from nimside and seaqt. Optionally make the playground genuinely complex: replace the JSON-string properties for intents, messages and members with typed list models, with nested objects, signals with arguments and cross-thread updates. | open | T5 | — |
+| **T8** (exo-607.11) | **The DSL payoff.** Write up for Jacek what muster needed from nimside and seaqt. Optionally make the playground genuinely complex: replace the JSON-string properties for intents, messages and members with typed list models, with nested objects, signals with arguments and cross-thread updates. | open | T5 | write-up done ([`seaqt-dsl-feedback.md`](seaqt-dsl-feedback.md)); the typed-model experiment waits on Q5 |
 
 ## 8. Open questions (for Jacek and the operator)
 
