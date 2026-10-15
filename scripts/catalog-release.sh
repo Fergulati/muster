@@ -21,6 +21,11 @@
 #                      with a certificate Basecamp trusts (SSL_CERT_FILE; see
 #                      docs/runbooks/install-from-catalogue.md, "Testing a release locally").
 #   --allow-dirty      build even if module/ or ui/ has uncommitted changes (never for a release)
+#   --from-run ID      take the packages from a successful run of the `lgx variants` workflow
+#                      (.github/workflows/lgx-variants.yml) instead of building here: one .lgx
+#                      per package holding every Linux variant (linux-amd64, linux-arm64). The
+#                      run must have built exactly HEAD. Assets are then named
+#                      <package>-<version>.lgx, as the official catalogue names its own.
 #
 # The catalogue publishes ONLY muster_module and muster_ui. Every dependency resolves from the
 # official Logos catalogue, which Basecamp enables by default and searches alongside ours
@@ -46,10 +51,10 @@ LGX_FLAKE=github:logos-co/logos-package/c25a1167578aef5cbd9a9b6f822ffe2ae4fd6a89
 REPO_URL=https://raw.githubusercontent.com/corpetty/muster/main/catalog/logos-repo.json
 INDEX_URL=https://raw.githubusercontent.com/corpetty/muster/main/catalog/index.json
 RELEASES=https://github.com/corpetty/muster/releases/download
-PLATFORM=linux-amd64
+PLATFORMS="linux-amd64"            # the variants each package must carry (--from-run: every Linux one)
 SUB=(--extra-substituters https://cache.nix.logos.co)
 
-TAG=""; URL_BASE=""; LOCAL=""; BASE_URL=""; ALLOW_DIRTY=0
+TAG=""; URL_BASE=""; LOCAL=""; BASE_URL=""; ALLOW_DIRTY=0; FROM_RUN=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --tag) TAG=${2:?--tag needs a value}; shift ;;
@@ -57,7 +62,8 @@ while [ $# -gt 0 ]; do
     --local) LOCAL=${2:?--local needs a directory}; shift ;;
     --base-url) BASE_URL=${2:?--base-url needs a URL}; shift ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
-    -h|--help) sed -n '2,37p' "$0"; exit 0 ;;
+    --from-run) FROM_RUN=${2:?--from-run needs a workflow run id}; shift ;;
+    -h|--help) sed -n '2,42p' "$0"; exit 0 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -76,7 +82,10 @@ VERSION=$(ver module/metadata.json)
   echo "module/metadata.json ($VERSION) and ui/metadata.json ($(ver ui/metadata.json)) disagree; bump both" >&2; exit 1; }
 TAG=${TAG:-muster-v$VERSION}
 URL_BASE=${URL_BASE:-$RELEASES/$TAG}
-asset() { echo "$1-$VERSION-$PLATFORM.lgx"; }
+[ -n "$FROM_RUN" ] && PLATFORMS="linux-amd64 linux-arm64"
+# one platform: <package>-<version>-<platform>.lgx (every release before 0.3.1); several: the
+# official catalogue's <package>-<version>.lgx
+asset() { if [ "$PLATFORMS" = "${PLATFORMS%% *}" ]; then echo "$1-$VERSION-$PLATFORMS.lgx"; else echo "$1-$VERSION.lgx"; fi; }
 
 # The committed tree, never a working copy.
 if [ $ALLOW_DIRTY = 0 ] && [ -n "$(git status --porcelain -- module ui)" ]; then
@@ -100,7 +109,23 @@ export PATH="$LGX:$PATH"
 
 # 1. The packages, as scripts/basecamp-profile.sh builds them (.#lgx-portable: the release
 #    accepts only the portable variant), with muster_module overridden to this clone's
-#    absolute git+file path and the eval cache off, as `make build` does (exo-fb7).
+#    absolute git+file path and the eval cache off, as `make build` does (exo-fb7). Or, with
+#    --from-run, the merged packages that workflow run built from this same commit.
+if [ -n "$FROM_RUN" ]; then
+  run=$(gh run view "$FROM_RUN" --repo corpetty/muster --json headSha,conclusion,workflowName \
+          --jq '"\(.workflowName)|\(.conclusion)|\(.headSha)"') \
+    || { echo "cannot read workflow run $FROM_RUN" >&2; exit 1; }
+  IFS='|' read -r wf concl sha <<<"$run"
+  [ "$wf" = "lgx variants" ] || { echo "run $FROM_RUN is '$wf', not 'lgx variants'" >&2; exit 1; }
+  [ "$concl" = "success" ] || { echo "run $FROM_RUN did not succeed ($concl)" >&2; exit 1; }
+  [ "$sha" = "$COMMIT" ] || { echo "run $FROM_RUN built $sha; HEAD is $COMMIT" >&2; exit 1; }
+  RUNDIR=$WORK/run-$FROM_RUN
+  rm -rf "$RUNDIR"; mkdir -p "$RUNDIR/module" "$RUNDIR/ui"
+  gh run download "$FROM_RUN" --repo corpetty/muster -n lgx-merged -D "$RUNDIR/dl"
+  mv "$RUNDIR/dl/muster_module.lgx" "$RUNDIR/module/"; mv "$RUNDIR/dl/muster_ui.lgx" "$RUNDIR/ui/"
+  MOD=$RUNDIR/module; UI=$RUNDIR/ui
+  echo "muster_module and muster_ui $VERSION from run $FROM_RUN (commit $COMMIT)"
+else
 echo "building muster_module and muster_ui $VERSION from $COMMIT"
 MOD=$(nix build "git+file://$ROOT?dir=module#lgx-portable" "${SUB[@]}" --no-eval-cache \
         --no-link --print-out-paths 2>"$WORK/build-module.log" | tail -1) \
@@ -109,6 +134,7 @@ UI=$(nix build "git+file://$ROOT?dir=ui#lgx-portable" "${SUB[@]}" --no-eval-cach
         --override-input muster_module "git+file://$ROOT?dir=module" \
         --no-link --print-out-paths 2>"$WORK/build-ui.log" | tail -1) \
   || { echo "ui build failed; see $WORK/build-ui.log" >&2; exit 1; }
+fi
 
 # Each package's embedded manifest must carry the name and version the catalogue claims.
 declare -A SRC
@@ -116,7 +142,8 @@ for pair in "muster_module:$MOD" "muster_ui:$UI"; do
   pkg=${pair%%:*}; f=$(ls "${pair#*:}"/*.lgx | head -1)
   lgx verify "$f" >/dev/null
   got=$(lgx manifest "$f" --json | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m["name"], m["version"], " ".join(sorted(m.get("main", {}))))')
-  [ "$got" = "$pkg $VERSION $PLATFORM" ] || { echo "$f: manifest says '$got', expected '$pkg $VERSION $PLATFORM'" >&2; exit 1; }
+  want="$pkg $VERSION $(tr ' ' '\n' <<<"$PLATFORMS" | sort | paste -sd' ')"
+  [ "$got" = "$want" ] || { echo "$f: manifest says '$got', expected '$want'" >&2; exit 1; }
   SRC[$pkg]=$f
 done
 
@@ -202,7 +229,7 @@ cat <<EOF
 
 Nothing is published. To publish $TAG:
   1. gh release create $TAG --repo corpetty/muster --target $COMMIT \\
-       --title "Muster $VERSION" --notes "Muster $VERSION for Basecamp (linux-amd64). Install: docs/runbooks/install-from-catalogue.md" \\
+       --title "Muster $VERSION" --notes "Muster $VERSION for Basecamp (${PLATFORMS// /, }). Install: docs/runbooks/install-from-catalogue.md" \\
        $ASSETS/$(asset muster_module) $ASSETS/$(asset muster_ui)
   2. check each asset downloads:  curl -sSfLI $URL_BASE/$(asset muster_ui) | head -1
   3. git add catalog/index.json catalog/icons && git commit (Tested-Behavior trailer), PR to main.

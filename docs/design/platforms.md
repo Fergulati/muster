@@ -4,10 +4,6 @@
 0.3.2 is released for, and what is left for the ones not built yet. The code and the
 workflow win over this page.
 
-> The linux-arm64 build, `.github/workflows/lgx-variants.yml` and
-> `scripts/catalog-release.sh --from-run` are in
-> [PR #301](https://github.com/corpetty/muster/pull/301) until it merges.
-
 ## How a package carries a platform
 
 A `.lgx` is a container of native builds, one directory per platform under `variants/`, and
