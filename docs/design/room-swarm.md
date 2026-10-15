@@ -1,7 +1,8 @@
 # The room swarm: a private file swarm on Logos Storage, with the room as its tracker
 
-Status: **planned 2026-10-15. Nothing built.** Epic `exo-4d0`: S0–S7 are `exo-4d0.1`–`.8` in the order of §7, and the upstream asks are
-`exo-4d0.9`. `pb dep tree exo-4d0` shows live status; S0, S3 and the asks can start now.
+Status: **planned 2026-10-15; S0 answered, and S2, S3 and the in-process half of S1 and S4
+built the same day** (§7). Epic `exo-4d0`: S0–S7 are `exo-4d0.1`–`.8` in the order of §7,
+and the upstream asks are `exo-4d0.9`. `pb dep tree exo-4d0` shows live status.
 
 ## 1. Where this comes from
 
@@ -51,18 +52,30 @@ default catalogue, on all four platforms.
   dataset is not advertised, the node neither announces it to the DHT **nor answers for it**
   — `manifest/protocol.nim` returns NotFound and `blockexchange/engine/engine.nim` skips
   its presence in a peer's want-list. There is no "serve to these peers only".
-- **Direct dialing.** `connect(peerId, addresses)` dials a peer without the DHT;
-  `peerId()`, `spr()` and `debug().addrs` say how to reach this node. A connected peer
-  receives want-list presence for advertised datasets, so in principle a room's seeders
-  can serve each other with no DHT lookup at all (read in code, **unverified at runtime**:
-  S0 answers it).
+- **A fetch goes through the DHT; a direct dial only helps it.** S0 observed this at
+  runtime (`docs/labbook/storage-from-muster.md` Q1, Q4). The manifest is asked only of the
+  providers the DHT lists for the CID; a peer the downloader has `connect`ed to is never
+  asked unless the DHT names it. Two isolated nodes, connected, fail with "Key doesn't
+  exist". A connection still earns its place: it makes a DHT-listed provider dialable when
+  its announced address is not (the provider record carries only the public address, and
+  a home router may not hairpin). On a private network bootstrapped from one node's SPR,
+  10 MB moved in under a second; on `logos.dev`, 1.4–4.5 s, mostly the public DHT lookup.
+  A fresh node takes about 2 minutes to become Reachable. Two members behind two home
+  NATs: not yet tested.
+- **Mix is slow.** A private fetch (`isPrivate`) worked on `logos.dev` at about 15 KB/s
+  (1 MB in 71 s; 10 MB is about 11 minutes), and the two nodes never connected. It needs
+  the preset's relay pool and DHT proxies; `storage_module` builds those only for the
+  presets and turns Mix off for a custom network.
 - **Events are host-wide.** Every subscriber sees every session's events (the
   downloader's, `storage_ui`'s); correlate by `sessionId` / `cid`. `fetch` has no
   completion event. `uploadChunk` declares its chunk as `tstr`; binary safety over IPC is
   unverified, so prefer `uploadUrl` with a file on disk.
 - **Networks.** Presets `logos.test` (default) and `logos.dev`, or a private network from a
   first node's SPR (`no-bootstrap-node`). The storage network is independent of the
-  delivery fleet Muster's room rides.
+  delivery fleet Muster's room rides. **Basecamp 0.3.2's shared node is on `logos.test`
+  with Mix on** (S0 Q8): the package downloader inits it as soon as `storage_module` is
+  ready, and downloads packages with `advertise=false`, so it seeds nothing. `network()`
+  names the default preset even on a private network, so it cannot place a node alone.
 
 ## 4. Private tracker, piece by piece
 
@@ -72,7 +85,7 @@ default catalogue, on all four platforms.
 | The index | the tracker's database, readable by its operator | `file/…` events in the room log, sealed to the room |
 | Who holds what | the tracker's peer list, built from every client's announce: IP, port, infohash, bytes up and down | `seed/…` events, each signed by the member who seeds (invariant 9): their storage peer id and addresses |
 | The secret | a passkey in every announce URL; it leaks with the `.torrent` | the room's epoch keys and a key per file; the file names no secret |
-| Peer discovery | the tracker only; DHT and PEX off by the private flag | the room's seed events, then a direct `connect`; the storage DHT still sees the ciphertext CID while `advertise` is one bit (§6, ask U1) |
+| Peer discovery | the tracker only; DHT and PEX off by the private flag | the storage DHT finds providers, and the room's seed events add a direct `connect` so a listed seeder can be dialled. Until asks U1 and U6 land, the DHT sees the ciphertext CID, its providers and each lookup (§3, §6) |
 | What a stranger with the hash gets | the plaintext pieces, if they reach a peer | ciphertext; the key is only in the room |
 | A late joiner | the whole catalogue | files shared from their epoch on; earlier ones only if a member shares them again (invariant 7) |
 | Ratio | enforced by the tracker from self-reported stats | not enforced. Muster cannot see bytes served. Pledges (S7) are motivational and say so |
@@ -94,9 +107,13 @@ show truthfully, with the observer who sees it.
   other in process. It is the stub every integration test uses ("never mock `Transport`"
   applies here too: tests run on the local store, not a mock).
 - `LpStorage` — `storage_module` over `lp_*`, compiled only into the plugin (like
-  `monero_backend_lp.nim`). Attach-or-create exactly as the atlas says; events through the
-  `inbound_queue` seam, matched by `sessionId`; the module thread never waits on storage
-  (the cmPump / cmNow split `monero_backend_lp` uses).
+  `monero_backend_lp.nim`). It **attaches** to the shared node and never inits it in
+  Basecamp: `init` rewrites `~/.logos_storage/config.json` for every consumer (S0 Q8).
+  Events come through the `inbound_queue` seam, each a JSON document in `args[0]`. An
+  upload is matched by its session id (a node-wide counter); a download's session id IS
+  the CID, so downloads are matched by CID and other consumers' events on the same CID
+  are expected (S0 Q7). The module thread never waits on storage (the cmPump / cmNow split
+  `monero_backend_lp` uses).
 - `storage_module` becomes an **optional** dependency of `muster_module`, graded by
   `module_registry` in three states, with Basecamp's `packages.install` as the remedy,
   exactly as `monero_wallet_backend` is (exo-dcc.10). The room works without it; the
@@ -146,8 +163,11 @@ effect and F-20 classes it as an external read at its log position.
 
 ### 5.4 Fetching and seeding
 
-1. Read the file's seeders from the fold. `connect` to each (direct dial, the room as
-   PEX), then `downloadToUrl` the ciphertext into the instance's temp directory.
+1. Read the file's seeders from the fold. `connect` to each (the seed event's addresses),
+   then `downloadToUrl` the ciphertext into the instance's temp directory. The download
+   looks the CID up in the node's DHT: on Basecamp's shared node that is the public
+   `logos.test` DHT, every time. The connection makes a seeder the DHT lists dialable
+   when its announced address is not; it does not replace the lookup (§3).
 2. Open it, check the digest, write the plaintext where the person chose. A mismatch is a
    refusal naming the sharer and the CID, never a partial file.
 3. If the person keeps seeding (the default, §9), post `seed/<me>` and leave the dataset
@@ -155,9 +175,13 @@ effect and F-20 classes it as an external read at its log position.
    no seed event — and **no direct dial in step 1**, because connecting to a seeder hands
    them this node's address. The fetch finds the blob through the storage network over
    Mix instead, and this member serves nothing afterwards (they can still choose to seed
-   later). Whether Storage's Mix path reaches a provider found this way is an S0 question.
+   later). S0 saw this work on `logos.dev` at about 15 KB/s, so the panel says how long a
+   private fetch will take before it starts, and it reaches only a seeder whose address
+   is reachable.
 4. A pump on the intents tick drives progress, retries other seeders, and re-announces
-   when this node's addresses change.
+   when this node's addresses or reachability change. A seed event will say whether the
+   node was Reachable when it was posted (with `LpStorage`, S1); an unreachable seeder serves only members
+   connected to it.
 
 ### 5.5 Who sees what
 
@@ -168,7 +192,7 @@ Two new observer classes in `intents/disclosure.nim`, and the rows `flow.nim` sh
 | room member | file name, size, sharer; each seeder by name with their storage peer id and **addresses (IP)** | — |
 | store node (delivery) | that the room's topic carried an envelope, when, and its size (FS-9) | the file, its CID, who shared it |
 | storage peer (new) | the peer id and IP of a node fetching or serving a ciphertext CID, and when | the plaintext, the name, the room |
-| storage DHT (new) | the ciphertext CID and the set of peer ids providing it (while `advertise` is one bit) — so the seeders of one blob are linkable to each other, by peer id | the plaintext, the name, the room, who in the room they are |
+| storage DHT (new) | the ciphertext CID and the set of peer ids providing it (while `advertise` is one bit) — so the seeders of one blob are linkable to each other, by peer id. A record outlives a stop until it expires, so the DHT keeps naming a past seeder. Each lookup tells the nodes asked that this peer wants this CID (a private fetch sends it through the preset's DHT proxies instead) | the plaintext, the name, the room, who in the room they are |
 | mix node | with private fetch, a hop of a tunnelled download | the endpoints together |
 
 The claims registry (ADR-012) gets the matching entries with credibility: content
@@ -178,14 +202,14 @@ confidentiality **imperative**; seeder IPs to room members and to storage peers
 ## 6. Asks of the Storage team
 
 Jarrad says Storage was already thinking about a delivery-bounded peer network. These are
-what would make the room swarm the thing they had in mind rather than a workaround. U1 is
-the one that matters.
+what would make the room swarm the thing they had in mind rather than a workaround. U1 and
+U6 are the ones that matter.
 
 - **U1 — serve without announcing, to a set of peers.** Split `advertise` into *announce*
   (DHT) and *serve*, and let *serve* take an allowlist of peer ids (or an SPR set).
-  Muster fills the list from the room's seed events. Then a room's blobs never touch the
-  DHT, and a stranger with the CID gets NotFound. This is the private tracker's private
-  flag, done properly.
+  Muster fills the list from the room's seed events. Then a stranger with the CID gets
+  NotFound (S0 Q2 confirmed the gate is all-or-nothing today). With U6 as well, the blobs
+  never touch the DHT.
 - **U2 — a node per consumer, or a namespace.** One shared node and one
   `~/.logos_storage/config.json` mean Muster's choices (network, quota, Mix) are whatever
   the downloader picked, and Muster's `init` would rewrite everyone's config.
@@ -194,13 +218,23 @@ the one that matters.
 - **U4 — `fetch` completion**, and `uploadChunk` as `bstr`.
 - **U5 — a manifest with no filename/mimetype** (or caller-set), so an upload does not
   need a temp-file rename to stay quiet.
+- **U6 — fetch from named peers** (from S0). A download or manifest call that takes peer
+  ids or SPRs and asks them directly; the block engine already asks connected peers, and
+  only `fetchManifest` insists on the DHT. Or: accept a manifest block the caller supplies,
+  which the room could carry in `file/<fid>`. **With U1 and U6 the swarm needs no DHT at
+  all**: no CID or provider record ever leaves the room, which is the private tracker done
+  properly.
+
+S0 adds evidence to U2: `network()` names the default preset on a custom network, and
+`init` rewrites the shared config file. U4 stands: a `tstr` carries JSON text, so
+non-UTF-8 bytes cannot pass.
 
 ## 7. Order of work
 
 Each slice's acceptance criteria become a test before its implementation (working
 agreement). S3's spec goes through `discuss-issue` first.
 
-- **S0 — Ground truth (spike, no Muster code).** Two storage nodes on a private network and
+- **S0 — Ground truth (done 2026-10-15; `docs/labbook/storage-from-muster.md`).** Two storage nodes on a private network and
   on `logos.dev`: does a directly connected seeder serve a fresh downloader with no DHT
   provider record, and how fast; does `isPrivate` work against a `connect`ed peer; what
   happens across two home NATs; what network the downloader inits the shared node on in
@@ -262,4 +296,6 @@ Still open:
 - **Feature name** in the UI. "Files" is a placeholder; the operator wants something
   better. The code says *swarm* (the mechanism), so renaming the panel costs nothing.
 - **Storage network**: whatever the shared node is on, recorded per share and per seed
-  event so a mismatch is shown, not guessed (proposed until U2).
+  event so a mismatch is shown, not guessed (proposed until U2). `network()` alone cannot
+  say (S0 Q8): a node on a private network answers the default preset. The seed event's
+  SPR and addresses are what actually place a node.
