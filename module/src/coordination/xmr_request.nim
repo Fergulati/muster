@@ -129,6 +129,56 @@ proc xmrAgree*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, b: Mo
   if why.len > 0: return why
   liveContribute(s, ks, driverFor, intentId, "", "", ctx, nowSec)
 
+# ── on someone's behalf, and sending (exo-dcc.32) ────────────────────────────────────
+proc moneroPayTosInUse*(events: seq[Event]): seq[string] =
+  ## Every address a Monero payment proposed in this room pays (its payTo), from the
+  ## proposals the log holds (proposalOf: never a substitute under an id). An address in
+  ## this list must not back another payment: the payee's wallet confirms a part by amount
+  ## at its subaddress, and two payments there could not be told apart.
+  for e in events:
+    if not (e.key.startsWith("intent/") and e.key.endsWith("/propose")): continue
+    let id = e.key["intent/".len ..< e.key.len - "/propose".len]
+    let ej = effectJsonOf(events, id)
+    if ej.len == 0: continue
+    try:
+      let sp = splitOf(effectFromJson(ej))
+      if familyOfChain(sp.chain) == MoneroSplitFamily and sp.payTo notin result:
+        result.add sp.payTo
+    except CatchableError: discard
+
+proc xmrBehalfPayTo*(events: seq[Event], who, chain: string): tuple[address, why: string] =
+  ## Where a Monero payment to `who` is paid when someone else proposes it: the newest
+  ## address `who` shared into the room for `chain` — refused when they shared none, or
+  ## when that address already backs a Monero payment here (they share a fresh one).
+  let a = sharedMoneroAddressOf(events, who, chain)
+  if a.len == 0:
+    return ("", "no-shared-address: they have shared no Monero address on this network")
+  if a in moneroPayTosInUse(events):
+    return ("", "shared-address-used: the address they shared already backs a payment here; " &
+                "they share a fresh one (Share my Monero address)")
+  (a, "")
+
+proc xmrSend*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, b: MoneroBackend,
+              chain, to, amount, memo: string, nowSec: int64, msgSeq: uint64,
+              ttlSec = DefaultIntentTtl): string =
+  ## Send `amount` (atomic XMR) to the member `to`: a Monero request on their behalf, paid at
+  ## the newest address they shared (xmrBehalfPayTo), with THIS member its only payer — so
+  ## proposing it is their agreement (the split driver's agreesByProposing), and it is payable
+  ## once `to` agrees that the address is theirs. Muster sends nothing (ADR-018): the sender
+  ## pays from any wallet, and `to`'s own wallet confirms. Returns the intent id, or a
+  ## refusal with nothing published.
+  if networkOfChain(chain).isNone: return "unknown-chain: not a Monero chain muster knows: " & chain
+  let me = myIdentity(ks).toLowerAscii().replace("0x", "")
+  let payee = to.toLowerAscii().replace("0x", "")
+  if payee == me: return "send-to-self: a send pays someone else"
+  if not isCanonDec(amount) or amount == "0": return "bad-amount: whole atomic units, more than zero"
+  s.poll()
+  let (payTo, why) = xmrBehalfPayTo(s.roomEvents(), payee, chain)
+  if why.len > 0: return why
+  let effect = splitEffectJson(chain, XmrAsset, amount, payee, payTo,
+                               @[SplitShare(who: me, amount: amount)], memo)
+  xmrPropose(s, ks, driverFor, b, chain, effect, nowSec, msgSeq, ttlSec)
+
 # ── the payer's half: a link, and "I paid" ─────────────────────────────────────────
 type XmrLink* = object
   ok*: bool

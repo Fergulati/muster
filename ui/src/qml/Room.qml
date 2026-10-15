@@ -641,7 +641,9 @@ Item {
                && p !== "contributor" && p !== "payer" && p !== "counterparty";
     }
     readonly property var composeBlockers: room.composeNeeds.filter(function (n) { return room.needBlocks(n); })
-    readonly property bool composeBlocked: room.composeBlockers.length > 0 || room.pickPending
+    // a send's payer needs no module of the kind's: they pay from any wallet (exo-dcc.32)
+    readonly property bool composeBlocked: (room.composeBlockers.length > 0 && !(room.composeType === "split" && room.splitSend))
+                                           || room.pickPending
     function composeNeedLine(n) {
         var info = room.kindInfo(room.policyKind);
         var label = (info && info.label) ? String(info.label) : room.policyKind;
@@ -1176,7 +1178,21 @@ Item {
     // not shared in the room).
     property string splitCreditor: ""
     readonly property string splitFor: (room.splitPrivate || room.splitBitcoin || room.splitRequest)
-                                       ? "" : room.splitCreditor
+                                       ? "" : room.splitSend ? room.sendTo : room.splitCreditor
+    // "Send Monero" (exo-dcc.32): one payment from you to one member — a Monero request on
+    // their behalf, with you its only payer. Paid at the address they shared from their own
+    // wallet; proposing it is your agreement, so it is payable once they agree.
+    property bool splitSend: false
+    // who you send to: the member picked, else the only other member
+    readonly property string sendTo: {
+        if (!room.splitSend) return "";
+        var others = [];
+        for (var k = 0; k < room.members.length; ++k)
+            if (room.members[k] && !room.members[k].self) others.push(String(room.members[k].identity || ""));
+        if (room.splitCreditor.length > 0 && others.indexOf(room.splitCreditor) >= 0) return room.splitCreditor;
+        return others.length === 1 ? others[0] : "";
+    }
+
     // where the split for someone else is paid: the address they shared — on Monero, the
     // subaddress their own wallet minted for this chain (exo-dcc.20)
     readonly property string splitForAddress: room.splitFor.length === 0 ? ""
@@ -1290,7 +1306,7 @@ Item {
     property string splitPayer: ""           // who pays, when more than one could
     onSplitRequestChanged: room.splitCreditorShares = !room.splitRequest
     // whether the creditor's own share is in the total: never in a request
-    readonly property bool splitCreditorIn: room.splitCreditorShares && !room.splitRequest
+    readonly property bool splitCreditorIn: room.splitCreditorShares && !room.splitRequest && !room.splitSend
     // An Ethereum split may be paid in a token (exo-5ab): the address typed, and what the
     // token says about itself once looked up — its decimals and symbol, display only.
     property string splitToken: ""
@@ -1405,6 +1421,7 @@ Item {
     // Who owes in the next split: every member but whoever fronted it, unless left out.
     function splitDebtors() {
         var out = [];
+        if (room.splitSend) return room.myIdentity.length > 0 ? [room.myIdentity] : [];   // you pay it
         if (room.splitRequest) {
             // one person: the one picked, else the only other member
             var others = [];
@@ -1483,7 +1500,10 @@ Item {
         if (total.length === 0 || who.length === 0) return;
         if (room.splitTokenPending) return;
         if (room.splitFor.length > 0 && room.splitForAddress.length === 0) return;
+        if (room.splitSend && room.splitFor.length === 0) return;   // a send names who it goes to
         var spec = { parties: who, creditorShares: room.splitCreditorIn };
+        // a send: the whole amount is your one share, paid to them (exo-dcc.32)
+        if (room.splitSend) spec = { shares: [{ who: who[0], amount: total }] };
         if (room.splitFor.length > 0) spec.creditor = room.splitFor;   // on their behalf (exo-770)
         if (room.splitTokenInfo) spec.asset = String(room.splitTokenInfo.asset);   // exo-5ab
         if (room.splitFiat) {

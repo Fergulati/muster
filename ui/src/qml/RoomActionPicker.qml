@@ -20,12 +20,22 @@ Popup {
     background: Surface { level: 2 }
 
     function pick(kind, request) {
+        picker.room.splitSend = false;
         picker.room.splitRequest = request;
         picker.room.composeType = kind;
         picker.room.composing = true;
         picker.close();
     }
 
+    // "Send Monero" (exo-dcc.32): a split you alone pay, to one member, on the Monero kind
+    function pickSend() {
+        picker.room.splitRequest = false;
+        picker.room.splitSend = true;
+        picker.room.composeType = "split";
+        picker.room.choosePolicy("monero-split");
+        picker.room.composing = true;
+        picker.close();
+    }
     component Tile: Rectangle {
         id: tile
         property string title: ""
@@ -103,7 +113,7 @@ Popup {
                 objectName: "roomKindSplit"
                 title: qsTr("Split a bill"); glyph: "split"
                 detail: qsTr("You paid; each person named pays you back their share from their own wallet.")
-                current: picker.room.composeType === "split" && !picker.room.splitRequest
+                current: picker.room.composeType === "split" && !picker.room.splitRequest && !picker.room.splitSend
                 onClicked: picker.pick("split", false)
             }
             Tile {
@@ -112,6 +122,13 @@ Popup {
                 detail: qsTr("Ask one person to pay you. On Monero, your own wallet confirms it.")
                 current: picker.room.composeType === "split" && picker.room.splitRequest
                 onClicked: picker.pick("split", true)
+            }
+            Tile {
+                objectName: "roomKindSendXmr"
+                title: qsTr("Send Monero"); glyph: "send"
+                detail: qsTr("Send XMR to someone here. They share an address from their own wallet; you pay from any wallet, and theirs confirms it.")
+                current: picker.room.composeType === "split" && picker.room.splitSend
+                onClicked: picker.pickSend()
             }
             Tile {
                 objectName: "roomKindStatement"

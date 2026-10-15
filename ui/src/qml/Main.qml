@@ -105,11 +105,13 @@ Item {
             roomSurface.composeType = "payment";
         else if (v === "decide")
             roomSurface.composeType = "statement";
-        else if (v === "split" || v === "request") {
+        else if (v === "split" || v === "request" || v === "send") {
             // you fronted it: the split composer (exo-a90); a request is one of one person
-            // who pays you, and you not in it (exo-dcc.5)
+            // who pays you, and you not in it (exo-dcc.5); a send, one payment of yours to
+            // one person (exo-dcc.32)
             roomSurface.composeType = "split";
             roomSurface.splitRequest = v === "request";
+            roomSurface.splitSend = v === "send";
         }
         // Auto-ask to join UNLESS this is a fresh composer creation (a verb): a joiner
         // entering a room someone else already founded can't see them (their epoch is
@@ -141,7 +143,7 @@ Item {
                 roomSurface.prefillPayment(String(o.to || ""),
                                            (o.value !== undefined ? String(o.value) : ""));
             } catch (e) { roomSurface.composing = true; }
-        } else if (v === "pay" || v === "decide" || v === "split" || v === "request") {
+        } else if (v === "pay" || v === "decide" || v === "split" || v === "request" || v === "send") {
             roomSurface.composing = true;
         }
     }
@@ -621,7 +623,7 @@ Item {
                     // what it is for, and from whom when they are a contact; never a hex id (exo-ef6)
                     var note = String(inv.note || "");
                     var what = note === "decide" ? qsTr("A decision") : note === "pay" ? qsTr("A payment")
-                             : note === "split" ? qsTr("Splitting a bill") : note === "request" ? qsTr("A payment request") : "";
+                             : note === "split" ? qsTr("Splitting a bill") : note === "request" ? qsTr("A payment request") : note === "send" ? qsTr("Sending Monero") : "";
                     var from = inv.fromAlias ? String(inv.fromAlias) : "";
                     if (what.length > 0 || from.length > 0)
                         root.labelRoom(topic, what.length > 0 ? (from.length > 0 ? qsTr("%1 from %2").arg(what).arg(from) : what) : from);
@@ -665,7 +667,7 @@ Item {
             // plain talk keeps no name, so it is called after its people as they arrive
             // (exo-ef6). Never a hex id in a name that lasts.
             var what = verb === "decide" ? qsTr("A decision") : verb === "pay" ? qsTr("A payment")
-                     : verb === "split" ? qsTr("Splitting a bill") : verb === "request" ? qsTr("A payment request") : "";
+                     : verb === "split" ? qsTr("Splitting a bill") : verb === "request" ? qsTr("A payment request") : verb === "send" ? qsTr("Sending Monero") : "";
             var who = root.contactAlias(peer);
             if (what.length > 0)
                 root.labelRoom(topic, who.length > 0 ? qsTr("%1 with %2").arg(what).arg(who) : what);

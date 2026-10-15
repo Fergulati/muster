@@ -15,7 +15,8 @@ Read from the pebbles on 2026-10-09. The pebbles win over this table.
 | 1 The mixnet | `exo-dcc.4` | **Done** (2026-10-08). An opt-in `mix` setting, off by default, sends only. Untested on `logos.test` |
 | 1 Install what's missing | `exo-dcc.10`, `.11` | **Done** (2026-10-08). Seen on display in Basecamp 0.3.2 |
 | 2 The XMR payment request | `exo-dcc.5`, `.20` | **Done, except the live payment** (2026-10-09). Spec `derived-exo-dcc.5`, 7/7. The UI was seen on display in Basecamp 0.3.2 with a real stagenet wallet, up to the payment. The live two-machine run is `exo-dcc.19`, which **waits on funds**: stagenet XMR for the payer. Detail: `docs/labbook/xmr-payment-request.md` |
-| 3 Pay from Basecamp's own wallet | `exo-dcc.6` | **Not started.** Waits on the upstream review intent (§8, ask 2) |
+| 2 Send Monero | `exo-dcc.32` | **Done** (2026-10-15). A request on the payee's behalf with the sender its only payer: paid at the address they shared, never one already backing a payment; proposing is the sender's agreement, the payee accepts, the sender pays from any wallet, the payee's wallet confirms. `xmr_send_test` |
+| 3 Pay from Basecamp's own wallet | `exo-dcc.6` | **Interim done** (2026-10-09): Pay with Monero Wallet copies the address and opens the wallet. The review intent `monero.wallet.review_send` is drafted for the wallet app and builds; it waits on being published upstream |
 | 4 The deal-desk demo | `exo-dcc.7` | **Not started.** Needs `.2`, `.3` and `.19`. `audit.nim` still refuses the split families |
 | 5 The mainnet gate | `exo-dcc.8` | **Not started** |
 

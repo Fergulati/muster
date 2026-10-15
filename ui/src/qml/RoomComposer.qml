@@ -60,6 +60,9 @@ ColumnLayout {
                     text: room.composeType === "statement" ? qsTr("Propose a statement")
                             : room.composeType === "action" ? qsTr("Propose an action")
                             : room.composeType === "split" && room.splitRequest ? qsTr("Request a payment")
+                            : room.composeType === "split" && room.splitSend
+                              ? (room.splitFor.length > 0 ? qsTr("Send Monero to %1").arg(room.memberLabel(room.splitFor))
+                                                          : qsTr("Send Monero"))
                             : room.composeType === "split" ? (room.splitFor.length > 0
                                                               ? qsTr("Split a bill %1 paid").arg(room.memberLabel(room.splitFor))
                                                               : qsTr("Split a bill you paid"))
@@ -350,7 +353,7 @@ ColumnLayout {
                                 objectName: "roomSplitTotal"
                                 visible: !room.acrossOpen     // a settle-up has no total of its own
                                 Layout.preferredWidth: 160
-                                placeholderText: room.splitRequest
+                                placeholderText: (room.splitRequest || room.splitSend)
                                                  ? qsTr("amount (%1)").arg(room.splitFiat ? String(room.splitFiatCurrency).toUpperCase()
                                                                                            : room.splitUnit)
                                                  : qsTr("total (%1)").arg(room.splitFiat ? String(room.splitFiatCurrency).toUpperCase()
@@ -582,7 +585,7 @@ ColumnLayout {
                         LogosText {
                             visible: !room.splitPrivate && !room.splitBitcoin && !room.splitRequest
                                      && room.members.length > 1 && !room.acrossOpen
-                            text: qsTr("Who paid the bill?")
+                            text: room.splitSend ? qsTr("Send to:") : qsTr("Who paid the bill?")
                             color: Theme.palette.textTertiary
                             font.pixelSize: MusterStyle.caption
                         }
@@ -592,13 +595,14 @@ ColumnLayout {
                             Layout.fillWidth: true
                             spacing: Theme.spacing.tiny
                             Repeater {
-                                model: room.members.filter(function (m) { return !!m; })
+                                // a send goes to someone else: never "I did" (exo-dcc.32)
+                                model: room.members.filter(function (m) { return !!m && !(room.splitSend && m.self); })
                                 delegate: ActionButton {
                                     required property var modelData
                                     readonly property string ident: modelData.self ? "" : String(modelData.identity || "")
                                     objectName: "roomSplitPaidBy_" + (modelData.self ? "me" : ident.slice(0, 8))
                                     text: modelData.self ? qsTr("I did") : room.memberLabel(ident)
-                                    variant: room.splitCreditor === ident ? LogosButton.Variant.Primary
+                                    variant: (room.splitSend ? room.sendTo === ident : room.splitCreditor === ident) ? LogosButton.Variant.Primary
                                                                          : LogosButton.Variant.Secondary
                                     onClicked: { room.splitCreditor = ident; room.splitOut = ({}); }
                                 }
@@ -613,11 +617,15 @@ ColumnLayout {
                             readonly property string addr: room.splitForAddress
                             text: addr.length > 0
                                   ? (room.splitMonero
-                                     ? qsTr("Paid to %1, the Monero address %2 shared from their own wallet. Nobody pays until %2 agrees it is theirs.")
+                                     ? (room.splitSend
+                                        ? qsTr("Sent to %1, the Monero address %2 shared from their own wallet. You pay once %2 agrees it is theirs, from any wallet; their wallet confirms it.")
+                                        : qsTr("Paid to %1, the Monero address %2 shared from their own wallet. Nobody pays until %2 agrees it is theirs."))
                                      : qsTr("Paid to %1, the address %2 shared. Nobody pays until %2 agrees it is theirs."))
                                         .arg(addr).arg(room.memberLabel(room.splitFor))
                                   : room.splitMonero
-                                  ? qsTr("⚠ %1 hasn't shared a Monero address on %2: ask them for one, then split it for them.")
+                                  ? (room.splitSend
+                                     ? qsTr("⚠ %1 hasn't shared a Monero address on %2: ask them for one, then send.")
+                                     : qsTr("⚠ %1 hasn't shared a Monero address on %2: ask them for one, then split it for them."))
                                         .arg(room.memberLabel(room.splitFor)).arg(room.moneroChainLabel(room.splitMoneroChain))
                                   : qsTr("⚠ %1 hasn't shared an address in this room: ask them to share one (the Pay composer's “Ask the room”), then split it for them.")
                                         .arg(room.memberLabel(room.splitFor))
@@ -638,13 +646,14 @@ ColumnLayout {
                                 room.backend.postMessage(JSON.stringify({
                                     kind: "address-request", intent: "split", asset: "XMR",
                                     chain: room.splitMoneroChain, chainLabel: label, "for": room.splitFor,
-                                    purpose: qsTr("A Monero split to be paid to you: an address on %1").arg(label)
+                                    purpose: (room.splitSend ? qsTr("Monero to be sent to you: an address on %1")
+                                                             : qsTr("A Monero split to be paid to you: an address on %1")).arg(label)
                                 }));
                             }
                         }
 
                         LogosText {
-                            visible: !room.acrossOpen
+                            visible: !room.acrossOpen && !room.splitSend
                             text: room.splitRequest
                                   ? (room.members.length > 1 ? qsTr("Who pays you? Tap one person:")
                                      : qsTr("Nobody here to ask yet: invite and admit the person who pays you, then request."))
@@ -660,7 +669,7 @@ ColumnLayout {
                         }
 
                         Flow {
-                            visible: !room.acrossOpen
+                            visible: !room.acrossOpen && !room.splitSend
                             Layout.fillWidth: true
                             spacing: Theme.spacing.tiny
                             Repeater {
@@ -706,6 +715,11 @@ ColumnLayout {
                                   : pv === null ? qsTr("Leave at least one person in.")
                                   : room.splitDust(pv)
                                   ? qsTr("⚠ Each share would be %1 sat — below Bitcoin's 546-sat dust limit, so it could never be paid.").arg(pv.each)
+                                  : room.splitSend
+                                  ? (room.splitFor.length === 0
+                                     ? qsTr("Pick who to send it to.")
+                                     : qsTr("You send %1 %2 XMR. Once they agree the address is theirs, pay from any Monero wallet with the link the room gives you; their own wallet confirms it.")
+                                           .arg(room.memberLabel(room.splitFor)).arg(room.weiToEth(pv.each)))
                                   : room.splitRequest
                                   ? (room.splitMonero
                                      ? qsTr("%1 pays you %2 XMR from any Monero wallet, with a link the room gives them.")
@@ -758,7 +772,10 @@ ColumnLayout {
                             Layout.fillWidth: true
                             Layout.preferredWidth: 0
                             wrapMode: Text.WordWrap
-                            text: room.splitFor.length > 0
+                            text: room.splitSend && room.splitFor.length === 0
+                                  ? qsTr("On %1. Sent to the address the person you pick shared from their own wallet; their wallet confirms it at 10 confirmations. Muster never sends Monero.")
+                                        .arg(room.moneroChainLabel(room.splitMoneroChain))
+                                  : room.splitFor.length > 0
                                   ? qsTr("On %1. Paid at the address %2 shared; %2's own wallet confirms each payment at 10 confirmations. Muster never sends Monero.")
                                         .arg(room.moneroChainLabel(room.splitMoneroChain)).arg(room.memberLabel(room.splitFor))
                                   : qsTr("On %1. Proposing asks your open Monero wallet for a new address for this request; your wallet confirms each payment at 10 confirmations. Muster never sends Monero.")
@@ -896,7 +913,7 @@ ColumnLayout {
 
                         ActionButton {
                             objectName: "roomProposeSubmit"
-                            text: qsTr("Propose")
+                            text: (room.composeType === "split" && room.splitSend) ? qsTr("Send") : qsTr("Propose")
                             // a payment needs a recipient AND an amount within the Safe's known
                             // balance — can't over-send (exo-bf9); the ⚠ above says why it's off.
                             // AND the room must have enough people to act on it (see the hint):
@@ -908,6 +925,7 @@ ColumnLayout {
                                                                     && !room.splitDust(room.splitPreview(splitTotal.text))
                                                                     && (!room.splitFiat || String(room.splitFiatSource).trim().length > 0)
                                                                     && (room.splitFor.length === 0 || room.splitForAddress.length > 0)
+                                                                    && !(room.splitSend && room.splitFor.length === 0)
                                    : room.enoughToPropose && (
                                      room.composeType === "statement" ? proposeText.text.length > 0
                                    : room.composeType === "action" ? room.chosenAction !== null

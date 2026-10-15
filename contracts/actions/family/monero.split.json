@@ -309,6 +309,276 @@
         "coordinate_report_paid",
         "coordinate_confirm_part"
       ]
+    },
+    {
+      "id": "monero.split/send",
+      "name": "Send Monero to someone in the room: they share an address from their own wallet, you pay from any wallet, their wallet confirms",
+      "area": "family",
+      "family": "monero.split",
+      "kind": "monero-split",
+      "status": "built",
+      "summary": "A send is a Monero request on the payee's behalf with the sender its only payer (exo-dcc.32): the same agreement, settlement and confirmation, no new driver. It is paid at the newest address the payee shared into the room, which their own wallet minted (Share my Monero address); an address already backing a Monero payment in the room is never reused, because the payee's wallet confirms a part by amount at its subaddress. Proposing is the sender's agreement (they are its only payer), and the payee's Accept is their word that the address is theirs; then the sender pays from any wallet through the monero: link, and the payee's wallet confirms at the 10-block depth. Muster sends nothing (ADR-018).",
+      "effect": {
+        "schema": "muster.effect.split.v1",
+        "fields": [
+          {
+            "name": "chain",
+            "means": "the Monero network, as CAIP-2 monero:<genesis-hash prefix> (mainnet, stagenet or testnet; stagenet first)"
+          },
+          {
+            "name": "asset",
+            "means": "XMR"
+          },
+          {
+            "name": "total",
+            "means": "the amount sent, in atomic units (1 XMR = 10^12), a decimal string"
+          },
+          {
+            "name": "creditor",
+            "means": "the member the XMR is sent to, by room identity"
+          },
+          {
+            "name": "payTo",
+            "means": "the newest Monero address the payee shared into the room for this chain, minted by their own wallet; never one that already backs a Monero payment in the room"
+          },
+          {
+            "name": "shares",
+            "means": "one share: the sender, owing the whole amount"
+          },
+          {
+            "name": "memo",
+            "means": "what the payment is for; stays in the room, never on chain"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "act",
+          "who": "the payee",
+          "does": "Share my Monero address: their own open wallet mints a fresh subaddress (create_subaddress) and posts it into the room, author-signed. A sender's 'Ask for a Monero address' asks for one."
+        },
+        {
+          "step": "propose",
+          "who": "the sender",
+          "does": "Picks the payee and the amount. The module pays it at the payee's newest shared address, refusing one already backing a Monero payment here (shared-address-used) or none at all (no-shared-address). Proposing is the sender's agreement: they are its only payer."
+        },
+        {
+          "step": "approve",
+          "who": "the payee",
+          "does": "Accept: their client agrees only while their own wallet lists the address (payto-not-mine otherwise)."
+        },
+        {
+          "step": "settle",
+          "who": "the sender",
+          "does": "Pays from any wallet through the monero: link or its QR code (or Pay with Monero Wallet), then says I paid: a claim, never a confirmation."
+        },
+        {
+          "step": "final",
+          "who": "the payee's own wallet",
+          "does": "Confirms once its history shows exactly the amount at that subaddress at 10 confirmations."
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a send at an address that already backs a Monero payment in the room",
+          "why": "the payee's wallet confirms by amount at a subaddress, so two payments there could not be told apart (shared-address-used)",
+          "evidence": [
+            "module/tests/xmr_send_test.nim"
+          ]
+        },
+        {
+          "what": "a send to someone who has shared no Monero address on the chain",
+          "why": "Muster never types or guesses a payee's address (no-shared-address)",
+          "evidence": [
+            "module/tests/xmr_send_test.nim"
+          ]
+        },
+        {
+          "what": "agreeing to a payTo the creditor's own wallet does not list (receive_info)",
+          "why": "the creditor's agreement vouches the address is theirs (payto-not-mine)",
+          "evidence": [
+            "module/tests/probes/probe_xmr_payto_stepper.nim"
+          ]
+        },
+        {
+          "what": "a payTo whose network prefix is not the agreed chain's",
+          "why": "invariant 2: an agreement made for stagenet must not be paid, or confirmed, on mainnet",
+          "evidence": [
+            "module/tests/probes/probe_xmr_payto_stepper.nim",
+            "module/tests/probes/probe_xmr_network_stepper.nim"
+          ]
+        },
+        {
+          "what": "confirming a part from anything but the creditor's own wallet read: a debtor's claim, a txid alone, a third-party explorer",
+          "why": "a share counts as paid only when the person owed says so, from their own read",
+          "evidence": [
+            "module/tests/probes/probe_xmr_confirm_stepper.nim"
+          ]
+        },
+        {
+          "what": "one incoming transfer confirming two parts",
+          "why": "one reference settles one part",
+          "evidence": [
+            "module/tests/probes/probe_xmr_one_ref_stepper.nim"
+          ]
+        },
+        {
+          "what": "two debtors owing the same amount at the same subaddress",
+          "why": "the creditor's wallet could not tell their payments apart (as the private split, lez.split)",
+          "evidence": [
+            "module/src/drivers/split.nim",
+            "module/tests/probes/probe_xmr_one_ref_stepper.nim"
+          ]
+        },
+        {
+          "what": "netting a Monero split into a settle-up",
+          "why": "its shares are told apart by amount at the creditor's subaddress, and a net payment would need an address the payee vouches for (ADR-018)",
+          "evidence": [
+            "module/tests/split_monero_test.nim"
+          ]
+        },
+        {
+          "what": "a method of the wallet backend that builds, signs or broadcasts a transfer, or changes the wallet's roles",
+          "why": "muster never spends: it reads the creditor's wallet and mints subaddresses, and the call set is closed in code (wallet/monero_backend.nim)",
+          "evidence": [
+            "module/src/wallet/monero_backend.nim",
+            "module/tests/probes/probe_xmr_no_spend_stepper.nim"
+          ]
+        }
+      ],
+      "ui": "Built (exo-dcc.32). The room's + picker has Send Monero, and Home's Start something has a Send Monero verb: pick who, type the amount in XMR; the form says which address it goes to, or offers Ask <name> for a Monero address. The card reads 'You send … / … sends you …', and the payee's button is Accept — <address> is my address.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        9,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The chain shows no sender, receiver or amount of the payment, and the subaddress is unlinkable to the creditor's other addresses; the link to the request lives only in the room",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A share counts as paid only when the creditor's own wallet sees exactly that amount arrive at the request's subaddress",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Nothing makes a debtor pay their share",
+          "credibility": "motivational",
+          "party": "each debtor"
+        },
+        {
+          "claim": "The payer's Monero node, a remote one by default, sees the wallet sync and when the transfer is broadcast, unless the payer runs their own node or a proxy",
+          "credibility": "exposed",
+          "party": "the payer's Monero node operator"
+        },
+        {
+          "claim": "Any module loaded in the same Basecamp can read the creditor's wallet history and subaddresses: the wallet backend's reads take no role",
+          "credibility": "exposed",
+          "party": "modules loaded beside Muster"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_send_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/split_monero_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_request_uri_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_payto_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_confirm_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_one_ref_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_request_convergence_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_no_spend_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/probes/probe_xmr_network_stepper.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/monero_address_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_request_edges_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "scripts/split-xmr-self-test.sh"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/glue.rs",
+          "what": "monero_wallet_backend 0.1.0: create_subaddress, receive_info and history take no role; prepare_send builds a reviewed send; confirm_send needs the approver role (the wallet app by default)."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/logos-monero-wallet-backend/blob/769098441db339f7541ba8804722ae3f20614309/rust-lib/src/model.rs",
+          "what": "the history row: direction, amount in atomic units, confirmations, pending, subaddrIndex (a comma-joined string), account."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/logos-monero-wallet-core-module/blob/7fc923dcce9ac5d40db8dd30f658eb63849e7212/src/wallet_runtime.cpp",
+          "what": "the wallet engine (wallet2 via monero_c) holds the keys and the password; reads answer within 750 ms or report busy."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-co/logos-monero-wallet-ui/blob/345fc5deb3ac61844dc27bb396bd77087e89c05c/qml/MoneroWalletView.qml",
+          "what": "monero_wallet_ui provides monero.wallet.unlock: another app asks the wallet app to open a wallet, and the person types the password there."
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.getmonero.org/public-address/subaddress/",
+          "what": "subaddresses: one wallet, many receiving addresses, unlinkable to each other on chain."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h",
+          "what": "CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE: received outputs unlock after 10 blocks."
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/monero-project/monero/blob/master/src/wallet/wallet2.cpp",
+          "what": "wallet2 make_uri / parse_uri: the monero: URI with tx_amount, tx_description and recipient_name, which other Monero wallets read."
+        }
+      ],
+      "unverified": [
+        "whether an incoming transfer appears in history() before it is confirmed (mempool visibility; the 10-block depth does not depend on it)",
+        "a live stagenet payment end to end: a payment from another wallet and 10 confirmations, read through lp at size (split-xmr-self-test.sh runs with no wallet; the display runs minted payTo from a real stagenet wallet but no payment was made)"
+      ],
+      "generated": "monero-split/request",
+      "hosted": [
+        "coordinate_propose_split",
+        "coordinate_share_address",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_report_paid",
+        "coordinate_confirm_part"
+      ]
     }
   ]
 }
