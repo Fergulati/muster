@@ -313,10 +313,13 @@ Rectangle {
     function disclosureGroups() {
         var r = cardRoot.readiness;
         if (!r || !r.manifest || !r.manifest.discloses) return [];
-        var order = ["room-member", "store-node", "rpc-provider", "chain-observer", "target-module"];
+        var order = ["room-member", "store-node", "rpc-provider", "chain-observer", "target-module",
+                     "storage-peer", "storage-dht"];
         var label = { "room-member": qsTr("the room"), "store-node": qsTr("the store node"),
                       "rpc-provider": qsTr("your RPC provider"), "chain-observer": qsTr("anyone reading the chain"),
-                      "target-module": qsTr("the module it calls") };
+                      "target-module": qsTr("the module it calls"),
+                      "storage-peer": qsTr("storage nodes that serve or fetch it"),
+                      "storage-dht": qsTr("anyone reading the storage network") };
         var groups = {};
         for (var i = 0; i < r.manifest.discloses.length; ++i) {
             var d = r.manifest.discloses[i];

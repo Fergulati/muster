@@ -44,13 +44,16 @@ Item {
         return m;
     }
 
-    readonly property var observerOrder: ["room-member", "store-node", "rpc-provider", "chain-observer", "target-module"]
+    readonly property var observerOrder: ["room-member", "store-node", "rpc-provider", "chain-observer", "target-module",
+                                          "storage-peer", "storage-dht"]
     function observerLabel(o) {
         return o === "room-member" ? qsTr("the room")
              : o === "store-node" ? qsTr("the store node")
              : o === "rpc-provider" ? qsTr("your RPC provider")
              : o === "chain-observer" ? qsTr("anyone reading the chain")
-             : o === "target-module" ? qsTr("the module it calls") : String(o);
+             : o === "target-module" ? qsTr("the module it calls")
+             : o === "storage-peer" ? qsTr("storage nodes that serve or fetch it")
+             : o === "storage-dht" ? qsTr("anyone reading the storage network") : String(o);
     }
     function matrixEntries() {
         var out = [];
