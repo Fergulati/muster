@@ -167,6 +167,14 @@ void MusterUiBackend::loadBalances()
     setBalancesJson(b);
 }
 
+void MusterUiBackend::loadWalletSummary()
+{
+    // The Wallet page: only the wallets this instance was given (exo-f37) — the keystore
+    // account chosen for Muster, the open Monero wallet, the LEZ wallet — and how to
+    // connect the rest. The module decides; the backend holds nothing.
+    setWalletSummaryJson(modules().muster_module.wallet_summary());
+}
+
 void MusterUiBackend::loadWalletAccounts()
 {
     // Every account across chains, with a LEZ account's shareable address (the `share`

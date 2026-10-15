@@ -1,0 +1,73 @@
+{
+  "about": "The Wallet in the standalone runner (exo-f37): the instance's own key on its configured chain and the demo chain, each marked as development, and a Monero wallet still being checked.",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "walletSummaryJson": {
+      "wallets": [
+        {
+          "id": "ethereum",
+          "name": "Ethereum",
+          "account": "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+          "via": "this instance's own key",
+          "dev": true,
+          "balances": [
+            {
+              "chain": "evm:31337",
+              "asset": "ETH",
+              "grade": "attested",
+              "display": "9999.99 ETH"
+            },
+            {
+              "chain": "evm:31337",
+              "asset": "MTD",
+              "grade": "attested",
+              "error": "the token did not answer"
+            }
+          ]
+        },
+        {
+          "id": "demo",
+          "name": "Demo chain",
+          "via": "an in-process chain, for trying the flows",
+          "dev": true,
+          "balances": [
+            {
+              "chain": "mock:shielded",
+              "asset": "MOCK",
+              "grade": "attested",
+              "display": "5000 MOCK"
+            }
+          ]
+        }
+      ],
+      "connect": [],
+      "checking": [
+        "Monero"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "view": "dashboard"
+    },
+    {
+      "expectProp": [
+        "wallet_ethereum",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "wallet_demo",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    }
+  ]
+}

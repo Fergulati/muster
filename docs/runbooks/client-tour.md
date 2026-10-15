@@ -809,9 +809,16 @@ key then owns a LEZ public account directly, with no tweak.
 
 **Wallet** in the sidebar, two tabs:
 
-- **Balances:** **Refresh balances**. While the chains are asked it reads **Reading your
-  balances…**. Alice's ETH is read from the tour's anvil. The badge reads *attested*: the
-  verified read isn't wired to this card yet.
+- **Balances:** a card for each wallet this instance has been given, and nothing else.
+  - Here, the runner's own key on the tour's anvil (**Ethereum**, marked *development*),
+    the in-process **Logos Execution Zone** and the **Demo chain**, each also marked
+    *development*.
+  - Each card shows its address with **Copy**, and every balance has a pill: **reported**
+    (what the node or wallet said; your client did not check it) or **verified**.
+  - Under Basecamp it is different. Ethereum shows only once you choose a keystore account
+    for Muster. Your open Monero wallet shows with its address and balance. What isn't
+    connected is listed under **Connect a wallet**, with a button for each.
+  - The page re-reads every 10 s while open; **Refresh** reads at once.
 - **Send on LEZ:** under *Your addresses — share one to be paid*, **Copy** one. Use it (or
   one of the other peer's) as the recipient with an amount, then click **Preview** and
   **Send**.

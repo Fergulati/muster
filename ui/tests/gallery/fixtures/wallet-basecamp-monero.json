@@ -1,0 +1,99 @@
+{
+  "about": "The Wallet under Basecamp with a Monero wallet open and no Ethereum ever set up (exo-f37, reported 2026-10-15): the Monero wallet with its address and balance, Ethereum only as a way to connect one — never Muster's own key as though it were a wallet.",
+  "sizes": [
+    "1440x900",
+    "1024x700"
+  ],
+  "props": {
+    "accountJson": {
+      "available": false
+    },
+    "keystoreStatusJson": {
+      "identity": {
+        "kind": "module"
+      },
+      "accounts": []
+    },
+    "walletSummaryJson": {
+      "wallets": [
+        {
+          "id": "monero",
+          "name": "Monero",
+          "account": "5BTj4yQ8kMhJ8M7qtuJx3vqNNKb3nDszAJ6P2yFCrW5w1xYkDq2ZH3D4W8jvHLzv5KfE8L6s3tcRZQyVQpYrM1hG2xyPLLx",
+          "wallet": "alice",
+          "network": "stagenet",
+          "state": "ready",
+          "watchOnly": false,
+          "via": "Monero Wallet",
+          "balances": [
+            {
+              "chain": "monero:stagenet",
+              "asset": "XMR",
+              "grade": "attested",
+              "account": "5BTj…",
+              "display": "1.5 XMR",
+              "raw": "1500000000000",
+              "unlocked": "1 XMR"
+            }
+          ]
+        }
+      ],
+      "connect": [
+        {
+          "id": "ethereum",
+          "name": "Ethereum",
+          "action": "accounts",
+          "how": "Create or import an account in Logos Keystore"
+        }
+      ],
+      "checking": []
+    }
+  },
+  "steps": [
+    {
+      "view": "dashboard"
+    },
+    {
+      "expectProp": [
+        "wallet_monero",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "walletBalance_monero",
+        "text",
+        "1.5 XMR"
+      ]
+    },
+    {
+      "expectProp": [
+        "walletConnect_ethereum",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "walletNone",
+        "visible",
+        false
+      ]
+    },
+    {
+      "shot": ""
+    },
+    {
+      "click": "walletConnectButton_ethereum"
+    },
+    {
+      "expect": {
+        "slot": "logos.request",
+        "args": [
+          "evm.accounts.manage"
+        ]
+      }
+    }
+  ]
+}

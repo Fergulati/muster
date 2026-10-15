@@ -1,0 +1,63 @@
+{
+  "about": "The Wallet with nothing connected (exo-f37): said once, with how to connect each wallet — never a default account or a zero balance.",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "accountJson": {
+      "available": false
+    },
+    "walletSummaryJson": {
+      "wallets": [],
+      "checking": [],
+      "connect": [
+        {
+          "id": "ethereum",
+          "name": "Ethereum",
+          "action": "accounts",
+          "how": "Create or import an account in Logos Keystore"
+        },
+        {
+          "id": "monero",
+          "name": "Monero",
+          "action": "install",
+          "package": "monero_wallet_ui",
+          "how": "Install Monero Wallet to request and receive XMR"
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "view": "dashboard"
+    },
+    {
+      "expectProp": [
+        "walletNone",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "walletConnect_monero",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": ""
+    },
+    {
+      "click": "walletConnectButton_monero"
+    },
+    {
+      "expect": {
+        "slot": "logos.request",
+        "args": [
+          "packages.install"
+        ]
+      }
+    }
+  ]
+}
