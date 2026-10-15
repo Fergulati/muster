@@ -5,19 +5,22 @@
 ## is the in-process stand-in the integration tests run on — tests use a real local store,
 ## never a mock, as with Transport.
 ##
-## The shape follows storage_module 3.0.2 where the room swarm depends on it (read in
-## logos-storage-nim; docs/design/room-swarm.md §3):
+## The shape follows storage_module 3.0.2 (engine logos-storage v0.5.3) where the room
+## swarm depends on it, as S0 observed it at runtime (docs/labbook/storage-from-muster.md):
 ##   * upload a file by path → a manifest CID; the manifest names the uploaded file;
 ##   * a dataset is SERVED or not, and served means announced to the network's DHT too —
-##     one bit, as `advertise` is; one not served is answered for by nobody;
-##   * a download reaches a connected peer that serves the CID, else any provider the DHT
-##     lists on the same network; `private` tunnels it (over Mix, on the platform), so the
-##     server sees a mix path, not the fetcher;
+##     one bit, as `advertise` is; one not served is answered for by nobody, and its
+##     provider record stays in the DHT after it stops (until it expires);
+##   * a download asks only the providers the DHT lists for the CID — a connected peer is
+##     never asked unless the DHT names it (Q1). A connection makes a listed provider
+##     dialable when its announced address is not (no hairpin, same LAN; Q4). `private`
+##     tunnels the download over Mix: no dial, the server sees a mix path, not the
+##     fetcher, and only a provider reachable on the network serves it (Q3);
 ##   * uploads and downloads are jobs: started, then read after `poll` — the module thread
 ##     never waits on storage.
 ## Bytes here are opaque: the swarm seals them first (crypto/blob_seal.nim).
 
-import std/[os, tables, sequtils]
+import std/[os, tables]
 import ../hashing/sha256
 import ../crypto/sodium
 
@@ -82,6 +85,7 @@ type
     net: LocalStorageNet
     dir: string
     peerId: string
+    reachable: bool                     ## its announced address can be dialled (AutoNAT says Reachable)
     blobs: Table[string, string]        ## cid -> path in dir
     names: Table[string, string]        ## cid -> the manifest's file name
     served: Table[string, bool]
@@ -103,18 +107,21 @@ proc providers*(n: LocalStorageNet, cid: string): seq[string] =
 
 proc newLocalBlobStore*(net: LocalStorageNet, dir: string): LocalBlobStore =
   createDir(dir)
-  result = LocalBlobStore(net: net, dir: dir,
+  result = LocalBlobStore(net: net, dir: dir, reachable: true,
                           peerId: "16UiuLocal" & hexOf(randomBytes(8)))
   net.stores[result.peerId] = result
 
 proc servedLog*(b: LocalBlobStore): seq[Served] = b.log
 proc manifestName*(b: LocalBlobStore, cid: string): string = b.names.getOrDefault(cid)
-proc connected*(b: LocalBlobStore): seq[string] = b.peers   ## the peers this node dialled
+proc connected*(b: LocalBlobStore): seq[string] = b.peers   ## the peers this node is connected to
+proc setReachable*(b: LocalBlobStore, on: bool) = b.reachable = on
+  ## Whether others can dial this node's announced address (behind a NAT with no mapping: not).
 
-proc announce(b: LocalBlobStore, cid: string, on: bool) =
-  var ps = b.net.dht.getOrDefault(cid).filterIt(it != b.peerId)
-  if on: ps.add b.peerId
-  if ps.len == 0: b.net.dht.del(cid) else: b.net.dht[cid] = ps
+proc announce(b: LocalBlobStore, cid: string) =
+  ## A provider record. Stopping never withdraws one: the DHT keeps naming this node until
+  ## the record expires, and the node then refuses (Q2).
+  var ps = b.net.dht.getOrDefault(cid)
+  if b.peerId notin ps: (ps.add b.peerId; b.net.dht[cid] = ps)
 
 proc newJob(b: LocalBlobStore, j: BlobJob): string =
   inc b.nextJob
@@ -129,7 +136,7 @@ proc keep(b: LocalBlobStore, cid, bytes, name: string, serve: bool) =
   b.blobs[cid] = p
   if cid notin b.names: b.names[cid] = name
   b.served[cid] = serve
-  b.announce(cid, serve)
+  if serve: b.announce(cid)
 
 method reach*(b: LocalBlobStore): PeerReach =
   PeerReach(peerId: b.peerId, addrs: @["/memory/" & b.peerId], network: b.net.network)
@@ -145,17 +152,16 @@ method upload*(b: LocalBlobStore, path: string): string =
   except CatchableError as e:
     b.newJob(BlobJob(state: jsFailed, error: e.msg))
 
-proc source(b: LocalBlobStore, cid: string): LocalBlobStore =
-  ## A connected peer serving `cid`, else a provider the DHT lists; nil when none.
-  for p in b.peers:
-    let s = b.net.stores.getOrDefault(p)
-    if s != nil and s.served.getOrDefault(cid): return s
+proc source(b: LocalBlobStore, cid: string, private: bool): LocalBlobStore =
+  ## A provider the DHT lists that serves `cid` and can be reached: over Mix only if its
+  ## address is reachable; directly if it is, or if this node is connected to it.
   for p in b.net.providers(cid):
     let s = b.net.stores.getOrDefault(p)
-    if s != nil and s != b and s.served.getOrDefault(cid): return s
+    if s == nil or s == b or not s.served.getOrDefault(cid): continue
+    if s.reachable or (not private and p in b.peers): return s
 
 method download*(b: LocalBlobStore, cid, dest: string, private, serve: bool): string =
-  let src = b.source(cid)
+  let src = b.source(cid, private)
   if src == nil:
     return b.newJob(BlobJob(state: jsFailed, cid: cid, error: "no peer serves " & cid))
   let bytes = readFile(src.blobs[cid])
@@ -177,15 +183,17 @@ method serving*(b: LocalBlobStore, cid: string): bool = b.served.getOrDefault(ci
 method setServing*(b: LocalBlobStore, cid: string, on: bool) =
   if cid notin b.blobs: return
   b.served[cid] = on
-  b.announce(cid, on)
+  if on: b.announce(cid)
 
 method connect*(b: LocalBlobStore, peer: PeerReach) =
-  if peer.network == b.net.network and peer.peerId in b.net.stores and peer.peerId notin b.peers:
-    b.peers.add peer.peerId
+  ## A libp2p connection: both ends hold it.
+  let other = b.net.stores.getOrDefault(peer.peerId)
+  if peer.network != b.net.network or other == nil or other == b: return
+  if peer.peerId notin b.peers: b.peers.add peer.peerId
+  if b.peerId notin other.peers: other.peers.add b.peerId
 
 method remove*(b: LocalBlobStore, cid: string) =
   if cid in b.blobs:
     removeFile(b.blobs[cid])
     b.blobs.del cid
   b.served.del cid
-  b.announce(cid, false)
