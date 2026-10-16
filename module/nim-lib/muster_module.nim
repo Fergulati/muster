@@ -71,6 +71,7 @@ import ../src/coordination/lp_invoker  # LpInvoker — call the target module ov
 import ../src/coordination/discovery   # discover coordinatable module actions (P-D3)
 import ../src/coordination/contacts    # the address book (aliases for member ids)
 import ../src/coordination/joined_rooms
+import ../src/coordination/room_journal  # the member's own copy of each room (exo-dcc.14)
 import ../src/coordination/send     # where a payment sent to someone is paid, by rail (exo-dcc.33)  # the rooms this member joined, re-entered on relaunch (exo-ecbe)
 import ../src/coordination/home        # the home surface: what waits on THIS member (F-18, exo-ed5)
 import ../src/coordination/effect_summary  # what an effect moves, in its family's words (exo-59c)
@@ -847,6 +848,26 @@ proc joinedRoomsPath(): string =
   if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
   dir / "joined_rooms.json"
 
+proc roomJournalPath(ctopic: string): string =
+  ## The member's own copy of one room (exo-dcc.14), beside the joined rooms, named by a
+  ## hash of the topic (a topic is a path, and names nothing anyway).
+  var dir = context().instancePersistencePath
+  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  var buf: seq[byte]
+  for c in ctopic: buf.add byte(c)
+  const d = "0123456789abcdef"
+  var hx = ""
+  for b in sha256(buf)[0 ..< 12]: (hx.add d[int(b shr 4)]; hx.add d[int(b and 0x0f)])
+  dir / "room_journals" / (hx & ".journal")
+
+proc attachJournal(s: CoordinationSession, ctopic: string) =
+  ## Rebuild the room from the member's own copy first, then keep everything it sees from
+  ## now on (exo-dcc.14): the store is catch-up, not the room's only copy.
+  let j = openJournal(roomJournalPath(ctopic))
+  s.replay(j.replayOrder())
+  s.setJournal(proc(frame: seq[byte]) {.gcsafe.} =
+    {.cast(gcsafe).}: discard j.record(frame))
+
 proc musterCoordinateJoin(topic: string): string =
   let ks = moduleKeystore()
   # Normalize to a valid Waku content topic so the room actually shards + routes over
@@ -859,6 +880,7 @@ proc musterCoordinateJoin(topic: string): string =
     # Joining by name founds this member's own epoch 0 on the topic, under a key derived
     # from the keystore and the room (exo-7b3): a relaunch's catch-up opens it again.
     gSession = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks, ctopic), ctopic)
+    attachJournal(gSession, ctopic)
     gSessions[ctopic] = gSession
   gTopic = ctopic
   # Remember the room beside the keystore, so a relaunch re-enters it (exo-ecbe).
@@ -925,6 +947,7 @@ proc restoreJoinedRooms(): seq[string] =
     # The same founding epoch coordinate_join made, derived again (exo-6dc.1): the room's
     # pre-admit history opens on relaunch, not only the epochs granted since.
     let s = newCoordinationSession(newDeliveryTransport(gDeliveryConfig, mix = gMix), newEpochCrypto(ks, ctopic), ctopic)
+    attachJournal(s, ctopic)
     gSessions[ctopic] = s
     s.announceBeacon()
     result.add ctopic
@@ -1042,6 +1065,7 @@ proc musterCoordinateLeave(roomTopic: string): string =
   gSessions[ctopic].leave()
   gSessions.del ctopic
   discard forgetJoinedRoom(joinedRoomsPath(), ctopic)
+  forget(roomJournalPath(ctopic))          # its own copy goes with it (exo-dcc.14)
   discard setRoomTitle(roomTitlesPath(), ctopic, "")
   if gTopic == ctopic:
     gSession = nil
