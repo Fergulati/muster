@@ -1,0 +1,77 @@
+{
+ "name": "split",
+ "width": 1280,
+ "segments": [
+  {
+   "src": "s2-alice",
+   "in": 1.0,
+   "out": 16.5,
+   "label": "Alice",
+   "lapse": 3,
+   "hold": 1.5
+  },
+  {
+   "src": "s2-bob",
+   "in": 15.0,
+   "out": 17.5,
+   "label": "Bob",
+   "hold": 1.5
+  },
+  {
+   "src": "s2-bob",
+   "in": 32.0,
+   "out": 35.0,
+   "label": "Bob",
+   "hold": 1.5
+  },
+  {
+   "src": "s2-bob",
+   "in": 43.5,
+   "out": 46.5,
+   "label": "Bob",
+   "hold": 1
+  },
+  {
+   "src": "s2-bob",
+   "in": 56.5,
+   "out": 59.0,
+   "label": "Bob \u00b7 Logos Signer",
+   "hold": 3.5
+  },
+  {
+   "src": "s2-bob",
+   "in": 70.0,
+   "out": 77.5,
+   "label": "Bob \u00b7 Logos Signer",
+   "lapse": 4
+  },
+  {
+   "src": "s2-bob",
+   "in": 77.5,
+   "out": 89,
+   "label": "Bob",
+   "lapse": 12,
+   "hold": 1
+  },
+  {
+   "src": "s2-alice",
+   "in": 89.0,
+   "out": 93,
+   "label": "Alice",
+   "hold": 1
+  },
+  {
+   "pair": [
+    "s2-alice",
+    "s2-bob"
+   ],
+   "at": 95,
+   "hold": 4,
+   "labels": [
+    "Alice",
+    "Bob"
+   ],
+   "crop": "1180:400:420:110"
+  }
+ ]
+}

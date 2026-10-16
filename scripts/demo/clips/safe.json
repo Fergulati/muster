@@ -1,0 +1,101 @@
+{
+ "name": "safe",
+ "width": 1280,
+ "segments": [
+  {
+   "src": "s3-bob",
+   "in": 3.5,
+   "out": 7.0,
+   "label": "Bob",
+   "hold": 0.8
+  },
+  {
+   "src": "s3-alice",
+   "in": 60.5,
+   "out": 67.5,
+   "label": "Alice",
+   "lapse": 3,
+   "hold": 2.5
+  },
+  {
+   "src": "s5-alice",
+   "in": 0.5,
+   "out": 3.5,
+   "label": "Alice",
+   "hold": 0.6
+  },
+  {
+   "src": "s5-alice",
+   "in": 9.0,
+   "out": 11.0,
+   "label": "Alice",
+   "hold": 1.4
+  },
+  {
+   "src": "s5-alice",
+   "in": 22.5,
+   "out": 33.5,
+   "label": "Alice",
+   "lapse": 3,
+   "hold": 1.2
+  },
+  {
+   "src": "s5-alice",
+   "in": 45.5,
+   "out": 48.5,
+   "label": "Alice",
+   "hold": 0.3
+  },
+  {
+   "src": "s5-alice",
+   "in": 53.5,
+   "out": 56.0,
+   "label": "Alice \u00b7 Logos Signer",
+   "hold": 3.5
+  },
+  {
+   "src": "s5-bob",
+   "in": 67.0,
+   "out": 72.5,
+   "label": "Bob",
+   "hold": 1
+  },
+  {
+   "src": "s5-bob",
+   "in": 79.5,
+   "out": 115.0,
+   "label": "Bob",
+   "lapse": 10,
+   "hold": 0.5
+  },
+  {
+   "src": "s5-bob",
+   "in": 125.0,
+   "out": 160.5,
+   "label": "Bob \u00b7 Logos Signer",
+   "lapse": 8,
+   "hold": 1.2
+  },
+  {
+   "src": "s5-bob",
+   "in": 160.5,
+   "out": 172.0,
+   "label": "Bob",
+   "lapse": 10
+  },
+  {
+   "pair": [
+    "s5-alice",
+    "s5-bob"
+   ],
+   "at": 180,
+   "hold": 4,
+   "labels": [
+    "Alice",
+    "Bob"
+   ],
+   "crop": "1180:330:420:575"
+  }
+ ],
+ "crf": 31
+}

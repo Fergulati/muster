@@ -153,6 +153,16 @@ section.band{padding:80px 0;border-top:1px solid var(--rule-soft)}
 .alt{background:var(--surface)}
 
 /* three layers */
+/* ============ see it run (real recordings, scripts/demo/) ============ */
+.reels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+@media (max-width:860px){.reels{grid-template-columns:1fr}}
+.reel{margin:0;background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column}
+.reel video{display:block;width:100%;height:auto;aspect-ratio:8/5;background:#111412;border-bottom:1px solid var(--rule)}
+.reel figcaption{padding:16px 20px 20px}
+.reel .n{font-family:var(--mono);font-size:11px;color:var(--signal);letter-spacing:.08em}
+.reel h3{font-size:18px;letter-spacing:-.015em;margin:6px 0 6px}
+.reel p{margin:0;color:var(--ink-2);font-size:14.5px}
+.reels-note{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin:18px 2px 0}
 .three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 @media (max-width:860px){.three{grid-template-columns:1fr}}
 .tile{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:22px 22px 24px}
@@ -358,6 +368,7 @@ footer a{color:var(--ink-2)}
       Muster
     </a>
     <nav aria-label="Site">
+      <a class="sec" href="#watch">Watch</a>
       <a class="sec" href="#how">How it works</a>
       <a class="sec" href="#monero">XMR</a>
       <a class="sec" href="#links">Seven links</a>
@@ -382,7 +393,7 @@ footer a{color:var(--ink-2)}
       <p class="lede">Muster coordinates multi-party transactions inside end-to-end encrypted conversations. Pay from a shared account, split a bill, or request XMR. <b>The conversation is the security boundary:</b> who is in the room decides who can read what is being done.</p>
       <div class="ctas">
         <a class="btn primary" href="#install">Install in Basecamp <span class="arr" aria-hidden="true">→</span></a>
-        <a class="btn" href="#how">See how it works</a>
+        <a class="btn" href="#watch">Watch it run</a>
         <a class="btn" href="atlas/">Explore the atlas</a>
       </div>
     </div>
@@ -417,6 +428,36 @@ footer a{color:var(--ink-2)}
       </div>
       <figcaption class="caption">An illustration, drawn after the real room card.</figcaption>
     </figure>
+  </div>
+</section>
+
+<!-- ============ see it run ============ -->
+<section class="band" id="watch">
+  <div class="wrap">
+    <div class="head">
+      <p class="eyebrow">Recorded, not drawn</p>
+      <h2>See it run.</h2>
+      <p>Two people, two Basecamp installs, real transactions on the Sepolia testnet. Nothing here is mocked: the keys are in each person's Logos keystore, every signature is approved in the Logos Signer, and each payment is confirmed by the person it was owed to, from their own read of the chain.</p>
+    </div>
+    <div class="reels">
+      <figure class="reel">
+        <video src="media/start.mp4" poster="media/start.jpg" muted loop playsinline preload="none" aria-label="Alice starts a bill split with Bob; Bob joins from his Home"></video>
+        <figcaption><span class="n">01 · START SOMETHING</span><h3>Name what you're doing, then who with</h3><p>Alice picks <i>Split a bill</i> and pastes Bob's contact link. Bob's Home shows the invitation; he joins, and each puts a name to the other, a name only they see.</p></figcaption>
+      </figure>
+      <figure class="reel">
+        <video src="media/split.mp4" poster="media/split.jpg" muted loop playsinline preload="none" aria-label="A bill split proposed, agreed, paid through the Logos Signer, and confirmed on Sepolia"></video>
+        <figcaption><span class="n">02 · SPLIT THE BILL</span><h3>Agree in the room, pay from your own wallet</h3><p>Alice proposes 0.002 ETH. Bob agrees with his room key, then pays his share: the Logos Signer shows the one transaction it will sign. Alice's own read of the chain confirms it, and the split is final on both screens.</p></figcaption>
+      </figure>
+      <figure class="reel">
+        <video src="media/safe.mp4" poster="media/safe.jpg" muted loop playsinline preload="none" aria-label="A payment from a 2-of-2 Safe approved by both owners and settled on Sepolia"></video>
+        <figcaption><span class="n">03 · A SHARED SAFE</span><h3>Two owners, one Safe they already had</h3><p>Alice discloses a 2-of-2 Safe; every member's client checks it against the chain. She proposes a payment from it, both owners approve in their Signer, and Bob settles it on-chain.</p></figcaption>
+      </figure>
+      <figure class="reel">
+        <video src="media/explain.mp4" poster="media/explain.jpg" muted loop playsinline preload="none" aria-label="The card's privacy view and the room history"></video>
+        <figcaption><span class="n">04 · ASK THE CARD</span><h3>Who sees what, and how the room got here</h3><p>Every card answers for itself: which observer learns which field, from the room to anyone reading the chain, and the room's own history, step by step, from the record every member keeps.</p></figcaption>
+      </figure>
+    </div>
+    <p class="reels-note">Muster 0.3 in Logos Basecamp 0.3.2, recorded on a virtual display and cut for length; waits for the chain are sped up, never removed. The scripts that recorded them are in <a href="https://github.com/corpetty/muster/tree/main/scripts/demo">scripts/demo</a>.</p>
   </div>
 </section>
 
@@ -859,6 +900,22 @@ footer a{color:var(--ink-2)}
     var done = function(){ btn.textContent = "Copied"; setTimeout(function(){ btn.textContent = "Copy"; }, 1600); };
     try { navigator.clipboard.writeText(url.textContent.trim()).then(done, select); } catch (e) { select(); }
   });
+})();
+/* The recordings play only while on screen, and never on their own for someone who asked
+   for less motion: then each shows its poster and its controls. */
+(function(){
+  var vids = Array.prototype.slice.call(document.querySelectorAll(".reel video"));
+  if (!vids.length) return;
+  var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (still || !("IntersectionObserver" in window)) { vids.forEach(function(v){ v.controls = true; }); return; }
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      var v = e.target;
+      if (e.isIntersecting) { if (v.preload === "none") v.preload = "auto"; var p = v.play(); if (p && p.catch) p.catch(function(){ v.controls = true; }); }
+      else v.pause();
+    });
+  }, {threshold: 0.35});
+  vids.forEach(function(v){ io.observe(v); });
 })();
 </script>
 

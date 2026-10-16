@@ -1,0 +1,48 @@
+{
+ "name": "start",
+ "width": 1280,
+ "segments": [
+  {
+   "src": "s1-alice",
+   "in": 3.0,
+   "out": 8.5,
+   "label": "Alice",
+   "hold": 1.2
+  },
+  {
+   "src": "s1-alice",
+   "in": 44.0,
+   "out": 47.5,
+   "label": "Alice",
+   "hold": 0.8
+  },
+  {
+   "src": "s1-bob",
+   "in": 45.0,
+   "out": 47.8,
+   "label": "Bob",
+   "hold": 1.5
+  },
+  {
+   "src": "s1-bob",
+   "in": 107.5,
+   "out": 111.5,
+   "label": "Bob",
+   "hold": 1.2
+  },
+  {
+   "src": "s1-alice",
+   "in": 132.5,
+   "out": 137.0,
+   "label": "Alice",
+   "hold": 0.8
+  },
+  {
+   "src": "s1-bob",
+   "in": 137.0,
+   "out": 142.0,
+   "label": "Bob",
+   "hold": 1.8
+  }
+ ]
+}

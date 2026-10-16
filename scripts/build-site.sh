@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Assemble the Pages site into one directory, as .github/workflows/pages.yml publishes it.
 #
-#   /            site/index.html — the landing page
+#   /            site/index.html — the landing page; /media/ its recordings (scripts/demo/)
 #   /diagrams/   docs/diagrams/ — the figure programme, its index, the substrates
 #   /atlas/      docs/design/multisig-atlas.html — the action atlas
 #
@@ -30,5 +30,7 @@ find "$root/docs/diagrams" -maxdepth 1 -type f \
   -exec cp {} "$out/" \;
 
 cp "$root/site/index.html" "$out/index.html"
+# the landing page's recordings and their posters (scripts/demo/)
+[ -d "$root/site/media" ] && cp -r "$root/site/media" "$out/media"
 
 python3 "$root/scripts/check-site-links.py" "$out"

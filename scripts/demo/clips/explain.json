@@ -1,0 +1,5 @@
+{"name": "explain", "width": 1280,
+ "segments": [
+  {"src": "s4-alice", "in": 1.0, "out": 6.0, "label": "Alice", "hold": 4.5, "crop": "1180:640:420:40"},
+  {"src": "s4-alice", "in": 24.5, "out": 28.0, "label": "Alice", "hold": 4.5, "crop": "1180:640:420:40"}
+ ]}
