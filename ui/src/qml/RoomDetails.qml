@@ -10,6 +10,7 @@ import Logos.Icons
 // default. Four tabs, the same components and the same folds of the sealed log as before:
 //   People    who is in the room, who asks to join, the room's security level (ScopePanel)
 //   Accounts  the accounts members disclosed into the room, and the forms to add one
+//   FileShare files shared in the room, sealed, moved by Logos Storage (exo-4d0)
 //   History   how the room reached its state (ActivityFeed)
 //   Privacy   who can see what (FlowView); the store node is always listed (FS-9)
 // Its connections moved to the header's dot (RoomHeader). The Room decides where the drawer
@@ -19,7 +20,7 @@ Rectangle {
     id: details
     required property var room   // the Room this piece belongs to (Room.qml's roomItem)
 
-    readonly property var tabs: ["people", "accounts", "history", "privacy"]
+    readonly property var tabs: ["people", "accounts", "files", "history", "privacy"]
     color: Theme.palette.backgroundTertiary
 
     Rectangle {      // the edge against the thread
@@ -61,6 +62,7 @@ Rectangle {
             onCurrentIndexChanged: details.room.detailsTab = details.tabs[currentIndex]
             LogosTabButton { objectName: "roomDetailsPeople"; text: qsTr("People") }
             LogosTabButton { objectName: "roomDetailsAccounts"; text: qsTr("Accounts") }
+            LogosTabButton { objectName: "roomDetailsFiles"; text: qsTr("FileShare") }
             LogosTabButton { objectName: "roomDetailsHistory"; text: qsTr("History") }
             LogosTabButton { objectName: "roomDetailsPrivacy"; text: qsTr("Privacy") }
         }
@@ -146,6 +148,20 @@ Rectangle {
                     }
                     onDiscloseSuggested: if (details.room.backend) details.room.backend.discloseSuggestedAccount()
                     onFormShown: accountsFollow.restart()
+                }
+            }
+
+            // ── FileShare: files shared in the room (exo-4d0, docs/design/room-swarm.md) ──
+            Flickable {
+                clip: true
+                contentWidth: width
+                contentHeight: fileShare.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+                RoomFileShare {
+                    id: fileShare
+                    objectName: "roomFileShare"
+                    width: parent.width
+                    backend: details.room.backend
                 }
             }
 

@@ -115,6 +115,10 @@ import ../src/coordination/parts_btc    # …and in Bitcoin, from each debtor's 
 import ../src/coordination/parts_lez    # …and privately on the LEZ, found by the creditor's scan (exo-a90.9)
 import ../src/coordination/xmr_request  # …and in XMR: a monero: link to pay from any wallet, the creditor's own wallet confirms (exo-dcc.5)
 import ../src/wallet/monero_backend_lp  # …monero_wallet_backend over lp_*: reads and one mint, never a spend
+import ../src/storage/storage_lp       # FileShare: storage_module over lp_* (exo-4d0.2)
+import ../src/coordination/swarm       # FileShare: the room as tracker (exo-4d0.4)
+import ../src/coordination/swarm_live  # FileShare: share, fetch and seed from a pump (exo-4d0.5)
+import std/mimetypes
 import ../src/wallet/summary         # what the Wallet page shows: what this instance was given (exo-f37)
 import ../src/monero/address as xmraddr # the payTo rules and the CAIP-2 map (ADR-018)
 
@@ -2698,6 +2702,118 @@ proc roundsPump() =
                                       uint64(epochTime())):
     if gLpDebug: stderr.writeLine("MUSTER-LP next-round " & id & " " & outcome)
 
+# ── FileShare: the room swarm (exo-4d0, docs/design/room-swarm.md) ─────────────────────
+# A room's files are author-signed log events (coordination/swarm.nim); the sealed blobs
+# move through the host's storage node (storage/storage_lp.nim). One SwarmNode per room,
+# all on the one storage node; their operations finish on the intents tick (and on
+# fileshare_files), so no hosted call waits on a transfer.
+
+var gStorage: LpStorage = nil
+var gSwarmNodes = initTable[string, SwarmNode]()
+
+proc storage(): LpStorage =
+  if gStorage == nil: gStorage = newLpStorage()
+  gStorage
+
+proc swarmWorkDir(topic: string): string =
+  var dir = context().instancePersistencePath
+  if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+  dir / "fileshare" / toHex(sha256(topic.toOpenArrayByte(0, topic.high)))[0 ..< 16].toLowerAscii
+
+proc swarmNode(topic: string): SwarmNode =
+  if topic notin gSwarmNodes:
+    gSwarmNodes[topic] = newSwarmNode(storage(), moduleKeystore(), swarmWorkDir(topic),
+                                      proc(): int64 = int64(epochTime()))
+  gSwarmNodes[topic]
+
+proc fileSharePump() =
+  ## Finish what the storage node has done since the last tick, room by room.
+  if gStorage == nil: return
+  for topic, node in gSwarmNodes:
+    if topic in gSessions:
+      try: node.pump(gSessions[topic])
+      except CatchableError: discard
+
+proc fileShareReady(): (bool, string) =
+  let s = storage()
+  if s.ensure(): (true, "") else: (false, s.note)
+
+proc musterFileshareStatus(): string =
+  let (ready, note) = fileShareReady()
+  var node = newJObject()
+  if ready:
+    let r = storage().reach()
+    node = %*{"peerId": r.peerId, "addrs": r.addrs, "network": r.network, "spr": storage().spr()}
+  $(%*{"ready": ready, "note": note, "node": node})
+
+proc musterFileshareShare(path: string): string =
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (ready, note) = fileShareReady()
+  if not ready: return $(%*{"error": "not-ready", "detail": note})
+  if not path.isAbsolute or not fileExists(path):
+    return $(%*{"error": "no such file", "detail": path})
+  let mime = (let e = splitFile(path).ext; if e.len > 1: newMimetypes().getMimetype(e[1 .. ^1]) else: "application/octet-stream")
+  let op = swarmNode(gTopic).share(gSession, path, mime)
+  for o in swarmNode(gTopic).ops():
+    if o.id == op and o.state == opFailed: return $(%*{"error": o.error})
+  $(%*{"op": op})
+
+proc musterFileshareFiles(): string =
+  if gSession == nil: return $(%*{"ready": false, "note": "not-joined", "files": [], "ops": []})
+  gSession.poll()
+  fileSharePump()
+  let (ready, note) = fileShareReady()
+  let me = toHex(gSession.selfIdentity().toBytes()).toLowerAscii
+  var files = newJArray()
+  for f in reduceSwarm(gSession.roomEvents()):
+    var seeders = newJArray()
+    var seeding = false
+    for sd in f.seeders:
+      if sd.member == me: seeding = true
+      seeders.add %*{"member": sd.member, "alias": contactBook().aliasOf(sd.member), "self": sd.member == me}
+    files.add %*{"id": f.fid, "name": f.name, "mime": f.mime, "size": int64(f.size),
+                 "sharer": f.sharer, "sharerAlias": contactBook().aliasOf(f.sharer),
+                 "self": f.sharer == me, "retracted": f.retracted, "seeders": seeders,
+                 "seeding": seeding, "held": ready and storage().has(f.cid)}
+  var ops = newJArray()
+  if gTopic in gSwarmNodes:
+    for o in gSwarmNodes[gTopic].ops():
+      ops.add %*{"id": o.id, "kind": $o.kind, "state": $o.state, "error": o.error, "file": o.fid,
+                 "name": o.name, "bytes": int64(o.bytes), "total": int64(o.total),
+                 "dest": o.dest, "private": o.private}
+  $(%*{"ready": ready, "note": note, "files": files, "ops": ops})
+
+proc musterFileshareFetch(fileId, folder, private: string): string =
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (ready, note) = fileShareReady()
+  if not ready: return $(%*{"error": "not-ready", "detail": note})
+  var dir = folder
+  if dir.len == 0:
+    dir = getHomeDir() / "Downloads"
+    createDir(dir)
+  let node = swarmNode(gTopic)
+  let op = node.fetch(gSession, fileId, dir, private = private == "true")
+  for o in node.ops():
+    if o.id == op and o.state == opFailed: return $(%*{"error": o.error})
+  $(%*{"op": op})
+
+proc musterFileshareSeed(fileId, on: string): string =
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let (ready, note) = fileShareReady()
+  if not ready: return $(%*{"error": "not-ready", "detail": note})
+  let why = swarmNode(gTopic).setSeeding(gSession, fileId, on == "true")
+  if why.len > 0: $(%*{"error": why}) else: "ok"
+
+proc musterFileshareRetract(fileId: string): string =
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let me = toHex(gSession.selfIdentity().toBytes()).toLowerAscii
+  for f in reduceSwarm(gSession.roomEvents()):
+    if f.fid == fileId:
+      if f.sharer != me: return $(%*{"error": "only the member who shared it can"})
+      gSession.publishAuthored(moduleKeystore(), retractEvent(fileId, me, int64(epochTime())))
+      return "ok"
+  $(%*{"error": "no such file in this room"})
+
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
   ## renders: the lifecycle state, the effect it carries, the driver threshold, and
@@ -2713,6 +2829,7 @@ proc musterCoordinateIntents(): string =
   roundsPump()                         # a multi-round room decision's next round, approved once (exo-720)
   splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
   keystorePump()                       # publish what a human approved in keystore_module (exo-149.2)
+  fileSharePump()                      # finish uploads and fetches the storage node completed (exo-4d0)
   let events = gSession.roomEvents()
   let myEnc = moduleKeystore().encIdentity()
   let myEncHex = toHex(myEnc.toBytes()).toLowerAscii()
