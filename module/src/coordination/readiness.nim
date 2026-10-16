@@ -293,12 +293,28 @@ proc moneroWalletGrade*(st: WalletStatus, chain: string, creditor: bool): Grade 
   elif why.startsWith("wallet-unread") or why.startsWith("wallet-busy"): (rdUnknown, why)
   else: (rdMissing, why)
 
-proc moneroWalletProbe*(st: WalletStatus, owedOn: seq[string]): proc(chain: string): Grade {.gcsafe.} =
+proc moneroNodeLine*(n: NodeHealth): string =
+  ## Whose node a payee's wallet syncs through (exo-dcc.7), said only when node_health
+  ## answered: their own, or a remote one, which sees when the wallet syncs and the
+  ## transactions it broadcasts (the manifest's wallet-sync and signed-tx rows).
+  if n.read != rsAnswered: return ""
+  if n.mode == "local": "; through your own node"
+  else: "; through a remote node, which sees when your wallet syncs and the transactions it broadcasts " &
+        "(run your own with Monero Node to keep that to yourself)"
+
+proc moneroWalletProbe*(st: WalletStatus, owedOn: seq[string],
+                        node = NodeHealth()): proc(chain: string): Grade {.gcsafe.} =
   ## HostFacts.moneroWallet over one wallet_status read: a creditor's grade on the chains
-  ## this member is owed on (`owedOn`), a debtor's on any other.
+  ## this member is owed on (`owedOn`), a debtor's on any other. A creditor's met grade also
+  ## names whose node their wallet syncs through, when `node` was read; a debtor pays from
+  ## any wallet, so theirs names none.
   let st = st
   let owed = owedOn
-  result = proc(chain: string): Grade {.gcsafe.} = moneroWalletGrade(st, chain, chain in owed)
+  let line = moneroNodeLine(node)
+  result = proc(chain: string): Grade {.gcsafe.} =
+    var g = moneroWalletGrade(st, chain, chain in owed)
+    if chain in owed and g.status == rdMet: g.detail &= line
+    g
 
 proc probeFromFacts*(f: HostFacts): ReadinessProbe =
   let facts = f

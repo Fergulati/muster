@@ -269,4 +269,31 @@ block boundCache:
   doAssert c.read(K, 8, 10.2, 15) == ""
   echo "6. the pump's wallet-bound cache: served once confirmed, even in lockstep; never another wallet's OK"
 
+# ── 7. whose node the payee's wallet syncs through (exo-dcc.7) ─────────────────────
+block node:
+  # The Connections row for a chain this member is owed on says whose node their wallet
+  # syncs through: their own (local mode), or a remote one, which sees when the wallet
+  # syncs and the transactions it broadcasts. Read through node_health, a read; never
+  # guessed when it did not answer. A payer pays from any wallet: no node claim for them.
+  doAssert isReadMethod("node_health"), "node_health is a read"
+  doAssert "node_health" notin AllowedCalls, "never one of a request's steps (s6)"
+  let w = newFakeMonero("wallet-alice", "stagenet")
+  proc rowFor(owed: bool): Grade =
+    let facts = HostFacts(moneroWallet: moneroWalletProbe(w.walletStatus(),
+                            (if owed: @[XmrStage] else: @[]), w.nodeHealth()))
+    probeFromFacts(facts).environmentReachable(XmrStage)
+  w.nodeMode = "local"
+  var g = rowFor(owed = true)
+  doAssert g.status == rdMet and "your own node" in g.detail, $g
+  w.nodeMode = "remote"
+  g = rowFor(owed = true)
+  doAssert g.status == rdMet and "remote node" in g.detail and "sees" in g.detail, $g
+  w.node = anUnreachable
+  g = rowFor(owed = true)
+  doAssert "own node" notin g.detail and "remote node" notin g.detail, "unread is never guessed: " & $g
+  w.node = anAnswered
+  doAssert "node" notin rowFor(owed = false).detail, "a payer's row makes no node claim"
+  doAssert "node_health" in w.calls
+  echo "7. the payee's node: own or remote, said only when read; none for a payer OK"
+
 echo "xmr_request_edges_test: all OK"
