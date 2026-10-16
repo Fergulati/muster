@@ -50,8 +50,13 @@ The on-chain scheme is the same as `monero.multisig`; only Muster's role differs
 ## 4. Open questions for the ADR
 
 1. ~~Does `describe_transfer` on a part-signed `multisig_txset` report what the signers will sign?~~ **Answered 2026-10-16: yes.** On a regtest 2-of-3 with monero-wallet-rpc v0.18.5.1, both co-signers' wallets reported exactly the agreed recipient, amount, fee and change, unsigned and signed, and the chain paid exactly that. From the source, a co-signer signs a transaction rebuilt from the same construction data `describe_transfer` reads (`docs/labbook/monero-multisig-describe-transfer.md`, `infra/monero/multisig-regtest.py`). Still untested: monero-multisig-gui's sets, and a deliberately tampered set.
-2. What file and blob sizes and timings does the room carry? The room is a store-backed log, and the sync blobs grow with the number of outputs.
-3. The members run their own wallet software, outside Basecamp, until the platform exposes multisig. Is that acceptable for the campaign?
+2. What file and blob sizes and timings does the room carry? The room is a store-backed log, and the sync blobs grow with the number of outputs. **Measured 2026-10-16** (`docs/labbook/monero-multisig-describe-transfer.md` § Sizes):
+   - setup is negligible;
+   - a sync blob is about 360 B per output, per member;
+   - a transaction set is about 2.6 KB per input.
+
+   Delivery caps a message at 150 KiB, so a wallet past about 400 outputs, or a spend of more than about 55 inputs, needs the blob split across messages.
+3. ~~The members run their own wallet software, outside Basecamp, until the platform exposes multisig. Is that acceptable for the campaign?~~ **Decided 2026-10-16 by the operator: yes, for now, with in-room warnings** that say how this differs from Muster's other accounts. The member's own wallet holds the key and the multisig state; upstream calls the scheme experimental; spends go one at a time.
 4. Does FCMP++ change the multisig steps enough to wait for it?
 
 ## 5. Upstream
