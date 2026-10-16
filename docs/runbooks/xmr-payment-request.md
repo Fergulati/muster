@@ -1,118 +1,93 @@
-# Runbook: request a payment in XMR
+# Runbook: request, or send, a payment in XMR
 
-**As of 2026-10-09 (exo-dcc.5, exo-dcc.20).** One person asks another for XMR inside a Muster
-room. The payer pays from any Monero wallet. The payment counts only when the payee's own
-wallet sees it. Every label below was read from the code on 2026-10-09; the code wins over
-this page. Detail and sources: [`docs/labbook/xmr-payment-request.md`](../labbook/xmr-payment-request.md).
+**As of 2026-10-16, Muster 0.3.1** (exo-dcc.5, .19, .20, .32). One person asks another for XMR inside a Muster room, or one person sends XMR to another. The payer pays from any Monero wallet. The payment counts only when the payee's own wallet sees it. Every label below was read from the code on 2026-10-16; the code wins over this page. Detail and sources: [`docs/labbook/xmr-payment-request.md`](../labbook/xmr-payment-request.md).
 
-> **No payment has been made through this yet.** Steps 1 and 2, and asking for an address,
-> were seen on display in Basecamp 0.3.2 with a real stagenet wallet. Steps 3 and 4, a real
-> payment and its confirmation, are first on screen: the two-machine run is `exo-dcc.19`, and
-> it waits on stagenet XMR for the payer. What you see there is the finding.
+> **No payment has been made through this yet.** Requesting, agreeing, asking for an address, and the Wallet listing a real stagenet wallet were all seen on display in Basecamp 0.3.2. Paying and confirming have not been, because they need stagenet XMR. That run is `exo-dcc.19`. What you see there is the finding: the checklist at the end says what to send back.
 
-**Stagenet only.** Muster requests on Monero stagenet. Mainnet waits on the Monero stack's
-threat model (`exo-dcc.8`).
+**Stagenet only.** Mainnet waits on the Monero stack's threat model (`exo-dcc.8`).
 
-## What you need
+## 0. Set up, on each of two machines
 
-**The payee** (the person asking to be paid):
-- Logos Basecamp 0.3.2, with Muster installed from its catalogue
-  ([`install-from-catalogue.md`](install-from-catalogue.md)) and **Monero Wallet Backend**
-  left ticked.
-- **Monero Wallet** (`monero_wallet_ui`), with a stagenet wallet in it. If it is missing, the
-  card offers **Install monero_wallet_ui**, and Basecamp's own dialog does the install.
+1. **Get Muster**, either way:
+   - **The AppImage** from the [`muster-v0.3.1` release](https://github.com/corpetty/muster/releases/tag/muster-v0.3.1). Run `chmod +x Muster-0.3.1-Basecamp-0.3.2-linux-x86_64.AppImage`, run it, and click **Muster** in the sidebar.
+   - **Or**, in an existing Basecamp 0.3.2, install from Muster's catalogue ([`install-from-catalogue.md`](install-from-catalogue.md)).
+2. **Open Muster before any other messaging app** (Chat, for instance). Basecamp runs one messaging node, and the first app to start it picks the network. Both of you should be on Muster's default, `logos.dev`. Check under **Settings → Advanced**.
+3. **The payee's Monero wallet.** In Muster, go to **Wallet → Monero → Install**, then confirm Basecamp's *Use this app?* prompt, then **Install** in Package Manager. You can untick the optional *Monero Node* to use a remote node. Then open **Monero Wallet** from the sidebar and **Create** a wallet on stagenet (or **Restore phrase**). Back in Muster's **Wallet**, it shows as *Monero · stagenet* with its address.
+4. **The payer's Monero wallet**: any stagenet wallet holding enough stagenet XMR, such as Feather, Cake, `monero-wallet-cli`, or Basecamp's Monero Wallet set up the same way.
+   - **The campaign payer:** its address is `57VTGxT3AW727aC8Df1WfxfkhrxwknsrZe8Wp2zvwCzt6CJvGjjtiW7Wiei8Y6XmGJjeQMHbZ4S5iFF7DbRqwc7dBsJnXeW`. Restore it from its seed (restore height 2205803) once it is funded.
 
-  The standalone runner (`make run`) bundles no Monero wallet, so it cannot be the payee.
+## 0b. Share a room
 
-**The payer:**
-- Muster, in Basecamp or the standalone runner. Muster needs no wallet on this side.
-- Any Monero wallet on stagenet, holding enough stagenet XMR: Cake, Feather,
-  `monero-wallet-cli`, or Basecamp's own Monero Wallet.
+1. **The payee:** **Needs you → Getting started → Share**, which copies your contact link. Send it to the payer however you like.
+2. **The payer:** **Contacts**, add the link. Then **Start something**, pick an activity, put the contact in *Who's doing it with you?*, and **Open the room**.
+   - ✓ The payee gets an invitation on **Needs you**. **Join** makes them a member at once, with no asking.
+   - If the composer warns *That isn't a chat id*, the invite cannot go: use the contact link.
 
-**Both** in one Muster room. Start one from **Home → Start something**, and invite the other.
-
-## 1. Request
+## 1a. Request a payment (the payee asks)
 
 **The payee:**
-1. **Home → Start something → Request a payment**, or in a room you share, **+** →
-   **Request**. **Settles on** should read **Split (Monero)**.
-2. Type the total in XMR. Choose who pays, if the room has more than one other person.
-   ✓ Expect a line like *Bob pays you 0.1 XMR from any Monero wallet, with a link the room
-   gives them.*
+1. In the room, **+ → Request a payment**. **Settles on** should read **Split (Monero)**.
+2. Type the amount in XMR. ✓ *Bob pays you 0.1 XMR from any Monero wallet, with a link the room gives them.*
 3. **Propose.**
-   - If your Monero wallet is closed, Muster says so and offers **Open Monero Wallet**.
-     Basecamp asks *Use this app? Muster wants to monero.wallet.unlock*; Monero Wallet asks
-     for the wallet's password. Then **Propose** again.
-     *Known rough edge:* Monero Wallet answers `failed` even after it opened the wallet
-     (`exo-dcc.21`), so the warning stays until you act again.
-   - With the wallet open, your wallet mints a fresh subaddress for this request, labelled
-     `muster:req-…`. You never type an address.
+   - If Monero Wallet is closed, Muster offers **Open Monero Wallet**, and the wallet asks for its password. Then **Propose** again.
+     - *Known rough edge:* the wallet may still answer `failed` (`exo-dcc.21`); act again.
+   - Your wallet mints a fresh subaddress for this request, labelled `muster:req-…`. Proposing is your agreement that it is yours.
 
-Proposing is your agreement that the address is yours.
+**The payer:** on the card, **Agree to my share**.
 
-## 2. Agree
+## 1b. Send money (the payer offers)
 
-**The payer:** on the card, **Agree to my share**. There is no link to pay until every party
-has agreed.
+1. **The payer:** **+ → Send money**. **Settles on** should read **Monero**. Pick who it goes to and type the amount.
+   - If they have shared no Monero address in the room, the form offers **Ask <name> for a Monero address**. Press it.
+2. **The payee:** on that address-request card, **Share my Monero address**. Your open wallet mints a fresh subaddress and the room sees it.
+3. **The payer:** the form now names that address. Press **Send**. Proposing is your agreement.
+4. **The payee:** **Accept — <address> is my address**. Your client accepts only while your open wallet lists that address.
 
-## 3. Pay — first on screen
+A shared address backs only one payment. A second send to it is refused until the payee shares a fresh one.
 
-**The payer:** the card shows a QR code, the `monero:` link as text, and **Copy link**.
+## 2. Pay — first on screen
 
-1. Scan the QR, or paste the link, in your Monero wallet. The link carries the address and
-   the exact amount, nothing else: no description and no name. The memo stays in the room.
-2. Send exactly that amount, to exactly that address.
-3. Back in Muster, **I paid**. A transaction id is optional.
-   ✓ Expect *"I paid" tells the room; it doesn't confirm anything.*
+**The payer:** the card shows a QR code, the `monero:` link, **Copy link**, and **Pay with Monero Wallet**.
+- **From another wallet:** scan the QR or paste the link. It carries the address and the exact amount, nothing else.
+- **From Basecamp's Monero Wallet:**
+  1. **Pay with Monero Wallet** copies the address and opens the wallet.
+  2. In **Send**, paste it as the address and type the exact amount. **Copy amount** puts the amount on the clipboard.
+  3. Review, and confirm in the wallet.
+- Then, back in Muster, **I paid**. A transaction id is optional. ✓ *"I paid" tells the room; it doesn't confirm anything.*
 
-## 4. Confirm — first on screen
+## 3. Confirm — first on screen
 
-**The payee:** keep Monero Wallet open on that stagenet wallet, and keep the room open in
-Muster. A room's payments are confirmed only while it is the open room (`exo-ff5.9`).
+**The payee:** keep Monero Wallet open on that wallet, and keep **this room open** in Muster. A room's payments are confirmed only while it is the open room (`exo-ff5.9`).
 
 ✓ Expect, in order:
-- *says they paid — your wallet confirms it at 10 confirmations*, once the payer says so;
-- *seen, n of 10 confirmations*, once your wallet sees the transfer;
-- the part confirmed, and the request final on both sides, at 10 confirmations. Monero makes
-  a block about every two minutes, so allow about 20 minutes.
+1. *says they paid — your wallet confirms it at 10 confirmations*;
+2. *seen, n of 10 confirmations*, once your wallet sees the transfer;
+3. confirmed, and final on both sides, at 10 confirmations. That takes about 20 minutes, since Monero makes a block about every two minutes.
 
-Your wallet confirms only an incoming transfer to that request's subaddress, of exactly the
-amount asked, at 10 confirmations or more. The payer's word, a txid alone, or a block
-explorer never confirm it.
+Only an incoming transfer to that subaddress, of exactly the amount, at 10 confirmations or more, confirms it. The payer's word, a txid, or an explorer never does. **Mark received** is the other way to finish: your word, recorded with no reference.
 
-**Mark received** is the other way to finish: your word that you were paid, recorded with
-no reference.
+## 4. The receipt
 
-## Asking on someone's behalf
-
-Bob can propose a split in XMR that pays Alice, the one who paid the bill:
-
-1. **Bob:** **+** → **Split** → **Split (Monero)**, **Who paid the bill?** → Alice. Until
-   she has shared a Monero address in the room, the composer offers **Ask Alice for a Monero
-   address**.
-2. **Alice:** on the address-request card, **Share my Monero address**. Her wallet mints a
-   fresh subaddress, and the room sees it.
-3. **Bob:** **Propose**.
-4. **Alice:** **Agree — I paid, and <address> is mine**. Her client agrees only while her open
-   wallet lists that address.
+On the final card, **Details → Download audit trail**. The file verifies from itself alone. From a checkout of this repo, `module/tools/muster_audit_verify.nim` checks it. Its report says who reported paying and that your wallet confirmed it.
 
 ## What each party learns
 
-- **The Monero chain** shows no sender, receiver or amount. A subaddress is not linkable to
-  the payee's other addresses. This is Monero's guarantee; the card says so.
-- **The room** holds the request, the link between the payment and the people, and any txid
-  someone reported. None of it leaves the room.
-- **The payer's remote node** sees their wallet's sync unless they run their own node or go
-  through a proxy.
-- **Any module loaded beside Muster in Basecamp** can read the payee's wallet history and
-  subaddresses while the wallet is open. The action's manifest discloses this.
+- **The Monero chain** shows no sender, receiver or amount, and a subaddress cannot be linked to the payee's other addresses.
+- **The room** holds the request, the people, and any txid reported. None of it leaves the room.
+- **A remote node** sees when a wallet syncs and the transactions it broadcasts, unless you run your own (Monero Wallet's optional *Monero Node*). From the next release, Muster's **Connections** row says which one the payee's wallet uses.
+- **Any module loaded beside Muster in Basecamp** can read the payee's wallet history while it is open. The action's manifest discloses this.
 
-## Known rough edges
+## Send back: what I need verified (exo-dcc.19)
 
-- Monero Wallet answers `failed` to an unlock it carried out (`exo-dcc.21`). Act again.
-- Several shares paid to one subaddress must differ in amount, so equal shares are refused.
-- "seen, n of 10" has not been seen with a real payment yet (`exo-dcc.19`).
+Note each item, with a screenshot where it says so:
+1. [ ] **Invite and join** (0b): the payee joined without asking. Did *Join* work across the two machines?
+2. [ ] **Request** (1a) or **Send** (1b) reached *payable* on both sides. A screenshot of the payer's card with the QR.
+3. [ ] **Paying:** which wallet, and did it read the link (QR or paste)? If you used **Pay with Monero Wallet**, did the address-and-amount paste work?
+4. [ ] **Before the first block:** did the payee's card show *seen, 0 of 10* while the payment was still unconfirmed, or only after the first block? This is the spike question: does an incoming transfer show in `history()` before it confirms?
+5. [ ] ***seen, n of 10*** counting up. A screenshot at some n.
+6. [ ] **Final on both sides at 10.** The time from **I paid** to final.
+7. [ ] **The receipt:** it downloads. If you can, send me the file and I'll run the verifier on it.
+8. [ ] **First sync:** how long a fresh stagenet wallet took to sync in Monero Wallet (the other spike question).
+9. [ ] Anything that read wrong, stalled, or needed a second try. The exact text, please.
 
-Self-test without a wallet: `scripts/split-xmr-self-test.sh` drives the refusals and remedies
-through the real runner, offscreen. The paid path is held by the spec's probes
-(`scripts/grade-specs.sh exo-dcc.5`).
+Self-test without a wallet: `scripts/split-xmr-self-test.sh`. The paid path is held by the spec's probes (`scripts/grade-specs.sh exo-dcc.5`).
