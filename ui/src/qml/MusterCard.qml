@@ -374,6 +374,9 @@ Rectangle {
     signal openMoneroWallet(string wallet)
     property string moneroWalletNote: ""
     readonly property var xmr: (cardRoot.split && cardRoot.split.xmr) ? cardRoot.split.xmr : null
+    // A Monero multisig spend's progress (ADR-020): {intentId, state, signers, synced, signed,
+    // txids, last, wallet}, null for any other intent. Room.qml looks it up by intent id.
+    readonly property var xmrMsig: (cardRoot.card && cardRoot.card.xmrMsig) ? cardRoot.card.xmrMsig : null
     readonly property bool isXmr: cardRoot.xmr !== null
     // MY share's link, if I owe one: {part, ok, uri, amount, payTo, why, reported, confirmed}
     readonly property var xmrPay: (cardRoot.xmr && cardRoot.xmr.payment) ? cardRoot.xmr.payment : null
@@ -844,6 +847,73 @@ Rectangle {
 
         // what this needs (CardNeeds.qml)
         CardNeeds { cardRoot: cardItem }
+
+        // a Monero multisig spend (ADR-020): where each signer's own wallet stands
+        ColumnLayout {
+            objectName: "cardXmrMsig"
+            Layout.fillWidth: true
+            visible: cardRoot.xmrMsig !== null
+            spacing: 2
+            readonly property var m: cardRoot.xmrMsig || ({})
+            readonly property int signerCount: (m.signers || []).length
+            LogosText {
+                text: qsTr("Monero multisig")
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.cardCaption
+                font.weight: Theme.typography.weightMedium
+            }
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: cardRoot.card && Number(cardRoot.card.threshold || 0) > 0
+                      ? qsTr("Signers: %1 of %2 fixed").arg(parent.signerCount).arg(cardRoot.card.threshold)
+                      : qsTr("Signers: %1 fixed").arg(parent.signerCount)
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.cardCaption
+            }
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("Synced: %1 of %2").arg((parent.m.synced || []).length).arg(parent.signerCount)
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.cardCaption
+            }
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("Signed: %1 of %2").arg((parent.m.signed || []).length).arg(parent.signerCount)
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.cardCaption
+            }
+            LogosText {
+                Layout.fillWidth: true
+                visible: String(parent.m.txids || "").length > 0
+                text: qsTr("Submitted: %1…").arg(String(parent.m.txids || "").slice(0, 12))
+                color: Theme.palette.textSecondary
+                font.family: MusterStyle.mono
+                font.pixelSize: MusterStyle.cardCaption
+            }
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                visible: String(parent.m.last || "").length > 0
+                text: qsTr("Your wallet: %1").arg(String(parent.m.last || ""))
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.cardCaption
+            }
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("Each signer's own wallet signs only if what it shows is this spend.")
+                color: Theme.palette.textTertiary
+                font.pixelSize: MusterStyle.cardCaption
+            }
+            LogosText {
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("A Monero transaction has no expiry: a set a signer signed could still be completed outside the room after this proposal expires.")
+                color: Theme.palette.textTertiary
+                font.pixelSize: MusterStyle.cardCaption
+            }
+        }
 
         // ── actions ────────────────────────────────────────────────────────
         // Past its expiry (exo-a90.15) no share of a split is paid. Say so, and — while a share

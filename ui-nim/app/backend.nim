@@ -147,12 +147,17 @@ proc loadActivityDo(o: MusterUi, d: Done = nil) =
 proc loadFrostCeremoniesDo(o: MusterUi, d: Done = nil) =
   ask mm.frost_ceremoniesAsync(proc (r: string) = o.setFrostCeremoniesJson(r); fin(d, r))
 
+proc loadXmrMsigDo(o: MusterUi, d: Done = nil) =
+  ask mm.xmr_msig_setupsAsync(proc (r: string) = o.setXmrMsigSetupsJson(r))
+  ask mm.xmr_msig_spendsAsync(proc (r: string) = o.setXmrMsigSpendsJson(r); fin(d, r))
+
 proc loadIntentsDo(o: MusterUi, d: Done = nil) =
   # The room's proposals folded from the shared log. The FROST ceremonies advance on
   # the same tick, and the activity feed folds from the same log.
   ask mm.coordinate_intentsAsync(proc (r: string) =
     o.setIntentsJson(r)
     o.loadFrostCeremoniesDo()
+    o.loadXmrMsigDo()
     o.loadActivityDo()
     fin(d, r))
 
@@ -663,6 +668,27 @@ proc frostCeremonyJoinDo(o: MusterUi, ceremonyId: string) =
     o.setFrostCeremonyJson(asObjectJson(r, "error"))
     o.loadFrostCeremoniesDo())
 
+proc xmrMsigSetupOpenDo(o: MusterUi, ceremonyId, chain, k, membersJson: string) =
+  # Open and join; each member's own wallet runs its rounds on the intents tick.
+  ask mm.xmr_msig_setup_openAsync(ceremonyId.strip(), chain.strip(), k.strip(), membersJson.strip(),
+    proc (r: string) =
+      info "xmr_msig_setup_open " & qs(ceremonyId) & " " & qs(chain) & " " & qs(k) & " -> " & qs(r)
+      o.setXmrMsigSetupJson(asObjectJson(r, "error"))
+      o.loadXmrMsigDo())
+
+proc xmrMsigSetupJoinDo(o: MusterUi, ceremonyId: string) =
+  ask mm.xmr_msig_setup_joinAsync(ceremonyId.strip(), proc (r: string) =
+    info "xmr_msig_setup_join " & qs(ceremonyId) & " -> " & qs(r)
+    o.setXmrMsigSetupJson(asObjectJson(r, "error"))
+    o.loadXmrMsigDo())
+
+proc xmrMsigProposeDo(o: MusterUi, account, recipientsJson, feeCap, memo: string) =
+  ask mm.coordinate_propose_xmr_msigAsync(account.strip(), recipientsJson.strip(), feeCap.strip(), memo,
+    proc (r: string) =
+      info "coordinate_propose_xmr_msig " & qs(account) & " -> " & qs(r)
+      o.setXmrMsigProposeJson(asObjectJson(r, "intentId"))
+      o.loadIntentsDo())
+
 # ── the audit file ──────────────────────────────────────────────────────────────
 
 const DownloadLocation = 14   ## QStandardPaths::DownloadLocation
@@ -1149,6 +1175,12 @@ proc frostCeremonyOpenImpl(o: MusterUi, ceremonyId, network, t, n: string) =
   o.frostCeremonyOpenDo(ceremonyId, network, t, n)
 proc frostCeremonyJoinImpl(o: MusterUi, ceremonyId: string) = o.frostCeremonyJoinDo(ceremonyId)
 proc loadFrostCeremoniesImpl(o: MusterUi) = o.loadFrostCeremoniesDo()
+proc xmrMsigSetupOpenImpl(o: MusterUi, ceremonyId, chain, k, membersJson: string) =
+  o.xmrMsigSetupOpenDo(ceremonyId, chain, k, membersJson)
+proc xmrMsigSetupJoinImpl(o: MusterUi, ceremonyId: string) = o.xmrMsigSetupJoinDo(ceremonyId)
+proc xmrMsigProposeImpl(o: MusterUi, account, recipientsJson, feeCap, memo: string) =
+  o.xmrMsigProposeDo(account, recipientsJson, feeCap, memo)
+proc loadXmrMsigImpl(o: MusterUi) = o.loadXmrMsigDo()
 proc loadFlowImpl(o: MusterUi) = o.loadFlowDo()
 proc loadGraphImpl(o: MusterUi, roomTopic: string) = o.loadGraphDo(roomTopic)
 proc loadRlnStatusImpl(o: MusterUi) = o.loadRlnStatusDo()

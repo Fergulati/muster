@@ -40,6 +40,38 @@ Item {
     property var frostCeremony: ({})      // the last open/join result ({ceremony, host} or {error})
     signal frostOpenRequested(string ceremonyId, string network, string t, string n)
     signal frostJoinRequested(string ceremonyId)
+    // Monero multisig (ADR-020): each member's own wallet runs the setup and signs the spends
+    property var xmrMsigSetups: []        // the room's setups [{ceremony, k, n, joined, address, disclosedBy, last, wallet, mine, joinedByMe}]
+    property var xmrMsigSetup: ({})       // the last open/join result ({ceremony, ...} or {error, detail})
+    property var xmrMsigPropose: ({})     // the last spend proposal ({intentId} or {error, detail})
+    property bool xmrMsigWalletSet: false // whether this member's xmr-msig-rpc setting is set
+    signal xmrMsigSetupRequested(string ceremonyId, string k)
+    signal xmrMsigJoinRequested(string ceremonyId)
+    signal xmrMsigProposeRequested(string account, string recipientsJson, string feeCap, string memo)
+    // the room's Monero multisig account, if a member disclosed one (its CAIP-10 id is the account)
+    readonly property var xmrAccount: {
+        for (var i = 0; i < acc.accounts.length; ++i)
+            if (acc.accounts[i] && String(acc.accounts[i].family || "") === "monero.multisig-coordinated")
+                return acc.accounts[i];
+        return null;
+    }
+    readonly property bool xmrWalletMissing: {
+        if (!acc.xmrMsigWalletSet) return true;
+        for (var i = 0; i < acc.xmrMsigSetups.length; ++i)
+            if (acc.xmrMsigSetups[i] && acc.xmrMsigSetups[i].wallet === false) return true;
+        return false;
+    }
+    // XMR → atomic units (12 decimals) by string arithmetic, never a float: digits with at
+    // most one point and at most 12 decimals; "" when it is not such an amount.
+    function xmrAtomic(text) {
+        var t = String(text || "").trim();
+        if (!/^[0-9]+(\.[0-9]{0,12})?$/.test(t)) return "";
+        var parts = t.split(".");
+        var frac = parts.length > 1 ? parts[1] : "";
+        while (frac.length < 12) frac += "0";
+        var s = String(parts[0] + frac).replace(/^0+/, "");
+        return s.length > 0 ? s : "0";
+    }
     // the Bitcoin multisig form: which family, and each network's CAIP-2 chain id
     // (module/src/bitcoin/network.nim)
     property string btcFamily: "btc.p2wsh-sortedmulti"
@@ -68,6 +100,7 @@ Item {
     function formForFamily(f) {
         f = String(f || "");
         if (f === "evm.safe") return "safe";
+        if (f === "monero.multisig-coordinated") return "xmr";
         if (f.indexOf("frost") >= 0) return "frost";
         if (f === "btc.p2wsh-sortedmulti" || f === "btc.tapscript-multi-a") return "btc";
         if (f === "lez.multisig-program") return "lez";
@@ -78,6 +111,7 @@ Item {
              : form === "btc" ? qsTr("Disclose a Bitcoin multisig")
              : form === "frost" ? qsTr("Make a key in a FROST ceremony")
              : form === "lez" ? qsTr("Create or disclose a LEZ multisig")
+             : form === "xmr" ? qsTr("Set up a Monero multisig")
              : qsTr("Add an account");
     }
     function expandForFamilies(fams) {
@@ -373,6 +407,13 @@ Item {
                     variant: acc.openForm === "lez" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                     onClicked: acc.openForm = "lez"
                 }
+                ActionButton {
+                    objectName: "addAccountXmr"
+                    Layout.fillWidth: true
+                    text: qsTr("Monero multisig")
+                    variant: acc.openForm === "xmr" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                    onClicked: acc.openForm = "xmr"
+                }
             }
         }
 
@@ -536,6 +577,228 @@ Item {
                 text: qsTr("Open the ceremony and join it")
                 variant: LogosButton.Variant.Secondary
                 onClicked: acc.frostOpenRequested(frostCid.text.trim(), frostNet.text.trim(), frostT.text.trim(), frostN.text.trim())
+            }
+        }
+
+        // ── a Monero multisig (ADR-020, exo-dcc.34) ──
+        // Each member's OWN monero-wallet-rpc holds the key and does the multisig; the room
+        // carries its messages in order, and Muster holds no Monero key. Shown while the form is
+        // open, or once the room has a setup or an account (a spend is sent from here).
+        ColumnLayout {
+            objectName: "xmrMsigSection"
+            Layout.fillWidth: true
+            visible: acc.openForm === "xmr" || acc.xmrMsigSetups.length > 0 || acc.xmrAccount !== null
+            spacing: Theme.spacing.small
+
+            LogosText {
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.spacing.small
+                text: qsTr("Monero multisig (your own wallet)")
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.caption
+            }
+            ColumnLayout {
+                objectName: "xmrMsigWarning"
+                Layout.fillWidth: true
+                spacing: 2
+                Repeater {
+                    model: [
+                        qsTr("Your own Monero wallet holds the key, outside Basecamp."),
+                        qsTr("Monero multisig is experimental upstream: a dishonest member could take the funds. Stagenet only."),
+                        qsTr("One spend at a time, about 20 minutes each (10 blocks)."),
+                        qsTr("Built before FCMP++: the wallet will need re-creating after Monero's upgrade.")
+                    ]
+                    delegate: LogosText {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        text: String(modelData)
+                        color: Theme.palette.warning
+                        font.pixelSize: MusterStyle.caption
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
+            LogosText {
+                objectName: "xmrMsigNoWallet"
+                Layout.fillWidth: true
+                visible: acc.xmrWalletMissing
+                text: qsTr("Set your Monero multisig wallet in Settings first.")
+                color: Theme.palette.error
+                font.pixelSize: MusterStyle.caption
+                wrapMode: Text.WordWrap
+            }
+
+            // the setup form, while it is the open one
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: acc.openForm === "xmr"
+                spacing: Theme.spacing.small
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("Set up a Monero multisig")
+                    color: Theme.palette.text
+                    font.pixelSize: Theme.typography.secondaryText
+                    font.weight: Theme.typography.weightMedium
+                    wrapMode: Text.WordWrap
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    LogosTextField {
+                        id: xmrK
+                        objectName: "xmrMsigK"
+                        Layout.preferredWidth: 60
+                        placeholderText: qsTr("M")
+                        text: "2"
+                    }
+                    ActionButton {
+                        objectName: "xmrMsigSetupOpen"
+                        Layout.fillWidth: true
+                        enabled: /^[0-9]+$/.test(xmrK.text.trim()) && Number(xmrK.text.trim()) >= 1
+                        text: qsTr("Set up a Monero multisig")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.xmrMsigSetupRequested("xmr-" + Date.now(), xmrK.text.trim())
+                    }
+                }
+            }
+
+            // the room's setups
+            Repeater {
+                model: acc.xmrMsigSetups
+                delegate: ColumnLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 2
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: qsTr("%1 of %2 · joined %3 of %2").arg(modelData.k).arg(modelData.n).arg(modelData.joined)
+                            color: Theme.palette.textSecondary
+                            font.family: MusterStyle.mono
+                            font.pixelSize: MusterStyle.caption
+                        }
+                        ActionButton {
+                            objectName: "xmrMsigJoin"
+                            visible: modelData.mine === true && modelData.joinedByMe !== true
+                            text: qsTr("Join")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: acc.xmrMsigJoinRequested(String(modelData.ceremony))
+                        }
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        visible: String(modelData.address || "").length > 0
+                        wrapMode: Text.WrapAnywhere
+                        text: qsTr("%1 · disclosed by %2 of %3").arg(String(modelData.address || ""))
+                              .arg((modelData.disclosedBy || []).length).arg(modelData.n)
+                        color: Theme.palette.textSecondary
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        visible: String(modelData.last || "").length > 0
+                        wrapMode: Text.WordWrap
+                        text: String(modelData.last || "")
+                        color: Theme.palette.textTertiary
+                        font.pixelSize: MusterStyle.caption
+                    }
+                }
+            }
+            LogosText {
+                objectName: "xmrMsigSetupResult"
+                Layout.fillWidth: true
+                visible: !!(acc.xmrMsigSetup && acc.xmrMsigSetup.error)
+                text: acc.xmrMsigSetup && acc.xmrMsigSetup.error
+                      ? "⚠ " + String(acc.xmrMsigSetup.error) + (acc.xmrMsigSetup.detail ? " — " + String(acc.xmrMsigSetup.detail) : "")
+                      : ""
+                color: Theme.palette.error
+                font.pixelSize: MusterStyle.caption
+                wrapMode: Text.WordWrap
+            }
+
+            // a spend from the multisig, once the room has its account
+            ColumnLayout {
+                objectName: "xmrMsigSendForm"
+                Layout.fillWidth: true
+                visible: acc.xmrAccount !== null
+                spacing: Theme.spacing.small
+                readonly property string amountAtomic: acc.xmrAtomic(xmrSendAmount.text)
+                readonly property string feeAtomic: acc.xmrAtomic(xmrSendFee.text)
+
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("Send from the multisig")
+                    color: Theme.palette.text
+                    font.pixelSize: Theme.typography.secondaryText
+                    font.weight: Theme.typography.weightMedium
+                    wrapMode: Text.WordWrap
+                }
+                LogosTextField {
+                    id: xmrSendAddress
+                    objectName: "xmrMsigSendAddress"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("recipient's Monero address")
+                    font.family: MusterStyle.mono
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    LogosTextField {
+                        id: xmrSendAmount
+                        objectName: "xmrMsigSendAmount"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("amount, in XMR")
+                    }
+                    LogosTextField {
+                        id: xmrSendFee
+                        objectName: "xmrMsigSendFeeCap"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("fee cap, in XMR")
+                        text: "0.001"
+                    }
+                }
+                LogosTextField {
+                    id: xmrSendMemo
+                    objectName: "xmrMsigSendMemo"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("a note for the room (optional)")
+                }
+                LogosText {
+                    Layout.fillWidth: true
+                    visible: (xmrSendAmount.text.length > 0 && parent.amountAtomic === "")
+                             || (xmrSendFee.text.length > 0 && parent.feeAtomic === "")
+                    text: qsTr("Amounts are plain numbers in XMR, with at most 12 decimals.")
+                    color: Theme.palette.warning
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
+                }
+                ActionButton {
+                    objectName: "xmrMsigSend"
+                    Layout.fillWidth: true
+                    enabled: xmrSendAddress.text.trim().length > 0 && parent.amountAtomic !== ""
+                             && parent.amountAtomic !== "0" && parent.feeAtomic !== ""
+                    text: qsTr("Propose this spend")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: acc.xmrMsigProposeRequested(
+                        acc.xmrAccount ? String(acc.xmrAccount.id || "") : "",
+                        JSON.stringify([{ address: xmrSendAddress.text.trim(), amount: parent.amountAtomic }]),
+                        parent.feeAtomic, xmrSendMemo.text)
+                }
+                LogosText {
+                    objectName: "xmrMsigProposeResult"
+                    Layout.fillWidth: true
+                    visible: !!(acc.xmrMsigPropose && (acc.xmrMsigPropose.error || acc.xmrMsigPropose.intentId))
+                    text: acc.xmrMsigPropose && acc.xmrMsigPropose.error
+                          ? "⚠ " + String(acc.xmrMsigPropose.error) + (acc.xmrMsigPropose.detail ? " — " + String(acc.xmrMsigPropose.detail) : "")
+                          : qsTr("Proposed to the room. The members approve it on its card.")
+                    color: acc.xmrMsigPropose && acc.xmrMsigPropose.error ? Theme.palette.error : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
+                }
             }
         }
 

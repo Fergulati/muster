@@ -825,6 +825,34 @@ Item {
         try { return JSON.parse(backend ? backend.frostCeremonyJson : "{}"); }
         catch (e) { return ({}); }
     }
+    // the room's Monero multisig setups and spends (ADR-020), parsed once; the card looks a
+    // spend up by intent id, and the accounts panel shows the setups and the last results
+    readonly property var xmrMsigSetups: {
+        try { return JSON.parse(backend ? backend.xmrMsigSetupsJson : "[]"); }
+        catch (e) { return []; }
+    }
+    readonly property var xmrMsigSetup: {
+        try { return JSON.parse(backend ? backend.xmrMsigSetupJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property var xmrMsigSpends: {
+        try { return JSON.parse(backend ? backend.xmrMsigSpendsJson : "[]"); }
+        catch (e) { return []; }
+    }
+    readonly property var xmrMsigPropose: {
+        try { return JSON.parse(backend ? backend.xmrMsigProposeJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property bool xmrMsigWalletSet: {
+        try { return !!JSON.parse(backend ? backend.settingsJson : "{}").xmrMsigRpc; }
+        catch (e) { return false; }
+    }
+    function xmrMsigSpendOf(id) {
+        var arr = room.xmrMsigSpends;
+        for (var i = 0; i < arr.length; ++i)
+            if (arr[i] && String(arr[i].intentId || "") === String(id || "")) return arr[i];
+        return null;
+    }
     // A LEZ multisig proposal in words: the effect carries the target program, the
     // instruction words and the accounts. A token Transfer is [0, amount (u128, 4 words)],
     // InitializeAccount is [3]; anything else is shown as the raw call.
@@ -1050,6 +1078,8 @@ Item {
             decliners: (it && it.decliners) ? it.decliners : [],
             declinedByMe: !!(it && it.decliners && room.myIdentity
                              && it.decliners.indexOf(room.myIdentity) >= 0),
+            // a Monero multisig spend's progress (ADR-020), null for any other intent
+            xmrMsig: room.xmrMsigSpendOf(it && it.id),
             // the five questions + your readiness, once asked for
             readiness: room.readinessFor(it && it.id),
             // "From you": which of my own holdings fill the slots this asks of me (K6)

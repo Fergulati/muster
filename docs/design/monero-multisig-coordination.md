@@ -1,6 +1,6 @@
 # Monero multisig, coordinated in the room (exo-dcc.34)
 
-Status: **candidate, 2026-10-16. Not built; a decision (a new ADR) comes first.** The atlas lists it as family `monero.multisig-coordinated`, with declared actions `setup` and `spend` (`contracts/actions/family/monero.multisig-coordinated.json`).
+Status: **accepted as ADR-020 (2026-10-16, option 1); S1–S3 built on 2026-10-16, the UI (S4) under way.** Family `monero.multisig-coordinated`, kind `xmr-msig`; actions `setup` and `spend` (`contracts/actions/family/monero.multisig-coordinated.json`). §6 maps the design to the code. The questions in §4 are answered in ADR-020 (`docs/02-implementation-plan.md`).
 
 ## 1. Why this note exists
 
@@ -62,3 +62,17 @@ The on-chain scheme is the same as `monero.multisig`; only Muster's role differs
 ## 5. Upstream
 
 A feature request ([logos-co/logos-monero-wallet-backend#8](https://github.com/logos-co/logos-monero-wallet-backend/issues/8), filed 2026-10-16) asks Logos to expose multisig in `monero_wallet_backend`, gated like sends: the approver role, with a review in the wallet app. Muster would then use the platform's wallet, as it does for `monero.split`, and would not need people to bring their own.
+
+## 6. As built (2026-10-16)
+
+| Step | Code | Held by |
+|---|---|---|
+| The effect, the refusals, the two rounds, the describe-check | `module/src/drivers/xmr_msig.nim` | `xmr_msig_test`; conformance |
+| The member's own wallet: setup, sync, build, describe, sign, submit, confirmations | `module/src/wallet/xmr_msig_wallet.nim` (setting `xmr-msig-rpc`) | `xmr_msig_regtest_e2e` (real wallets) |
+| Setup over the room: open, consent, each round in order, each member's disclosure | `module/src/coordination/xmr_msig_setup.nim`; `xmr_msig_setup_open` / `_join` / `xmr_msig_setups` | `xmr_msig_setup_test`; `xmr_msig_setup_regtest_e2e` |
+| The account acted from only once every member disclosed it | `xmrMsigAccountOf` in `coordination/accounts.nim` | `xmr_msig_setup_test` §4 |
+| A spend: signer set, sync, build, check-then-sign, round 2, submit, final at 10, one in flight | `module/src/coordination/xmr_msig_spend.nim`; `coordinate_propose_xmr_msig` / `xmr_msig_spends` | `xmr_msig_spend_test`; `xmr_msig_spend_regtest_e2e` |
+
+Two rounds. Round 1 is the agreement, by M members' room keys; the first M the fold counts are the signers. Round 2 is each signer's word that its wallet signed after the describe-check, signed under the driver's own tag, so a round-1 signature never stands in for it. Round 2 is published by the spend's own step, after the wallet signs, and never on the intents tick (`Driver.laterRoundsInApp`).
+
+The run against real wallets on regtest is `infra/monero/regtest.sh up 4`, then `module/tests/run-suite.sh e2e xmr_msig_spend_regtest_e2e`. It takes about a minute. Traps found while building it: `docs/labbook/monero-multisig-in-the-room.md`.
