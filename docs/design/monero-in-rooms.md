@@ -96,7 +96,10 @@ a wallet is open, the core is ungated.
    Its code talks to `monero-wallet-rpc`, not to the Logos modules. Muster integrates the
    swap; it does not build one.
 3. **Monero multisig stays `reject`** (`contracts/families/registry.json`). Upstream calls it
-   experimental, and the platform backend does not expose it anyway. Every Monero action
+   experimental, and the platform backend does not expose it anyway. Re-assessed 2026-10-16 against
+   the multisig docs, the MMS guide and monero-multisig-gui: unchanged. The room as the
+   coordination layer for members' own multisig wallets is a candidate,
+   `monero.multisig-coordinated` (`monero-multisig-coordination.md`, exo-dcc.34). Every Monero action
    starts on the `each` locus, the split's model: each person pays their own part.
 4. **Muster never enrols itself as approver.** This is the posture `exo-149` set for
    `keystore_module`. Paying from the Basecamp wallet therefore waits on an upstream review
