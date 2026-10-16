@@ -159,6 +159,8 @@ proc harnessMain() =
 # once, by the constructor the generated surface installs (muster_gen.nim calls NimMain
 # at load, as in the shipped plugin). A Nim main would run NimMain a second time, and
 # with it every module's top-level code. So the work is in the program's C main.
-proc main(argc: cint, argv: pointer): cint {.exportc: "main", cdecl.} =
+# argv is char** (cstringArray): clang refuses a main whose second parameter is
+# anything else; gcc, which the suite uses on Linux, accepts it.
+proc main(argc: cint, argv: cstringArray): cint {.exportc: "main", cdecl.} =
   harnessMain()
   0

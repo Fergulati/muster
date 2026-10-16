@@ -158,7 +158,9 @@ proc synDropping(): string =
   ## timeout, ~2 min, unless something bounds it).
   let s = newSocket()
   s.bindAddr(Port(0), "127.0.0.1")
-  s.listen(0)
+  # Linux queues backlog + 1 connections, so 0 holds the filler alone. macOS does not:
+  # at a backlog of 0 it admitted all 64 loopback connects tried, at 1 exactly one.
+  s.listen(when defined(macosx): 1 else: 0)
   listeners.add s
   let port = s.getLocalAddr()[1]
   let filler = newSocket()
