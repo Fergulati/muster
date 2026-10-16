@@ -40,6 +40,7 @@ import ../src/coordination/intents     # intent lifecycle = reduce(log) (the mul
 import ../src/coordination/live        # the live propose/contribute path, driveable in-process (exo-ef1)
 import ../src/coordination/accounts    # accounts disclosed by members into the room (exo-a50.1.3)
 import ../src/coordination/xmr_msig_setup   # a Monero multisig set up over the room (ADR-020 S2)
+import ../src/coordination/xmr_msig_spend   # …and a spend from it (ADR-020 S3)
 import ../src/drivers/xmr_msig        # monero.multisig-coordinated (ADR-020)
 import ../src/wallet/xmr_msig_wallet  # the member's own monero-wallet-rpc
 import ../src/settlement/settlement     # the settlement seam: chosen by profile, through the adapter (exo-a50.1.5)
@@ -1260,6 +1261,7 @@ var gFrostAuto: seq[string]                            ## intents this member ap
 var gFrostPumpAt = 0.0
 
 proc xmrMsigPump()   # a Monero multisig setup's next step (below, ADR-020 S2)
+proc xmrSpendPump()  # a Monero multisig spend's next step (below, ADR-020 S3)
 
 proc frostPump() =
   if gSession == nil or epochTime() - gFrostPumpAt < 2.0: return
@@ -2682,6 +2684,7 @@ proc musterCoordinateIntents(): string =
   lezPump()                            # complete any LEZ step the chain has since included
   frostPump()                          # advance joined FROST ceremonies and round 2
   xmrMsigPump()                        # advance joined Monero multisig setups (ADR-020)
+  xmrSpendPump()                       # …and agreed spends from them: sync, build, sign, submit, confirm
   roundsPump()                         # a multi-round room decision's next round, approved once (exo-720)
   splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
   keystorePump()                       # publish what a human approved in keystore_module (exo-149.2)
@@ -4085,6 +4088,80 @@ proc musterXmrMsigSetups(): string =
     o["disclosedBy"] = disclosedBy
     o["last"] = %gXmrLast.getOrDefault(cid, "")
     o["wallet"] = %(gXmrMsigRpc.len > 0)
+  $arr
+
+# A spend from a Monero multisig (ADR-020 S3): once agreed, each signer's own wallet syncs,
+# builds or checks and signs, and the last submits, on the coordinate_intents tick.
+var gXmrSpendLast = initTable[string, string]()     ## intent id → this member's last step outcome
+var gXmrSpendAt = 0.0
+
+proc xmrSpendPump() =
+  if gSession == nil or gXmrMsigRpc.len == 0 or epochTime() - gXmrSpendAt < 3.0: return
+  gXmrSpendAt = epochTime()
+  let events = gSession.roomEvents()
+  for id, it in reduceIntents(events, driverFor):
+    if splitPolicy(intentPolicyOf(events, id)).kind != "xmr-msig": continue
+    if it.state notin {lsCollecting, lsExecutable, lsSubmitted, lsSettling}: continue
+    if it.state == lsCollecting and it.collection.round < 2: continue
+    gXmrSpendLast[id] = xmrSpendStep(gSession, moduleKeystore(), newRpcXmrMsigWallet(gXmrMsigRpc),
+                                     driverFor, id, uint64(epochTime()))
+
+proc musterCoordinateProposeXmrMsig(account, recipientsJson, feeCap, memo: string): string =
+  ## Propose a spend from a Monero multisig the room set up (ADR-020): to the recipients,
+  ## in atomic units, the network fee capped at fee_cap.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  var acctId = account.strip()
+  if acctId.len == 0:
+    let (pkind, pacct) = splitPolicy(gCoordKind)
+    if pkind == "xmr-msig": acctId = pacct
+  if acctId.len == 0:
+    return $(%*{"error": "no-account", "detail": "name the Monero multisig account (its CAIP-10 id)"})
+  let (found, a) = findAccount(roomAccounts(), acctId)
+  if not found or a.family != XmrMsigFamily:
+    return $(%*{"error": "no-account", "detail": "no Monero multisig with that id is disclosed in this room"})
+  let (ok, _, detail) = xmrMsigAccountOf(a)
+  if not ok: return $(%*{"error": "account-not-ready", "detail": detail})
+  var recips: seq[XmrRecipient]
+  try:
+    for r in parseJson(recipientsJson).getElems():
+      if r.kind == JArray: recips.add XmrRecipient(address: r[0].getStr().strip(), amount: r[1].getStr().strip())
+      else: recips.add XmrRecipient(address: r["address"].getStr().strip(), amount: r["amount"].getStr().strip())
+  except CatchableError:
+    return $(%*{"error": "bad-recipients", "detail": "recipients is a JSON array of {address, amount} in atomic units"})
+  let policy = qualify("xmr-msig", a.id)
+  let effectJson = xmrMsigSpendJson(a.chain, a.address, recips, feeCap.strip(), memo.strip())
+  let why = driverFor(policy).signRefusal(effectFromJson(effectJson))
+  if why.len > 0: return $(%*{"error": "refused", "detail": why})
+  inc gMsgSeq
+  var ttl = DefaultIntentTtl
+  try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
+  except ValueError: discard
+  let id = liveProposeIntent(gSession, moduleKeystore(), driverFor, policy, effectJson,
+                             int64(epochTime()), gMsgSeq, account = a.address, ttlSec = ttl)
+  if not id.startsWith("0x"): return $(%*{"error": "refused", "detail": id})
+  id
+
+proc musterXmrMsigSpends(): string =
+  ## Each Monero multisig spend in the joined room and where it stands, for the card.
+  if gSession == nil: return "[]"
+  gSession.poll()
+  xmrSpendPump()
+  let events = gSession.roomEvents()
+  var arr = newJArray()
+  for id, it in reduceIntents(events, driverFor):
+    let policy = intentPolicyOf(events, id)
+    if splitPolicy(policy).kind != "xmr-msig": continue
+    let drv = driverFor(policy)
+    var signers, synced, signed = newJArray()
+    if drv of XmrMsigDriver:
+      let d = XmrMsigDriver(drv)
+      for m in signerSet(events, driverFor, id, d.account.k, d.account.members):
+        signers.add %m
+        if readBlob(events, id, "xsync", m).complete: synced.add %m
+        if readBlob(events, id, "xtx", m).complete: signed.add %m
+    arr.add %*{"intentId": id, "state": $it.state, "signers": signers, "synced": synced, "signed": signed,
+               "txids": submittedRef(events, id), "last": gXmrSpendLast.getOrDefault(id, ""),
+               "wallet": gXmrMsigRpc.len > 0}
   $arr
 
 proc musterLezPending(): string =

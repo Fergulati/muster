@@ -55,6 +55,14 @@ method environment*(d: Driver): string {.base, gcsafe.} =
   ## driver's decisions live in the room, so the default is "room".
   "room"
 
+method laterRoundsInApp*(d: Driver): bool {.base, gcsafe.} =
+  ## Whether a member's contribution to a round after the first is the same in-app
+  ## signature as their first, sent for them on the intents tick (liveNextRounds). A
+  ## driver whose later rounds attest to something only another step can do (a Monero
+  ## multisig: "my wallet signed after its check", exo-dcc.34.3) says no, and that step
+  ## publishes the contribution itself.
+  true
+
 # ── The driver-generic core: a round-based collection driven only by describe() ─
 type Collection* = object
   descriptor*: DriverDescriptor

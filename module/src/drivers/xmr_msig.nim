@@ -137,6 +137,10 @@ method signRefusal*(d: XmrMsigDriver, e: Effect): string =
 # ── the agreement: members' room keys, M of them ────────────────────────────────
 const SignedTag = "muster.monero.multisig-spend.signed.v0"
 
+method laterRoundsInApp*(d: XmrMsigDriver): bool = false
+  ## round 2 is "my wallet signed after its describe-check": only the spend's own step,
+  ## after the wallet signs, may say it (coordination/xmr_msig_spend.nim)
+
 method describe*(d: XmrMsigDriver): DriverDescriptor =
   ## Two rounds, as Monero's multisig has (the sync carries the signing nonces, then the
   ## signers sign): round 1, M members agree with their room keys; round 2, M signers each

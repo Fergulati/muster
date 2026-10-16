@@ -6,7 +6,7 @@
 ## reports the same address: a stagenet (or regtest) standard address whose keys hash the
 ## sorted wallet ids and the threshold. No cryptography: the order and the outcome only.
 
-import std/[json, strutils, sequtils, algorithm]
+import std/[json, strutils, sequtils, algorithm, tables, hashes]
 import ../../src/hashing/sha256
 import ../../src/crypto/curve25519
 import ../../src/monero/address
@@ -75,3 +75,90 @@ method exchange*(w: FakeMsigWallet, infos: seq[string]): MsigRound =
     w.ready = true
     return MsigRound(info: "", address: w.sharedAddress())
   MsigRound(info: $(w.done + 1) & ":" & w.id)
+
+proc walletAddressFake*(net: MoneroNetwork): string =
+  ## an address nobody in a test agreed to pay
+  encodeAddress(net, makStandard, keyOf("mallory/spend"), keyOf("mallory/view"))
+
+# ── the spend half: a shared fake chain ─────────────────────────────────────────
+# A transaction set is hex of JSON {recipients, fee, change, signers}. The wallet that
+# builds it signs it; a wallet signs or builds only after importing M-1 others' sync data
+# from this sync round; a set is accepted on chain with M signatures; a wallet sees a
+# spend once it is in a block.
+type FakeXmrChain* = ref object
+  height*: int
+  included*: Table[string, int]     ## txid → block height
+  sets*: seq[string]                ## every set submitted
+
+proc newFakeXmrChain*(): FakeXmrChain = FakeXmrChain(included: initTable[string, int]())
+proc mine*(c: FakeXmrChain, n = 1) = c.height += n
+
+var fakeChain* = newFakeXmrChain()   ## the one chain every fake wallet of a test spends on
+var fakeChange* = 77'u64             ## the change a built spend returns to the wallet
+
+proc hexStr(s: string): string =
+  const d = "0123456789abcdef"
+  for c in s: (result.add d[ord(c) shr 4]; result.add d[ord(c) and 0x0f])
+proc unhexStr(h: string): string =
+  for i in countup(0, h.len - 2, 2): result.add char(parseHexInt(h[i .. i + 1]))
+
+type FakeSpendWallet* = ref object of FakeMsigWallet
+  imported*: int                    ## others' sync data imported this round
+  exports*: int
+  fee*: uint64
+  tamper*: string                   ## "" honest; "amount" / "recipient" / "fee" builds another spend
+
+proc newFakeSpendWallet*(id: string, net = xmrStagenet): FakeSpendWallet =
+  FakeSpendWallet(id: id, net: net, exchanges: 2, fee: 400)
+
+method refresh*(w: FakeSpendWallet) = discard
+method exportInfo*(w: FakeSpendWallet): string =
+  inc w.exports
+  w.imported = 0
+  "sync:" & w.id & ":" & $w.exports
+method importInfo*(w: FakeSpendWallet, infos: seq[string]): int =
+  for i in infos:
+    if not i.startsWith("sync:") or i.split(':')[1] == w.id:
+      raise newException(WalletError, "fake wallet " & w.id & ": not another wallet's sync data: " & i)
+  w.imported = infos.len
+  infos.len
+
+method transfer*(w: FakeSpendWallet, recipients: seq[(string, string)]): string =
+  if w.imported < w.k - 1: raise newException(WalletError, "fake wallet " & w.id & ": not synced")
+  var rs = recipients
+  case w.tamper
+  of "amount": rs[0][1] = $(parseBiggestUInt(rs[0][1]) + 1)
+  of "recipient": rs[0][0] = walletAddressFake(w.net)
+  else: discard
+  let fee = (if w.tamper == "fee": w.fee * 1000 else: w.fee)
+  hexStr($(%*{"recipients": rs.mapIt(%*[it[0], it[1]]), "fee": fee,
+               "change": [w.sharedAddress(), fakeChange], "signers": [w.id]}))
+
+method describe*(w: FakeSpendWallet, txset: string): JsonNode =
+  let j = parseJson(unhexStr(txset))
+  var rs = newJArray()
+  for r in j["recipients"]: rs.add %*{"address": r[0].getStr(), "amount": parseBiggestUInt(r[1].getStr())}
+  %*{"desc": [{"recipients": rs, "fee": j["fee"].getBiggestInt(),
+               "change_address": j["change"][0].getStr(), "change_amount": j["change"][1].getBiggestInt()}]}
+
+method sign*(w: FakeSpendWallet, txset: string): SignedSet =
+  if w.imported < w.k - 1: raise newException(WalletError, "fake wallet " & w.id & ": not synced")
+  let j = parseJson(unhexStr(txset))
+  if j["signers"].getElems().anyIt(it.getStr() == w.id):
+    raise newException(WalletError, "fake wallet " & w.id & ": already signed")
+  inc w.calls
+  j["signers"].add %w.id
+  SignedSet(txset: hexStr($j), txids: @["tx-" & $fakeChain.sets.len])
+
+method submit*(w: FakeSpendWallet, txset: string): seq[string] =
+  let j = parseJson(unhexStr(txset))
+  if j["signers"].len < w.k: raise newException(WalletError, "fake wallet " & w.id & ": not enough signers")
+  let txid = "tx" & $hash(txset).uint
+  if txid notin fakeChain.included:
+    fakeChain.sets.add txset
+    fakeChain.included[txid] = fakeChain.height + 1
+  @[txid]
+
+method confirmations*(w: FakeSpendWallet, txid: string): int =
+  if txid notin fakeChain.included or fakeChain.included[txid] > fakeChain.height: return -1
+  fakeChain.height - fakeChain.included[txid] + 1
