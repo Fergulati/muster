@@ -32,6 +32,7 @@ import ../drivers/btc_multisig   # Bitcoin accounts (exo-a50.2.3)
 import ../drivers/lez_multisig   # LEZ multisig accounts (exo-6cbe)
 import ../drivers/btc_frost      # FROST accounts: the ceremony's recovery data (Phase D)
 import ../drivers/lez_frost      # a FROST group's LEZ public account (exo-55e)
+import ../drivers/xmr_msig       # a Monero multisig, every member's wallet disclosing it (ADR-020)
 import ../lez/multisig as lezms
 import ../lez/multisig_chain
 import ../crypto/secp256k1
@@ -58,7 +59,12 @@ type
   ChainView* = tuple[known: bool, signers: seq[string], threshold: int, detail: string]
     ## what the host read from the chain for an account; known=false = could not read
 
-proc accountId*(chain, address: string): string = chain & ":" & address.toLowerAscii()
+proc normAddress*(chain, address: string): string =
+  ## An address as the room keys it: lowercase, except on a chain whose addresses are
+  ## case-sensitive (Monero's base58, ADR-020), where lowercasing would make another string.
+  if chain.startsWith("monero:"): address else: address.toLowerAscii()
+
+proc accountId*(chain, address: string): string = chain & ":" & normAddress(chain, address)
 
 proc splitAccountId*(id: string): tuple[chain, address: string] =
   ## CAIP-10 → (CAIP-2 chain, address): the address is after the LAST ':'.
@@ -66,7 +72,7 @@ proc splitAccountId*(id: string): tuple[chain, address: string] =
   if i < 0: ("", id) else: (id[0 ..< i], id[i+1 .. ^1])
 
 proc disclosureJson(a: RoomAccount): JsonNode =
-  result = %*{"family": a.family, "chain": a.chain, "address": a.address.toLowerAscii(),
+  result = %*{"family": a.family, "chain": a.chain, "address": normAddress(a.chain, a.address),
               "label": a.label, "signers": a.signers.mapIt(it.toLowerAscii()), "threshold": a.threshold}
   if a.config.len > 0: result["config"] = %a.config   # only when present: older disclosures keep their bytes
 
@@ -90,7 +96,7 @@ proc reduceAccounts*(events: seq[Event]): seq[RoomAccount] =
     try:
       let j = parseJson(e.value)
       d = RoomAccount(family: j{"family"}.getStr(), chain: j{"chain"}.getStr(),
-                      address: j{"address"}.getStr().toLowerAscii(), label: j{"label"}.getStr(),
+                      address: normAddress(j{"chain"}.getStr(), j{"address"}.getStr()), label: j{"label"}.getStr(),
                       threshold: j{"threshold"}.getInt(), config: j{"config"}.getStr())
       if j.hasKey("signers") and j["signers"].kind == JArray:
         for s in j["signers"]: d.signers.add s.getStr().toLowerAscii()
@@ -140,9 +146,21 @@ proc evmChainId*(chain: string): (bool, uint64) =
   try: (true, uint64(parseBiggestUInt(chain[7 .. ^1])))
   except ValueError: (false, 0'u64)
 
+proc xmrMsigAccountOf*(a: RoomAccount): tuple[ok: bool, account: XmrMsigAccount, detail: string] =
+  ## The account a room may act from: a monero.multisig-coordinated disclosure every one
+  ## of its members made, with one config. One member's word is not the wallet.
+  if a.family != XmrMsigFamily: return (false, XmrMsigAccount(), "not a Monero multisig account")
+  if a.conflict: return (false, XmrMsigAccount(), "members disclosed it differently")
+  if a.signers.len < 2 or a.threshold < 2 or a.threshold > a.signers.len:
+    return (false, XmrMsigAccount(), "not an M of N")
+  let missing = a.signers.filterIt(it notin a.disclosedBy)
+  if missing.len > 0:
+    return (false, XmrMsigAccount(), $missing.len & " of its members have not disclosed it from their wallets")
+  (true, XmrMsigAccount(chain: a.chain, address: a.address, k: a.threshold, members: a.signers), "")
+
 proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
                       roomBuild: proc(kind: string): Driver,
-                      delegatecallAllow: seq[Address] = @[]): Driver =
+                      delegatecallAllow: seq[Address] = @[], xmrAllowRegtest = false): Driver =
   ## Resolve an intent's policy against the room's disclosed accounts. A room kind is
   ## built by the host (`roomBuild`, its roster wiring) from its bare kind, a
   ## chain-qualified kind (a split, "<kind>@<CAIP-2>") from its whole policy; an
@@ -203,6 +221,12 @@ proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
     let (ok, acct, _) = lezFrostAccountOfDisclosure(a.chain, a.address, rec)
     if not ok: return newUnsupportedDriver(policy)
     newLezFrostDriver(acct)
+  of "xmr-msig":
+    # a Monero multisig (ADR-020): no observer can re-derive its address, so the room acts
+    # from it only once every member's own wallet disclosed the same one
+    let (ok, acct, _) = xmrMsigAccountOf(a)
+    if not ok: return newUnsupportedDriver(policy)
+    newXmrMsigDriver(acct, allowRegtest = xmrAllowRegtest)   # a test's private chain only
   else: newUnsupportedDriver(policy)
 
 proc accountsJson*(accounts: seq[RoomAccount]): JsonNode =

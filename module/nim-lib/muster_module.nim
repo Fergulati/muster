@@ -39,6 +39,9 @@ import ../src/coordination/authorship # the room's authentic view; author-bearin
 import ../src/coordination/intents     # intent lifecycle = reduce(log) (the multi-party fold)
 import ../src/coordination/live        # the live propose/contribute path, driveable in-process (exo-ef1)
 import ../src/coordination/accounts    # accounts disclosed by members into the room (exo-a50.1.3)
+import ../src/coordination/xmr_msig_setup   # a Monero multisig set up over the room (ADR-020 S2)
+import ../src/drivers/xmr_msig        # monero.multisig-coordinated (ADR-020)
+import ../src/wallet/xmr_msig_wallet  # the member's own monero-wallet-rpc
 import ../src/settlement/settlement     # the settlement seam: chosen by profile, through the adapter (exo-a50.1.5)
 import ../src/drivers/btc_multisig     # Bitcoin multisig accounts (exo-a50.2.3)
 import ../src/drivers/lez_multisig     # the LEZ multisig vote locus (exo-a50.3)
@@ -241,6 +244,9 @@ proc roomDriver(kind: string): Driver =
   of "invoke":    newInvokeDriver(roster, min(2, n))   # generic module-action (P-D2); action in the effect
   else: newUnsupportedDriver(kind)
 
+let gXmrAllowRegtest = getEnv("MUSTER_XMR_ALLOW_REGTEST") == "1"
+  ## a private regtest chain for a Monero multisig: a developer's local test only, never a setting
+
 proc driverForKind(kind: string): Driver =
   ## Resolve an intent's POLICY to its driver (coordination/accounts.driverForPolicy).
   ## A room kind is built from the roster (roomDriver). An account-bound kind — "safe",
@@ -250,7 +256,7 @@ proc driverForKind(kind: string): Driver =
   ## never this instance's own key injected in (exo-45e K3) and never a module-global
   ## Safe: a bare "safe", an undisclosed account, or a kind not on the one list
   ## (drivers/kinds.nim) is UNSUPPORTED (exo-a50.1.2, exo-a50.1.3).
-  driverForPolicy(kind, roomAccounts(), roomDriver, delegatecallAllow())
+  driverForPolicy(kind, roomAccounts(), roomDriver, delegatecallAllow(), gXmrAllowRegtest)
 
 let driverFor: DriverFor = proc(kind: string): Driver = driverForKind(kind)
   ## The per-intent driver resolver the folds take: each intent's own policy → its driver.
@@ -271,6 +277,9 @@ var gRelayer = "self"
 # own setting (the runner, anvil); "auto" = the platform when it offers a chain, else the URL.
 var gEvmChains = getEnv("MUSTER_EVM_CHAINS", "auto")
 var gBtcRpc = getEnv("MUSTER_BTC_RPC", "")   ## the user's Bitcoin node, "http://user:pass@host:port"; "" = none (exo-a50.2.6)
+var gXmrMsigRpc = getEnv("MUSTER_XMR_MSIG_RPC", "")
+  ## the member's own monero-wallet-rpc for a Monero multisig (ADR-020): it holds their key
+  ## and the multisig state; "" = none. Started with --disable-rpc-login on 127.0.0.1 (v1).
 # The LEZ multisig, live (exo-3c9): the user's sequencer (untrusted, invariant 8), the zone
 # it serves, and the multisig program. By default: the public testnet (the LEZ wallet's
 # own default), and the lez-multisig build deployed there (logos-co/lez-multisig#45).
@@ -353,6 +362,7 @@ proc loadSettingsFile() =
       if j.hasKey("relayer"): gRelayer = j["relayer"].getStr("self")
       if j.hasKey("evmChains"): gEvmChains = j["evmChains"].getStr("auto")
       if j.hasKey("btcRpc"): gBtcRpc = j["btcRpc"].getStr()
+      if j.hasKey("xmrMsigRpc"): gXmrMsigRpc = j["xmrMsigRpc"].getStr()
       if j.hasKey("lezRpc"): gLezRpc = j["lezRpc"].getStr()
       if j.hasKey("lezChain"): gLezChain = j["lezChain"].getStr()
       if j.hasKey("lezMultisigProgram"): gLezProgram = j["lezMultisigProgram"].getStr()
@@ -389,7 +399,7 @@ proc saveSettingsFile() =
     writeFile(settingsPath(), $(%*{"rpc": gRpcUrl, "delivery": gDeliveryConfig,
                                    # only a level the user chose: one from MUSTER_MIX stays the runner's
                                    "mix": (if gMixSaved: $gMix else: ""), "relayer": gRelayer,
-                                   "evmChains": gEvmChains, "btcRpc": gBtcRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
+                                   "evmChains": gEvmChains, "btcRpc": gBtcRpc, "xmrMsigRpc": gXmrMsigRpc, "lezRpc": gLezRpc, "lezChain": gLezChain,
                                    "lezMultisigProgram": gLezProgram,
                                    "keystoreBackend": gKeystoreBackend,
                                    "keystoreAccount": gKeystoreAccount,
@@ -1248,6 +1258,8 @@ var gFrostJoined: seq[(CoordinationSession, string)]   ## (room, ceremony id) th
 var gFrostLast = initTable[string, string]()           ## ceremony id → this member's last step outcome
 var gFrostAuto: seq[string]                            ## intents this member approved (round 2 follows)
 var gFrostPumpAt = 0.0
+
+proc xmrMsigPump()   # a Monero multisig setup's next step (below, ADR-020 S2)
 
 proc frostPump() =
   if gSession == nil or epochTime() - gFrostPumpAt < 2.0: return
@@ -2669,6 +2681,7 @@ proc musterCoordinateIntents(): string =
   gSession.poll()
   lezPump()                            # complete any LEZ step the chain has since included
   frostPump()                          # advance joined FROST ceremonies and round 2
+  xmrMsigPump()                        # advance joined Monero multisig setups (ADR-020)
   roundsPump()                         # a multi-round room decision's next round, approved once (exo-720)
   splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
   keystorePump()                       # publish what a human approved in keystore_module (exo-149.2)
@@ -3993,6 +4006,87 @@ proc musterFrostCeremonies(): string =
                "address": address, "last": gFrostLast.getOrDefault(cid, "")}
   $arr
 
+# A Monero multisig set up over the room (ADR-020 S2): a joined setup advances on the
+# coordinate_intents tick through the member's own wallet (setting xmr-msig-rpc).
+var gXmrJoined: seq[(CoordinationSession, string)]   ## (room, ceremony id) this member joined
+var gXmrLast = initTable[string, string]()           ## ceremony id → this member's last step outcome
+var gXmrPumpAt = 0.0
+
+proc xmrMsigPump() =
+  if gSession == nil or gXmrJoined.len == 0 or epochTime() - gXmrPumpAt < 2.0: return
+  gXmrPumpAt = epochTime()
+  let ks = moduleKeystore()
+  var keep: seq[(CoordinationSession, string)]
+  for (s, cid) in gXmrJoined:
+    if s != gSession:
+      keep.add (s, cid)
+      continue
+    if gXmrMsigRpc.len == 0:
+      gXmrLast[cid] = "waiting: no Monero multisig wallet (Settings → xmr-msig-rpc)"
+      keep.add (s, cid)
+      continue
+    let r = xmrSetupStep(s, ks, newRpcXmrMsigWallet(gXmrMsigRpc), cid)
+    gXmrLast[cid] = r
+    if not (r.startsWith("done") or r.startsWith("refused") or r == "not-a-participant"): keep.add (s, cid)
+  gXmrJoined = keep
+
+proc musterXmrMsigSetupOpen(ceremonyId, chain, k, membersJson: string): string =
+  ## Open a Monero multisig setup in the joined room and join it.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  let cid = ceremonyId.strip()
+  var ki: int
+  try: ki = parseInt(k.strip())
+  except ValueError: return $(%*{"error": "bad-threshold", "detail": "M is a whole number"})
+  let ch = (if chain.strip().len > 0: chain.strip() else: xmraddr.caip2Of(xmrStagenet))
+  var members: seq[string]
+  if membersJson.strip().len == 0:
+    for m in gSession.members(): members.add toHex(m.toBytes()).toLowerAscii()
+  else:
+    try:
+      for m in parseJson(membersJson).getElems(): members.add m.getStr().toLowerAscii()
+    except CatchableError: return $(%*{"error": "bad-members", "detail": "members is a JSON array of room identities"})
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  if me notin members: return $(%*{"error": "not-a-member", "detail": "the one who opens a setup takes part in it"})
+  gSession.poll()
+  let why = xmrSetupOpen(gSession, cid, ch, ki, members, gXmrAllowRegtest)
+  if why.len > 0: return $(%*{"error": "refused", "detail": why})
+  discard xmrSetupJoin(gSession, moduleKeystore(), cid)
+  gXmrJoined.add (gSession, cid)
+  $(%*{"ceremony": cid, "chain": ch, "k": ki, "n": members.len})
+
+proc musterXmrMsigSetupJoin(ceremonyId: string): string =
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  gSession.poll()
+  let cid = ceremonyId.strip()
+  let why = xmrSetupJoin(gSession, moduleKeystore(), cid)
+  if why.len > 0: return $(%*{"error": "refused", "detail": why})
+  if not gXmrJoined.anyIt(it[0] == gSession and it[1] == cid): gXmrJoined.add (gSession, cid)
+  $(%*{"ceremony": cid})
+
+proc musterXmrMsigSetups(): string =
+  if gSession == nil: return "[]"
+  gSession.poll()
+  xmrMsigPump()
+  let events = gSession.roomEvents()
+  let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
+  var arr = xmrSetupsJson(events, me)
+  for o in arr.mitems:
+    let cid = o["ceremony"].getStr()
+    var address = ""
+    var disclosedBy = newJArray()
+    for a in roomAccounts():
+      if a.family == XmrMsigFamily:
+        try:
+          if parseJson(a.config)["ceremony"].getStr() == cid:
+            address = a.address
+            disclosedBy = %a.disclosedBy
+        except CatchableError: discard
+    o["address"] = %address
+    o["disclosedBy"] = disclosedBy
+    o["last"] = %gXmrLast.getOrDefault(cid, "")
+    o["wallet"] = %(gXmrMsigRpc.len > 0)
+  $arr
+
 proc musterLezPending(): string =
   ## The LEZ steps sent and not yet included, and the last outcomes.
   lezPump()
@@ -4657,6 +4751,7 @@ proc musterSettings(): string =
     "evmChains": gEvmChains,                 # where EVM chains are read (exo-d4d.3)
     "evmPlatform": evmPlatform(),            # …and whether that is eth_rpc_module right now
     "btcRpc": gBtcRpc, "btcRpcMasked": redactUrl(gBtcRpc),
+    "xmrMsigRpc": gXmrMsigRpc, "xmrMsigRpcMasked": redactUrl(gXmrMsigRpc),
     "lez": {"rpc": gLezRpc, "rpcMasked": redactUrl(gLezRpc), "chain": gLezChain,
             "multisigProgram": gLezProgram},
     "delivery": gDeliveryConfig,
@@ -4700,6 +4795,12 @@ proc musterSetSetting(key, value: string): string =
     if v.len > 0 and not (v.startsWith("http://") or v.startsWith("https://")):
       return $(%*{"error": "btc-rpc must be an http(s) URL, e.g. http://user:pass@127.0.0.1:8332"})
     gBtcRpc = v
+  of "xmr-msig-rpc":
+    # the member's own monero-wallet-rpc for a Monero multisig (ADR-020); "" clears it
+    let v = value.strip()
+    if v.len > 0 and not (v.startsWith("http://") or v.startsWith("https://")):
+      return $(%*{"error": "xmr-msig-rpc must be an http(s) URL, e.g. http://127.0.0.1:38083"})
+    gXmrMsigRpc = v
   of "lez-rpc":
     # the user's LEZ sequencer (exo-3c9); "" restores the public testnet
     let v = value.strip()
