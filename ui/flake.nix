@@ -80,6 +80,23 @@
               '';
           }) d.packages;
         };
+      # storage_module as this builder sees it (exo-4d0). The runner bundles the real module
+      # (its packages.<sys>.lgx, untouched), but this builder's code generator parses every
+      # dependency's contract, and storage_module 3.0.2's declares `importFiles(path: tstr)`
+      # with no return type, which this builder's LIDL parser (basecamp's, ADR-013) refuses.
+      # muster_ui never calls storage_module, so its contract is handed over without that
+      # one method; muster_module calls it over raw lp_* (src/storage/storage_lp.nim).
+      storageForUi =
+        let d = inputs.logos-storage-module;
+        in d // {
+          packages = builtins.mapAttrs (system: ps: ps // {
+            lidl = (import logos-module-builder.inputs.nixpkgs { inherit system; }).runCommand
+              "storage_module-lidl-for-muster-ui" { } ''
+                mkdir -p $out
+                sed '/^[[:space:]]*method importFiles(/d' ${ps.lidl}/storage_module.lidl > $out/storage_module.lidl
+              '';
+          }) d.packages;
+        };
       # The RLN modules as this builder sees them (exo-eb6.3 R1). The runner's host predates
       # `optional_dependencies`, the way delivery v0.3.0 declares them, so it would never
       # load them for delivery; muster declares them itself instead. Each is delivery's
@@ -112,7 +129,7 @@
           fee_module = inputs.logos-evm-fee-module;
           liblogos_rln_module = rlnModule "liblogos_rln_module" "logos-rln-module/rust-lib/liblogos_rln_module.lidl";
           liblogos_lez_rln_module = rlnModule "liblogos_lez_rln_module" "logos-lez-rln-module/rust-lib/liblogos_lez_rln_module.lidl";
-          storage_module = inputs.logos-storage-module;
+          storage_module = storageForUi;
         } // inputs;
       };
 
