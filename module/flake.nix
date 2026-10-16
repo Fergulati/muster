@@ -97,6 +97,12 @@
     # backend's, this builder ignores the key (muster calls it over raw lp_*), so the pin
     # records the contract muster targets.
     logos-modules-state-module.url = "github:logos-co/logos-modules-state-module/c70da49aa56e48f867d50b9ff58679749f09dbcf";
+    # Logos Storage (exo-4d0, FileShare): muster calls storage_module over lp_* to upload and
+    # fetch a room's sealed blobs (src/storage/). OPTIONAL: a room works without it, and the
+    # FileShare panel names what is missing. Pinned to 3.0.2 (7548f41), the storage_module
+    # Basecamp 0.3.2 bundles; mapped to the module name below. Like the Monero backend's,
+    # this builder ignores optional_dependencies (muster calls it over raw lp_*).
+    logos-storage-module.url = "github:logos-co/logos-storage-module/7548f41ae189917d58c37f0fb6d3a2700b99f59b";
   };
 
   outputs = inputs@{ self, logos-module-builder, ... }:
@@ -131,7 +137,8 @@
                          eth_rpc_module = inputs.logos-evm-eth-rpc-module;
                          tx_sender_module = inputs.logos-evm-tx-sender-module;
                          monero_wallet_backend = inputs.logos-monero-wallet-backend;
-                         modules_state = inputs.logos-modules-state-module; } // inputs;
+                         modules_state = inputs.logos-modules-state-module;
+                         storage_module = inputs.logos-storage-module; } // inputs;
         }).packages.${system});
     };
 }

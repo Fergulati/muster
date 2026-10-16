@@ -54,6 +54,11 @@
     # against; this pins only their LIDL contracts, at the same rev (logos-rln-modules
     # 25357cf), for the code generator.
     logos-rln-modules = { url = "github:logos-co/logos-rln-modules/25357cfd877ba18d6e0880564b8fd7ba0abf2d70"; flake = false; };
+    # Logos Storage (exo-4d0, FileShare): muster_module uploads and fetches a room's sealed
+    # blobs through storage_module over lp_*, so it rides the runner's module set. Basecamp
+    # 0.3.2 bundles the same 3.0.2 (7548f41). Same pin as module/flake.nix; muster_ui does
+    # not call it.
+    logos-storage-module.url = "github:logos-co/logos-storage-module/7548f41ae189917d58c37f0fb6d3a2700b99f59b";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -107,6 +112,7 @@
           fee_module = inputs.logos-evm-fee-module;
           liblogos_rln_module = rlnModule "liblogos_rln_module" "logos-rln-module/rust-lib/liblogos_rln_module.lidl";
           liblogos_lez_rln_module = rlnModule "liblogos_lez_rln_module" "logos-lez-rln-module/rust-lib/liblogos_lez_rln_module.lidl";
+          storage_module = inputs.logos-storage-module;
         } // inputs;
       };
 
