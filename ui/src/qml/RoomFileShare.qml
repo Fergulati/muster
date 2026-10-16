@@ -12,6 +12,9 @@ import Logos.Controls
 ColumnLayout {
     id: fs
     required property var backend
+    // the Room: it raises Basecamp's packages.install (packageInstallRequested) and hands the
+    // answers back in packageRequests, as for a card's install remedy (exo-dcc.10)
+    property var room: null
     spacing: Theme.spacing.medium
 
     readonly property var state: {
@@ -24,6 +27,20 @@ ColumnLayout {
         try { return JSON.parse(r); } catch (e) { return {}; }
     }
     readonly property bool ready: fs.state.ready === true
+    readonly property string readiness: String(fs.state.state || "")
+    readonly property string install: String(fs.state.install || "")
+    readonly property var installReq: (fs.room && fs.install.length > 0 && fs.room.packageRequests)
+                                      ? (fs.room.packageRequests[fs.install] || null) : null
+    function installNote() {
+        var r = fs.installReq, pkg = fs.install;
+        if (!r) return "";
+        if (r.state === "asking") return qsTr("Asking Package Manager to open %1…").arg(pkg);
+        if (r.state === "open") return qsTr("Package Manager is open on %1. Confirm the install there; this tab updates once it is installed.").arg(pkg);
+        if (r.state === "unavailable") return qsTr("Install %1 from Basecamp's Package Manager.").arg(pkg);
+        if (r.state === "failed") return qsTr("%1 was not found in your catalogues. Check the catalogues in Package Manager.").arg(pkg);
+        if (r.state === "cancelled") return qsTr("The install request was cancelled.");
+        return qsTr("Package Manager did not answer (%1). Install %2 from Basecamp's Package Manager.").arg(String(r.error || "")).arg(pkg);
+    }
     readonly property var files: (fs.state.files || []).filter(function (f) { return !f.retracted; })
     readonly property var ops: fs.state.ops || []
 
@@ -60,11 +77,23 @@ ColumnLayout {
     }
 
     InlineNotice {
+        objectName: "fileShareNotReady"
         Layout.fillWidth: true
         visible: !fs.ready
-        tone: "waiting"
-        title: qsTr("FileShare is not ready")
+        tone: fs.readiness === "failed" ? "error" : fs.readiness === "not-installed" ? "needs" : "waiting"
+        title: fs.readiness === "not-installed" ? qsTr("Logos Storage is not installed")
+             : fs.readiness === "failed" ? qsTr("Logos Storage is not working")
+             : fs.readiness === "not-running" ? qsTr("Logos Storage is not running yet")
+             : qsTr("FileShare is getting ready")
         text: String(fs.state.note || qsTr("Checking for a storage node…"))
+              + (fs.installNote().length > 0 ? "\n" + fs.installNote() : "")
+        ActionButton {
+            objectName: "fileShareInstall"
+            visible: fs.install.length > 0 && fs.room !== null
+            enabled: !fs.installReq || fs.installReq.state !== "asking"
+            text: qsTr("Install Logos Storage")
+            onClicked: fs.room.packageInstallRequested(fs.install)
+        }
     }
 
     // ── share ───────────────────────────────────────────────────────────────

@@ -150,6 +150,7 @@ Rectangle {
                     objectName: "roomFileShare"
                     width: parent.width
                     backend: details.room.backend
+                    room: details.room
                 }
             }
 
