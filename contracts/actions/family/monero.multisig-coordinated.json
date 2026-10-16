@@ -192,7 +192,7 @@
       "family": "monero.multisig-coordinated",
       "kind": "xmr-msig",
       "status": "partial",
-      "partialBecause": "ADR-020 S1: the driver (effect, refusals, two rounds, the describe-check) is built and conforms, and a spend ran on regtest; the room does not yet carry the sync, the transaction set or the signing rounds (S3), and no UI offers it (S4).",
+      "partialBecause": "ADR-020 S3: the spend runs over the room end to end — agree, sync, build, each signer's describe-check before its wallet signs, submit, final at 10 confirmations, one spend per wallet in flight — held on scripted wallets and with real wallets on regtest; no UI offers it yet (S4), and it has not run on stagenet.",
       "summary": "The room agrees the payment first: recipients and amounts. Before the spend, the members' wallets re-sync partial key images (export_multisig_info / import_multisig_info), the room carrying the blobs. One member's wallet builds the transaction set (transfer); the room carries it; each signer's own wallet runs describe_transfer on it and signs (sign_multisig) only if its recipients and amounts are the agreed ones; any wallet submits (submit_multisig). One spend at a time: the scheme needs a fresh sync after each.",
       "generated": "xmr-msig/spend",
       "effect": {
@@ -230,7 +230,8 @@
           ],
           "evidence": [
             "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_spend_test.nim",
+            "module/tests/xmr_msig_spend_regtest_e2e.nim"
           ]
         },
         {
@@ -246,7 +247,8 @@
           ],
           "evidence": [
             "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_spend_test.nim",
+            "module/tests/xmr_msig_spend_regtest_e2e.nim"
           ]
         },
         {
@@ -262,7 +264,8 @@
           ],
           "evidence": [
             "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_spend_test.nim",
+            "module/tests/xmr_msig_spend_regtest_e2e.nim"
           ]
         },
         {
@@ -273,7 +276,8 @@
           "reveals": [],
           "evidence": [
             "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_spend_test.nim",
+            "module/tests/xmr_msig_spend_regtest_e2e.nim"
           ]
         },
         {
@@ -284,7 +288,8 @@
           "reveals": [],
           "evidence": [
             "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_spend_test.nim",
+            "module/tests/xmr_msig_spend_regtest_e2e.nim"
           ]
         }
       ],
@@ -294,7 +299,8 @@
           "why": "invariant 1, done by the member's own wallet: Muster cannot decode a Monero transaction set",
           "evidence": [
             "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_spend_test.nim",
+            "module/tests/xmr_msig_spend_regtest_e2e.nim"
           ]
         },
         {
@@ -302,7 +308,8 @@
           "why": "the scheme refuses stale multisig data ('This signature was made with stale data')",
           "evidence": [
             "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_spend_test.nim",
+            "module/tests/xmr_msig_spend_regtest_e2e.nim"
           ]
         }
       ],
@@ -356,11 +363,25 @@
           "kind": "test",
           "path": "module/tests/xmr_msig_regtest_e2e.nim",
           "what": "real monero-wallet-rpc on regtest: a 2-of-3 set up, the describe-check passing the agreed spend and refusing others, signed, submitted, 10 confirmations"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_msig_spend_test.nim",
+          "what": "the spend over the room with scripted wallets: nothing before M agreed, the signer set, the builder's and each co-signer's describe-check, M signatures on chain, final at 10, one in flight"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_msig_spend_regtest_e2e.nim",
+          "what": "the spend over the room with three real monero-wallet-rpc wallets on regtest: set up, funded, agreed, signed, submitted, final at 10"
         }
       ],
       "unverified": [
         "describe_transfer on monero-multisig-gui's transaction sets, and on a deliberately tampered set (wallet-rpc v0.18.5.1's own sets verified on regtest, docs/labbook/monero-multisig-describe-transfer.md)",
         "any run: nothing is built (docs/design/monero-multisig-coordination.md)"
+      ],
+      "hosted": [
+        "coordinate_propose_xmr_msig",
+        "xmr_msig_spends"
       ]
     }
   ]

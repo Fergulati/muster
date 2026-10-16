@@ -17,6 +17,8 @@
 ##   intent/<id>/proposer/<who>           who proposed the intent (exo-770)
 ##   xmsig/<cid>/join/<who>               a Monero multisig setup join (exo-dcc.34.2)
 ##   xmsig/<cid>/kex/<r>/<who>            that member's wallet's round r of the key exchange
+##   intent/<id>/xsync|xtx/<who>/<i>/<n> a Monero multisig spend's sync data or transaction
+##                                        set, from that member's wallet (exo-dcc.34.3)
 ##
 ## Each of those carries `authorSig`: the named author's Ed25519 signature (the
 ## encryption identity's signing half, F-14) over a domain-separated hash-input record
@@ -118,6 +120,7 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
     if p[0] == "intent" and p[2] == "proposer": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "xmsig" and p[2] == "join": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "xmsig" and p[2] == "kex": return (true, (if p.len >= 5: p[4] else: ""))
+    if p[0] == "intent" and p[2] in ["xsync", "xtx"]: return (true, (if p.len >= 4: p[3] else: ""))
   (false, "")
 
 proc claimOf(room: string, e: Event, author: string, body: JsonNode): HashInput =

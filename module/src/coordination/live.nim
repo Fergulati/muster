@@ -392,7 +392,8 @@ proc liveNextRounds*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor,
       declinedByMe.add p[1]
   for id, it in reduceIntents(events, driverFor):
     if it.state != lsCollecting or it.collection.round <= 1 or id in declinedByMe: continue
-    if driverFor(intentPolicyOf(events, id)).frostGroupOf().ok: continue
+    let nd = driverFor(intentPolicyOf(events, id))
+    if nd.frostGroupOf().ok or not nd.laterRoundsInApp(): continue
     var approvedBefore, approvedNow = false
     for g in approvalGrades(events, driverFor, id):
       if g.grade == agRejected or bareNames([g.who])[0] notin mine: continue

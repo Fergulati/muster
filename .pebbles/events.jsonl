@@ -2599,3 +2599,5 @@
 {"type":"comment","timestamp":"2026-10-16T14:37:11.365365367Z","issue_id":"exo-dcc.34.1","payload":{"body":"Merged #317: driver, wallet seam, regtest e2e; kind pending until S2-S4."}}
 {"type":"close","timestamp":"2026-10-16T14:56:47.131001188Z","issue_id":"exo-dcc.34.2","payload":{}}
 {"type":"comment","timestamp":"2026-10-16T14:56:47.379925772Z","issue_id":"exo-dcc.34.2","payload":{"body":"Setup over the room: coordination/xmr_msig_setup.nim, hosted xmr_msig_setup_open/_join/setups + pump, setting xmr-msig-rpc; real-wallet regtest e2e green."}}
+{"type":"close","timestamp":"2026-10-16T15:16:32.276912549Z","issue_id":"exo-dcc.34.3","payload":{}}
+{"type":"comment","timestamp":"2026-10-16T15:16:32.528910577Z","issue_id":"exo-dcc.34.3","payload":{"body":"Spend over the room: coordination/xmr_msig_spend.nim; hosted coordinate_propose_xmr_msig + xmr_msig_spends + pump; real-wallet regtest e2e: agreed→synced→built→checked→signed→submitted→final."}}
