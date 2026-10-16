@@ -37,6 +37,8 @@ else: c["no-bootstrap-node"] = True
 print(json.dumps(c))
 EOF
 }
+# the backend's lines reach the log Qt-quoted (\"key\":\"value\"): read them unquoted
+lg() { sed 's/\\"/"/g' "$1" 2>/dev/null; }
 mkdir -p "$D/A-home" "$D/B-home" "$D/B-downloads"
 head -c 3145728 /dev/urandom > "$D/report-q3.bin"
 echo "topic: $TOPIC · file: 3 MB · logs: $D"
@@ -48,11 +50,11 @@ ui_launch "$D/A" "$D/A.log" HOME="$D/A-home" QT_FORCE_STDERR_LOGGING=1 \
 echo "waiting for A's storage node (its signed peer record)..."
 SPR=""
 for i in $(seq 1 90); do
-  SPR=$(grep -a 'FILESHARE-NODE' "$D/A.log" 2>/dev/null | grep -ao '"spr":"[^"]*"' | tail -1 | sed 's/"spr":"//;s/"$//')
+  SPR=$(lg "$D/A.log" | grep -a 'FILESHARE-NODE' | grep -ao '"spr":"spr:[A-Za-z0-9_-]*' | tail -1 | sed 's/"spr":"//')
   [ -n "$SPR" ] && break
   sleep 1
 done
-[ -n "$SPR" ] || { echo "FAIL: A's storage node never reported an SPR — logs kept in $D"; grep -a 'FILESHARE-NODE' "$D/A.log" | tail -2; exit 1; }
+[ -n "$SPR" ] || { echo "FAIL: A's storage node never reported an SPR — logs kept in $D"; lg "$D/A.log" | grep -a 'FILESHARE-NODE' | tail -1 | cut -c1-400; exit 1; }
 echo "A's storage node is up after ~${i}s"
 
 CFG_B=$(ui_peer_config "$D/A.log") || exit 1
@@ -68,16 +70,16 @@ ok=0
 for i in $(seq 1 240); do
   sleep 1
   if [ -f "$D/B-downloads/report-q3.bin" ] && cmp -s "$D/report-q3.bin" "$D/B-downloads/report-q3.bin" \
-     && grep -a 'FILESHARE {' "$D/A.log" | tail -1 | grep -q '"self":false'; then ok=1; break; fi
+     && lg "$D/A.log" | grep -a 'FILESHARE {' | tail -1 | grep -q '"self":false'; then ok=1; break; fi
 done
 ui_cleanup
-echo "A shared: $(grep -ac '"kind":"share","state":"done"' "$D/A.log" | sed 's/^0$/no/;s/^[1-9].*/yes/') · B's last op: $(grep -a 'FILESHARE {' "$D/B.log" | tail -1 | grep -ao '"kind":"fetch","state":"[a-z]*","error":"[^"]*"' | tail -1)"
+echo "A shared: $(lg "$D/A.log" | grep -ac '"kind":"share","state":"done"' | sed 's/^0$/no/;s/^[1-9].*/yes/') · B's last op: $(lg "$D/B.log" | grep -a 'FILESHARE {' | tail -1 | grep -ao '"kind":"fetch","state":"[a-z]*","error":"[^"]*"' | tail -1)"
 others=$(ls "$D/B-downloads" | grep -vx 'report-q3.bin' | wc -l)
 if [ "$ok" = 1 ] && [ "$others" = 0 ]; then
   echo "SUCCESS: B fetched A's file byte-identical through Logos Storage after ~${i}s, and seeds it."
   [ "${KEEP_LOGS:-0}" = 1 ] || rm -rf "$D"
 else
   echo "FAIL: logs kept in $D"
-  grep -a 'FILESHARE {' "$D/B.log" | tail -1 | cut -c1-600
+  lg "$D/B.log" | grep -a 'FILESHARE {' | tail -1 | cut -c1-800
   exit 1
 fi

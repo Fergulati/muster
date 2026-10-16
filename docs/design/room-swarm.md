@@ -1,7 +1,9 @@
-# The room swarm: a private file swarm on Logos Storage, with the room as its tracker
+# FileShare — the room swarm: a private file swarm on Logos Storage, with the room as its tracker
 
-Status: **planned 2026-10-15; S0 answered, and S2, S3 and the in-process half of S1 and S4
-built the same day** (§7). Epic `exo-4d0`: S0–S7 are `exo-4d0.1`–`.8` in the order of §7,
+Status: **planned 2026-10-15. By 2026-10-16 S0, S2 and S3 are done, and FileShare runs end to
+end in the real runner**: two instances share a file through `storage_module` on a private
+storage network (`scripts/fileshare-self-test.sh`). Still open: the install remedy, the
+view on a display and in Basecamp, and a file picker (§7). Epic `exo-4d0`: S0–S7 are `exo-4d0.1`–`.8` in the order of §7,
 and the upstream asks are `exo-4d0.9`. `pb dep tree exo-4d0` shows live status.
 
 ## 1. Where this comes from
@@ -241,8 +243,11 @@ agreement). S3's spec goes through `discuss-issue` first.
   Basecamp 0.3.2; does `uploadChunk` carry binary intact; can a Nim module subscribe to
   `storageUploadDone` over `lp_*`. Labbook `docs/labbook/storage-from-muster.md`.
 - **S1 — The storage seam.** `BlobStore`, `LocalBlobStore`, `LpStorage`; optional
-  dependency, three-state readiness, install remedy. **Needs a runner rebuild** to bundle
-  `storage_module` (ask first: `make build` is memory-capped and froze a workstation once).
+  dependency, three-state readiness, install remedy. *Landed 2026-10-16:* the seam, the
+  stand-in, `LpStorage` (`storage_lp.nim` + the pure `storage_events.nim`), the optional
+  dependency, and `storage_module` 3.0.2 in the runner (its contract handed to the UI builder
+  without `importFiles`, which that builder's parser refuses). *Open:* readiness through
+  `module_registry` and Basecamp's install remedy; today the tab only says what is missing.
 - **S2 — Sealed blobs** (landed: `crypto/blob_seal.nim`, `blob_seal_test`). Round trip,
   tamper and truncation refusals; the check that an uploaded manifest names nothing moves
   to S1, which has a storage node. Padding is not built.
@@ -251,14 +256,18 @@ agreement). S3's spec goes through `discuss-issue` first.
   `derived-exo-4d0.4` with probes: the fold is order-free and idempotent; a seeder is listed
   only by their own signed announce; a forged announce is dropped; a later-epoch member
   holds no key to an earlier file; a digest mismatch refuses.
-- **S4 — Hosted surface.** `muster.lidl`: `swarm_share`, `swarm_files`, `swarm_fetch`,
-  `swarm_seed`, `swarm_status`; the pump; the disclosure rows and observers.
-  `swarm_local_test` over two `LocalBlobStore`s and `LocalTransport`.
-- **S5 — The Files panel** (a placeholder name, §9). In the room: share (file picker), the list (sharer, size,
-  seeders by name), Fetch / Private fetch / Seed, progress, a mismatch refusal; the
-  who-sees-what box from §5.5. `scripts/swarm-self-test.sh`: two runners offscreen, a
-  private storage network of their own, share → fetch → seed → a third fetches from the
-  second with the first gone. Then on display in Basecamp 0.3.2 against the bundled node.
+- **S4 — Hosted surface** (landed 2026-10-16). `muster.lidl`: `fileshare_status`,
+  `fileshare_share`, `fileshare_files`, `fileshare_fetch`, `fileshare_seed`,
+  `fileshare_retract`; one `SwarmNode` per room on the intents tick; the storage-peer and
+  storage-dht observers. `swarm_live_test` over `LocalBlobStore`s and `LocalTransport`.
+- **S5 — The FileShare tab.** In the room: share, the list (sharer, size, seeders by
+  name), Fetch / Fetch privately / Seed / Remove from list, progress, a refusal; the
+  who-sees-what box from §5.5. *Landed 2026-10-16:* the tab in the room details drawer (and
+  the header menu), both backends' slots, and `scripts/fileshare-self-test.sh`: two runners
+  offscreen on a private storage network, share → fetch byte-identical → seed, 3 of 3 runs
+  green (~13 s). *Open:* a native file picker (a path field for now), a look on a display,
+  a third instance fetching with the sharer gone (held in process by `swarm_live_test`
+  only), and Basecamp 0.3.2 against its bundled node.
 - **S6 — The lesson.** Walkthrough steps and claims-registry entries built from §4 and
   §5.5: what a private tracker's operator sees, what the room's infrastructure sees.
 - **S7 — Pledges (decide after S5).** "Keep this available until T" as an intent with a
@@ -285,17 +294,18 @@ agreement). S3's spec goes through `discuss-issue` first.
 
 ## 9. Decisions
 
-Decided 2026-10-15 by the operator:
+Decided by the operator:
 
-- **Seeding after a fetch is on by default.** A member can choose a private fetch instead
-  (§5.4 step 3): over Mix, nothing served afterwards, no seed event.
-- **Seed events carry the seeder's network addresses** for now. Storage's own privacy
-  features (Mix-routed serving, ask U1) come later and change the §5.5 rows when they do.
+- **The name is FileShare** (2026-10-16). The code keeps *swarm* for the mechanism; the
+  methods are `fileshare_*`.
+- **Seeding after a fetch is on by default** (2026-10-15). A member can choose a private
+  fetch instead (§5.4 step 3): over Mix, nothing served afterwards, no seed event.
+- **Seed events carry the seeder's network addresses** for now (2026-10-15). Storage's own
+  privacy features (Mix-routed serving, ask U1) come later and change the §5.5 rows when
+  they do.
 
 Still open:
 
-- **Feature name** in the UI. "Files" is a placeholder; the operator wants something
-  better. The code says *swarm* (the mechanism), so renaming the panel costs nothing.
 - **Storage network**: whatever the shared node is on, recorded per share and per seed
   event so a mismatch is shown, not guessed (proposed until U2). `network()` alone cannot
   say (S0 Q8): a node on a private network answers the default preset. The seed event's
