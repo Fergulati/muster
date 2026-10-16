@@ -163,7 +163,6 @@
         }
       ],
       "unverified": [
-        "the describe_transfer check against monero-multisig-gui's and monero-wallet-cli's transaction sets",
         "any run: nothing is built (docs/design/monero-multisig-coordination.md)"
       ]
     },
@@ -376,7 +375,7 @@
         }
       ],
       "unverified": [
-        "the describe_transfer check against monero-multisig-gui's and monero-wallet-cli's transaction sets",
+        "describe_transfer on monero-multisig-gui's transaction sets, and on a deliberately tampered set (wallet-rpc v0.18.5.1's own sets verified on regtest, docs/labbook/monero-multisig-describe-transfer.md)",
         "any run: nothing is built (docs/design/monero-multisig-coordination.md)"
       ]
     }

@@ -49,7 +49,7 @@ The on-chain scheme is the same as `monero.multisig`; only Muster's role differs
 
 ## 4. Open questions for the ADR
 
-1. Does `describe_transfer` on a part-signed `multisig_txset` report what the signers will sign? It needs checking against monero-wallet-cli and monero-multisig-gui on stagenet.
+1. ~~Does `describe_transfer` on a part-signed `multisig_txset` report what the signers will sign?~~ **Answered 2026-10-16: yes.** On a regtest 2-of-3 with monero-wallet-rpc v0.18.5.1, both co-signers' wallets reported exactly the agreed recipient, amount, fee and change, unsigned and signed, and the chain paid exactly that. From the source, a co-signer signs a transaction rebuilt from the same construction data `describe_transfer` reads (`docs/labbook/monero-multisig-describe-transfer.md`, `infra/monero/multisig-regtest.py`). Still untested: monero-multisig-gui's sets, and a deliberately tampered set.
 2. What file and blob sizes and timings does the room carry? The room is a store-backed log, and the sync blobs grow with the number of outputs.
 3. The members run their own wallet software, outside Basecamp, until the platform exposes multisig. Is that acceptable for the campaign?
 4. Does FCMP++ change the multisig steps enough to wait for it?
