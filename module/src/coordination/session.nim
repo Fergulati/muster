@@ -37,6 +37,7 @@ type
     sealedIn*: Table[string, int] ## event id → the earliest epoch whose key opened (or sealed) it here; log + keys, never position (exo-dde)
     authorChecked*: Table[string, bool]  ## exo-f76: event id → its author signature verifies (authorship.nim). A pure function of (topic, event), so safe to cache
     afterChecked*: Table[string, bool]   ## C5: (event id, afterSig, after) → the author signed that `after` (authorship.afterVerified); pure, so safe to cache
+    journal: proc(frame: seq[byte]) {.gcsafe.}  ## exo-dcc.14: every frame seen or sent, for the member's own copy (room_journal.nim)
 
 # Every frame on the topic carries a 1-byte kind, so the membership handshake
 # shares the topic with data without either misreading the other.
@@ -106,6 +107,7 @@ proc ingestEnvelope(s: CoordinationSession, env: IncomingMessage) =
   ## later-epoch envelope we hold no key for, F-16), a control frame not addressed
   ## to us, or malformed bytes — is swallowed: the frame simply isn't ours to act on.
   if env.payload.len == 0: return
+  if s.journal != nil: s.journal(env.payload)   # the member's own copy keeps what is room state
   let kind = env.payload[0]
   let body = env.payload[1 .. ^1]
   try:
@@ -149,6 +151,17 @@ proc newCoordinationSession*(transport: Transport, crypto: ConversationCrypto,
     {.cast(gcsafe).}:                 # crypto.open uses secp's global context
       self.ingestEnvelope(m))
 
+proc setJournal*(s: CoordinationSession, journal: proc(frame: seq[byte]) {.gcsafe.}) =
+  ## Keep a copy of every frame this session sees or sends (exo-dcc.14): the hosted module
+  ## hands it to the room's journal, which keeps the data and grant frames.
+  s.journal = journal
+
+proc replay*(s: CoordinationSession, frames: seq[seq[byte]]) =
+  ## Rebuild from the member's own copy (exo-dcc.14): each frame through the same ingest a
+  ## frame from the network takes — grants first (room_journal.replayOrder), so every
+  ## epoch's data opens. Idempotent: the log dedups.
+  for f in frames: s.ingestEnvelope(IncomingMessage(contentTopic: s.topic, payload: f))
+
 proc topic*(s: CoordinationSession): string = s.topic
   ## The room's content topic — what an author signature binds to (authorship.nim).
 
@@ -166,7 +179,9 @@ proc publish*(s: CoordinationSession, ev: Event) =
   s.log.ingest(e)
   let ep = (try: s.crypto.epoch() except CatchableError: -1)
   if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
-  discard s.transport.publish(s.topic, @[FrameData] & s.crypto.seal(encodeEvent(e)))
+  let frame = @[FrameData] & s.crypto.seal(encodeEvent(e))
+  if s.journal != nil: s.journal(frame)
+  discard s.transport.publish(s.topic, frame)
 
 # ── membership handshake ───────────────────────────────────────────────────────
 
@@ -238,6 +253,7 @@ proc admit*(s: CoordinationSession, joiner: Member) =
   ## grants so every member of the new epoch — the joiner included — gets its key.
   ## The joiner receives only this epoch's key, never earlier ones (F-16).
   for frame in s.crypto.admit(joiner):
+    if s.journal != nil: s.journal(@[FrameControl] & frame)
     discard s.transport.publish(s.topic, @[FrameControl] & frame)
   s.pending = s.pending.filterIt(it.enc != joiner)
   # Record the transition IN the log (exo-275 / M4): sealed under the NEW epoch, so

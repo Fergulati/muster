@@ -94,6 +94,7 @@ are the UI's own join request, re-sent every few seconds.
   A run on Basecamp 0.3.2 wants that catalog's 0.3.2.
 - **PR #220 (exo-6dc.1)** has to land. Until it does, a founder who relaunches before
   admitting anyone loses everything said and proposed in the room.
+- **Resolved 2026-10-16 (exo-dcc.14):** each member now keeps its own copy of every room (`coordination/room_journal.nim`): the data and grant frames, still sealed, replayed grants-first on re-entry. `scripts/room-copy-self-test.sh` relaunches with no store peer and reads the room back. What follows was true until then.
 - **A room lives only in the store.** muster keeps no local copy of a room's log
   (`joined_rooms.nim`: "rebuilt from the store and the keystore"). The fleet's
   store-retention policy is therefore the room's lifetime. The infra role's default is
