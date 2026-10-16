@@ -6,7 +6,7 @@
       "area": "family",
       "family": "monero.multisig-coordinated",
       "status": "partial",
-      "partialBecause": "ADR-020 S1: the driver and the wallet seam are built and run against real wallets on regtest; the room does not yet carry the setup rounds (S2).",
+      "partialBecause": "ADR-020 S2: the room carries the setup between the members' own wallets (open, join, each round in order, every member disclosing the address its wallet reports), held with real wallets on regtest; no UI offers it yet (S4).",
       "summary": "Each member's own wallet runs prepare_multisig; the room carries each member's output to the others, then each wallet runs make_multisig with the threshold and exchange_multisig_keys once or twice, the room carrying every round's data in order. Muster holds none of the keys; it records who sent each round. The resulting address is disclosed into the room by the members whose wallets show the same address.",
       "effect": {
         "schema": "muster.effect.monero.multisig-setup.v0",
@@ -82,8 +82,8 @@
             }
           ],
           "evidence": [
-            "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_setup_test.nim",
+            "module/tests/xmr_msig_setup_regtest_e2e.nim"
           ]
         },
         {
@@ -98,8 +98,8 @@
             }
           ],
           "evidence": [
-            "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_setup_test.nim",
+            "module/tests/xmr_msig_setup_regtest_e2e.nim"
           ]
         },
         {
@@ -109,8 +109,8 @@
           "signs": "",
           "reveals": [],
           "evidence": [
-            "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_setup_test.nim",
+            "module/tests/xmr_msig_setup_regtest_e2e.nim"
           ]
         }
       ],
@@ -119,8 +119,8 @@
           "what": "a disclosed address that differs between members",
           "why": "the wallets did not reach the same multisig account",
           "evidence": [
-            "module/tests/xmr_msig_test.nim",
-            "module/tests/xmr_msig_regtest_e2e.nim"
+            "module/tests/xmr_msig_setup_test.nim",
+            "module/tests/xmr_msig_setup_regtest_e2e.nim"
           ]
         }
       ],
@@ -167,17 +167,22 @@
         },
         {
           "kind": "test",
-          "path": "module/tests/xmr_msig_test.nim",
-          "what": "the driver: the effect, the refusals, both rounds' signatures, the describe-check, conformance"
+          "path": "module/tests/xmr_msig_setup_test.nim",
+          "what": "the setup over the room with scripted wallets: no wallet asked before every member joined, rounds in order, one address disclosed by all, refusals, a forged round dropped"
         },
         {
           "kind": "test",
-          "path": "module/tests/xmr_msig_regtest_e2e.nim",
-          "what": "real monero-wallet-rpc on regtest: a 2-of-3 set up, the describe-check passing the agreed spend and refusing others, signed, submitted, 10 confirmations"
+          "path": "module/tests/xmr_msig_setup_regtest_e2e.nim",
+          "what": "the setup over the room with three real monero-wallet-rpc wallets on regtest: each ready as a 2-of-3 at one address, disclosed by all three"
         }
       ],
       "unverified": [
         "any run: nothing is built (docs/design/monero-multisig-coordination.md)"
+      ],
+      "hosted": [
+        "xmr_msig_setup_open",
+        "xmr_msig_setup_join",
+        "xmr_msig_setups"
       ]
     },
     {
