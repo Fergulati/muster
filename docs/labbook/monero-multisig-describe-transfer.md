@@ -38,3 +38,20 @@
 - **wallet2 says the check is the caller's to make.** Its own comment: "the caller should further verify that the tx details are acceptable (inputs/outputs/memos/tx type)". That check is the room's design: each member's wallet compares the description with the agreed payment before signing.
 
 **Not tested:** a deliberately tampered transaction set. The finding above rests on the source, read at master and v0.18. The scheme's experimental warning still stands.
+
+## Sizes (2026-10-16, the same regtest 2-of-3, measured)
+
+What the room would carry, in raw bytes:
+
+| Data | 1 output in the multisig | 30 outputs |
+|---|---|---|
+| setup messages (`prepare`, `make`, each `exchange` round), per member | ~95–120 B | the same |
+| `export_multisig_info`, per member per spend | 546 B | 10.8 KB (~360 B per output) |
+| transaction set (unsigned; signed is +64 B) | 4.7 KB (1 input) | 65 KB (~25 inputs, ~2.6 KB per input) |
+
+The 2-of-3 setup took two `exchange_multisig_keys` rounds after `make_multisig`.
+
+Against Logos delivery's 150 KiB per message (both fleets):
+- **Setup is negligible.**
+- **A sync blob passes 150 KiB at about 400 outputs.**
+- **A transaction set passes it at about 55 inputs**, carried as raw bytes. As hex it is twice that size.
