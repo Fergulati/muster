@@ -366,6 +366,36 @@ It cuts across the phases rather than adding one:
   - The app's in-process Logos libraries are built by `ui-nim`, not taken from `logos-standalone-app`. The flake pins their source revisions to the builder's, so the core and the modules stay the runner's own.
   **Slices.** T1b (`exo-607.13`) newest everything (Qt 6.11, seaqt `qt-6.11` with RemoteObjects, liblogos and logos-protocol rebuilt on it, the QtRO check across versions) · T5 the backend in Nim · T6 `muster-app` as the runner (`make run`, `run-fleet`, the parity suite green) · T7 delete the C++ that has no Basecamp role (the headless host and the probe harness) and add the gate · T8 the DSL write-up (`exo-607`).
 
+- **ADR-020 A Monero room treasury: the room coordinates each member's own multisig wallet (pre-FCMP++, stagenet)** — **accepted (2026-10-16, by the operator: option 1), `exo-dcc.34`; design `docs/design/monero-multisig-coordination.md`.**
+  **Problem.** The campaign wants a shared XMR account, which `monero.split` cannot be. ADR-018 rejects `monero.multisig` as a family Muster runs, for three reasons: upstream's experimental warning, Basecamp's backend exposes no multisig, and running wallet2 would make Muster a second key holder. Monero's current multisig is built on the scheme FCMP++ replaces. FCMP++ forked on stressnet on 2026-10-05 and has no mainnet date (a non-binding roadmap targets 2027 week 16).
+  **Decision.**
+  - **Family `monero.multisig-coordinated`, kind `xmr-msig`.** The room coordinates; each member's **own `monero-wallet-rpc`** holds their key and multisig state.
+    - It is a setting, `xmr-msig-rpc`: user-configured infrastructure, like `btc-rpc` (invariant 8).
+    - Muster holds no Monero key and no multisig state, and never calls Basecamp's `monero_wallet_backend` for this.
+  - **Setup is a ceremony in the room.** The room fixes M, N and the members. Each wallet runs `prepare_multisig`, then `make_multisig`, then `exchange_multisig_keys` until ready, with the room carrying each round in order. Setup is done when every wallet reports the same address. The account is disclosed into the room by its members.
+  - **A spend.**
+    1. The room agrees the effect, `muster.effect.monero.multisig-spend.v0`: chain, account, recipients and amounts, and a fee cap. Every member's room key signs it, and M agreements make it executable.
+    2. The signers' wallets sync: `export_multisig_info` goes into the room and `import_multisig_info` comes out.
+    3. One member's wallet builds the transaction set (`transfer`), and the room carries it.
+    4. Each signer's own wallet runs `describe_transfer`, and the signer's client signs (`sign_multisig`) **only if the recipients and amounts are the agreed ones, and the fee is within the cap.** This is invariant 1, done in the member's wallet: a co-signer signs a transaction rebuilt from the same construction data `describe_transfer` reads (`docs/labbook/monero-multisig-describe-transfer.md`).
+    5. Any member submits (`submit_multisig`). The spend is final when the member's own wallet sees its txid at 10 confirmations.
+    6. One spend in flight per account.
+  - **Labelled, everywhere it shows, as different and temporary.**
+    - The member's own wallet, outside Basecamp, holds the key.
+    - Upstream calls the scheme experimental and warns a malicious member can steal funds.
+    - One spend at a time, and about 20 minutes between spends.
+    - **pre-FCMP++:** the wallet will need re-creating after Monero's upgrade.
+  - **Stagenet only.** Mainnet waits on FCMP++ multisig and on `exo-dcc.8`.
+  - **Blobs are carried as raw bytes.** One over about 100 KB is split across messages (`docs/labbook/monero-multisig-describe-transfer.md` § Sizes).
+  **Why not other options.**
+  - *Wait for FCMP++ multisig:* nothing ships before mid-2027 at the earliest.
+  - *The room carrier alone, with no wallet integration:* members would copy and paste blobs at every step.
+  - *Basecamp's backend:* it exposes no multisig yet (logos-co/logos-monero-wallet-backend#8). When it does, the setting gains a platform option, and the room plumbing is unchanged.
+  **Consequences.**
+  - **Invariant 2.** A collected multisig signature has no expiry. The room bounds it only by the effect's expiry, and by re-syncing after a cancel, which invalidates stale sets. The card says so.
+  - **Rework at FCMP++.** The scheme-specific part (the wallet calls and the per-spend sync) is redone when FCMP++ multisig is defined. The room plumbing, the agreement and the describe-check stay.
+  **Slices.** S1: the family, the effect, the driver, the wallet-rpc client and a fake. S2: the setup ceremony. S3: the spend. S4: the UI and warnings. S5: the docs and runbook. A regtest end-to-end test lands with S2 and S3.
+
 ## Working agreements for Claude Code
 
 - Re-validate the stack decisions table against current upstream HEADs at the start of every phase. The platform moves faster than this document; a stale assumption found at P0 is cheap, the same one found at P4 is not.
