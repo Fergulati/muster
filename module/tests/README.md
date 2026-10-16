@@ -23,6 +23,15 @@ and the summary names every failure. Env: `JOBS` (8), `TEST_TIMEOUT` (900 s),
 `TEST_ARGS` (appended to each selected test's command line, for an e2e test's own
 arguments), `MUSTER_NIMPKGS` (the closure dir).
 
+**On macOS** (arm64) the same command runs under the stock `/bin/bash` 3.2, given Nix
+and a working `git` and `python3` (the closure fetch needs both; `/usr/bin`'s are the
+Xcode Command Line Tools'). It links nixpkgs' `libsodium.dylib` (no glibc to match, so
+no nixpkgs gcc). With no `nim` on `PATH` it takes the nim and the clang the `.lgx`
+compiles with: `nixpkgs#nim` and `#stdenv.cc` at the nixpkgs `../flake.lock` pins under
+`logos-module-builder` (in a fresh clone, which has no `flake.lock` until a first build,
+the builder's own lock, read with `nix flake metadata`), the clang first on `PATH`, since
+nim runs `clang` from there. With no `timeout` it uses nixpkgs coreutils'.
+
 **Chain-bound tests never run by default.** Bring the chain up first
 ([on-chain tests](#on-chain-tests)), then run one by name:
 
