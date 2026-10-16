@@ -36,6 +36,10 @@ export SPEC_ORACLE_RTAMT_PYTHON="$VENV/bin/python"
 # them. Refreshed every run: the closure re-checks its pins, the link follows nixpkgs.
 PROBE_ENV="$REPO/module/.probe-env"
 mkdir -p "$PROBE_ENV"
+# Gone when the grader exits (exo-dcc.22): left behind, tests/probes/config.nims and the
+# audit verifier's build pick up its compiler, and audit-download-self-test.sh then fails.
+# KEEP_PROBE_ENV=1 keeps it, to rerun a probe by hand.
+trap '[ -n "${KEEP_PROBE_ENV:-}" ] || rm -rf "$PROBE_ENV"' EXIT
 ln -sfn "$("$REPO/module/tools/nim-closure.sh")" "$PROBE_ENV/nimpkgs"
 # libsodium, and the gcc that links against it, from one nixpkgs (exo-56a; run-suite.sh does
 # the same, exo-844). The oracle's PATH holds the host's gcc, and a probe it links loads the
