@@ -14,6 +14,16 @@ block:
   doAssert summarizeEffect("""{"effect":"invoke","module":"vote","method":"cast","args":[]}""") ==
            "call vote.cast(…)"
   doAssert summarizeEffect("not json") == ""
+  # a split reads in its asset's own decimals, never a raw base-unit count labelled as the
+  # asset (the provenance line said "split 2000000000000000 ETH" until 2026-10-16)
+  doAssert summarizeEffect("""{"effect":"split","total":"2000000000000000","asset":"ETH","shares":[{}]}""") ==
+           "split 0.002 ETH: 1 person owes the creditor"
+  doAssert summarizeEffect("""{"effect":"split","total":"150000","asset":"BTC","shares":[{},{}]}""") ==
+           "split 0.0015 BTC: 2 people owe the creditor"
+  doAssert summarizeEffect("""{"effect":"split","total":"2500000000","asset":"LEZ","shares":[{}]}""") ==
+           "split 2.5 LEZ: 1 person owes the creditor"
+  doAssert summarizeEffect("""{"effect":"split","total":"1000000","asset":"erc20:0x00000000000000000000000000000000000000aa","shares":[{}]}""") ==
+           "split 1000000 base units of erc20:0x00000000000000000000000000000000000000aa: 1 person owes the creditor"
   echo "1. summarizeEffect renders each effect kind OK"
 
 const effectJson = """{"to":"0x00000000000000000000000000000000DeaDBeef","value":42,"nonce":0}"""
