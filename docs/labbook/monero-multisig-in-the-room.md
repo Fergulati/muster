@@ -33,3 +33,23 @@ One spend per wallet is in flight at a time, so a second agreed spend waits. Whi
 - **Setup:** a 2-of-3 is ready after `prepare`, `make` and two `exchange` rounds. Over the room that took five steps of every member (`xmr_msig_setup_regtest_e2e`).
 - **A spend:** agreeing, syncing, building, checking, signing and submitting took four to five steps, then 10 blocks to final.
 - **The experimental flag:** wallet-rpc v0.18.5.1 refuses `prepare_multisig` unless it is called with `enable_multisig_experimental: true`. Muster passes it explicitly, and the room says why.
+
+## 7. The stagenet run (2026-10-16)
+
+`module/tests/xmr_msig_stagenet_live.nim` uses three fresh `monero-wallet-rpc` wallets on stagenet against public nodes. It runs the same room code the UI drives, in-process. It is not the UI on a display.
+
+- **Setup.** A 2-of-3 over the room took **149 s**: address `56G4oLtM…1dT6`.
+- **Funding.** 0.005 XMR, network fee 0.00003044. The funds unlocked after 10 blocks.
+- **The spend.** 0.001 XMR back to the funder, with a fee cap of 0.001. The actual fee was **0.00003036**.
+  - Alice's wallet built the set and passed its own describe-check. Carol's wallet checked it and signed, then submitted it as tx `53fdf53e…bd05`.
+  - Final on every member at 10 confirmations, **about 13 minutes** after submitting. The funder's wallet saw the 0.001 come back.
+
+Two failures, both from the remote node and both transient, were wrongly treated as final. Each is now a "waiting", with a test:
+
+- **A busy wallet.** A wallet syncing against a remote node holds its lock. `is_multisig` did not answer within the 5 s read budget, and the setup step called that **refused**. On a refusal the hosted pump drops the member from the setup for good.
+  - **Fix:** a timeout or an unreachable wallet raises `XmrWalletBusy`, which the steps report as "waiting: your wallet did not answer". The member's own wallet is also given the 30 s send budget.
+- **The node went away.** wallet-rpc answers `no connection to daemon` when its node stops serving it. One member's wallet stayed stuck 16 blocks behind on `node.monerodevs.org` for about 10 minutes, while the other two read the same node fine.
+  - **Fix:** that answer is also `XmrWalletBusy`.
+  - In this run the member's wallet was pointed at another node (`set_daemon`). The UI has no way to tell the member their node is the problem. It shows the wallet's message under "Your wallet:".
+
+A test room lives only in its process, so a run can stop after funding. `XMR_STAGE_RESUME=<tag>` reopens the funded wallets in a new room, where each member re-discloses the address its wallet reports.

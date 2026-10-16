@@ -6,7 +6,7 @@
       "area": "family",
       "family": "monero.multisig-coordinated",
       "status": "partial",
-      "partialBecause": "ADR-020 S2+S4: the room carries the setup between the members' own wallets (open, join, each round in order, every member disclosing the address its wallet reports), held with real wallets on regtest; the UI offers it (Settings → Monero multisig wallet; the room's Add an account → Monero multisig) but has not been seen on a display with a Monero account, nor run on stagenet.",
+      "partialBecause": "ADR-020 S2+S4: the room carries the setup between the members' own wallets (open, join, each round in order, every member disclosing the address its wallet reports), held with real wallets on regtest; the UI offers it (Settings → Monero multisig wallet; the room's Add an account → Monero multisig) but has not been seen on a display with a Monero account. It ran on stagenet through the room code with real wallets (2026-10-16), not yet through the UI on a display.",
       "summary": "Each member's own wallet runs prepare_multisig; the room carries each member's output to the others, then each wallet runs make_multisig with the threshold and exchange_multisig_keys once or twice, the room carrying every round's data in order. Muster holds none of the keys; it records who sent each round. The resulting address is disclosed into the room by the members whose wallets show the same address.",
       "effect": {
         "schema": "muster.effect.monero.multisig-setup.v0",
@@ -192,7 +192,7 @@
       "family": "monero.multisig-coordinated",
       "kind": "xmr-msig",
       "status": "partial",
-      "partialBecause": "ADR-020 S3+S4: the spend runs over the room end to end — agree, sync, build, each signer's describe-check before its wallet signs, submit, final at 10 confirmations, one spend per wallet in flight — held on scripted wallets and with real wallets on regtest; the room's Send from the multisig form and the card's status block exist, not yet seen on a display, and it has not run on stagenet.",
+      "partialBecause": "ADR-020 S3+S4: the spend runs over the room end to end — agree, sync, build, each signer's describe-check before its wallet signs, submit, final at 10 confirmations, one spend per wallet in flight — held on scripted wallets and with real wallets on regtest; the room's Send from the multisig form and the card's status block exist, not yet seen on a display. It ran on stagenet through the room code with real wallets (2026-10-16, labbook monero-multisig-in-the-room §7), not yet through the UI on a display.",
       "summary": "The room agrees the payment first: recipients and amounts. Before the spend, the members' wallets re-sync partial key images (export_multisig_info / import_multisig_info), the room carrying the blobs. One member's wallet builds the transaction set (transfer); the room carries it; each signer's own wallet runs describe_transfer on it and signs (sign_multisig) only if its recipients and amounts are the agreed ones; any wallet submits (submit_multisig). One spend at a time: the scheme needs a fresh sync after each.",
       "generated": "xmr-msig/spend",
       "effect": {

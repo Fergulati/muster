@@ -66,6 +66,11 @@ echo "2. no wallet is asked anything until every member joined OK"
 # ── 3. the exchange over the log ──────────────────────────────────────────────
 var outcomes: seq[string]
 var trace: seq[seq[string]]
+# a busy wallet (one syncing against a remote node holds its lock) is waited for, never
+# refused: a refusal would end the member's part in the setup (stagenet, 2026-10-16)
+ws[1].busy = 2
+pollAll()
+doAssert xmrSetupStep(r.bob, bobKs, ws[1], Cid).startsWith("waiting: your wallet did not answer")
 for step in 0 ..< 8:
   outcomes = stepAll(Cid)
   trace.add outcomes
@@ -83,7 +88,7 @@ doAssert acct.k == 2 and acct.members == ids and acct.chain == Stage
 let d = driverForPolicy(qualify("xmr-msig", accts[0].id), accts, proc(k: string): Driver = nil)
 doAssert d of XmrMsigDriver and XmrMsigDriver(d).account.address == msigAddr
 doAssert xmrSetupStep(r.alice, aliceKs, ws[0], Cid) == "done " & msigAddr, "idempotent once done"
-echo "3. a 2-of-3 over the room: three wallets ready, one address, disclosed by all three, xmr-msig@ acts OK"
+echo "3. a 2-of-3 over the room (a busy wallet waited for): three wallets ready, one address, disclosed by all three, xmr-msig@ acts OK"
 
 # ── 4. one member's word is not the wallet ────────────────────────────────────
 block:
