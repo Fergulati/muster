@@ -25,6 +25,7 @@ type
     label*: string            ## what a person calls it on the picker
     composes*: seq[string]    ## the proposals it serves: "payment" | "statement" | "action" | "split"
     founding*: bool           ## admitted in every room from the start; else only by an approved add-driver
+    pending*: bool            ## built and conforming, but not offered to people until the room runs it
     accountFamilies*: seq[string]
       ## non-empty = the kind acts FROM an account a member disclosed into the room
       ## (exo-a50.1.3): its intents carry "<kind>@<CAIP-10>" and resolve to that
@@ -60,7 +61,13 @@ const Kinds*: seq[KindInfo] = @[
   KindInfo(kind: "btc-split", family: "btc.split", label: "Split (Bitcoin)", composes: @["split"],
            founding: true, settlesOn: @["bip122"]),
   KindInfo(kind: "monero-split", family: "monero.split", label: "Split (Monero)", composes: @["split"],
-           founding: true, settlesOn: @["monero"])]
+           founding: true, settlesOn: @["monero"]),
+  # a Monero room treasury (ADR-020): each member's own multisig wallet holds the key
+  # Pending until the room runs its setup and spend (ADR-020 S2-S4): the driver is built
+  # and conforms, but neither the composer nor the picker offers it yet.
+  KindInfo(kind: "xmr-msig", family: "monero.multisig-coordinated", label: "Monero multisig (your own wallet)",
+           composes: @["payment"], founding: false, pending: true,
+           accountFamilies: @["monero.multisig-coordinated"])]
 
 const SplitKinds* = ["evm-split", "lez-split", "btc-split", "monero-split"]
   ## every kind whose intents settle in parts on the each locus (the split families)
@@ -101,7 +108,7 @@ proc kindsFor*(proposal: string): seq[string] =
   ## The kinds the composer may offer for a proposal kind (payment / statement / action / split),
   ## in list order — "payment via FROST" is not a thing, so it is never offered.
   for k in Kinds:
-    if proposal in k.composes: result.add k.kind
+    if proposal in k.composes and not k.pending: result.add k.kind
 
 proc kindsJson*(admitted: seq[string], needsOf: proc(kind: string): JsonNode = nil): JsonNode =
   ## Every kind this client has, and whether the joined room has admitted it — what the
@@ -112,6 +119,7 @@ proc kindsJson*(admitted: seq[string], needsOf: proc(kind: string): JsonNode = n
   ## one that raises, is no needs: a list row is never lost to its grade.
   result = newJArray()
   for k in Kinds:
+    if k.pending: continue
     var needs = newJArray()
     if needsOf != nil:
       try:

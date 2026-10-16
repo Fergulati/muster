@@ -206,6 +206,18 @@ proc effectFromJson*(effectJson: string): Effect =
           for k, v in j["quote"]: q.add (cbText(k), cbText(v.getStr()))
           fields.add ("quote", cbMap(q))
         return Effect(schemaId: "muster.effect.split.v1", fields: fields)
+      of "monero-multisig-spend":
+        # A Monero room treasury's spend (ADR-020, exo-dcc.34): the chain, the account, the
+        # recipients and amounts, a fee cap. Carried exactly as proposed; the xmr-msig driver
+        # refuses anything not in its one spelling.
+        var recips: seq[CborValue]
+        for r in j{"recipients"}.getElems():
+          recips.add cbArray(@[cbText(r{"address"}.getStr()), cbText(r{"amount"}.getStr())])
+        var fields: seq[(string, CborValue)]
+        for k in ["chain", "account", "feeCap", "memo"]:
+          fields.add (k, cbText(j{k}.getStr()))
+        fields.add ("recipients", cbArray(recips))
+        return Effect(schemaId: "muster.effect.monero.multisig-spend.v0", fields: fields)
       of "settle-up":
         # A settle-up (exo-3c6, §4.11): the agreed, unpaid split parts it covers — each as its
         # split says — and the net transfers that settle them instead. Carried as proposed;
@@ -279,6 +291,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "statement": return ("muster.effect.statement.v1", true)
     of "split": return ("muster.effect.split.v1", true)      # who owes the creditor what (exo-a90.3)
     of "settle-up": return ("muster.effect.settle-up.v1", true)   # net several splits (exo-3c6)
+    of "monero-multisig-spend": return ("muster.effect.monero.multisig-spend.v0", true)   # a room treasury (ADR-020)
     of "add-driver": return ("muster.effect.governance.add-driver.v1", true)
     of "invoke":
       let m = j{"module"}.getStr()

@@ -56,6 +56,9 @@ proc configFor(kind: string): JsonNode =
   of "lez-split": %*{"chain": "lez:testnet"}
   of "btc-split": %*{"chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328"}
   of "monero-split": %*{"chain": "monero:76ee3cc98646292206cd3e86f74d88b4"}
+  of "xmr-msig": %*{"chain": "monero:76ee3cc98646292206cd3e86f74d88b4",
+                    "address": "5BpLD7mYyGDWmEgp6YtBo2WrAmNebRq6Y7wRzrJxKmHGK2fRkzmRW2qHqmtFgQ2QqmdBzzRLjD4Cyd8oS7W7mXSd8G6DTZw",
+                    "k": 2, "members": roster.mapIt(edHex(it))}
   else: %*{"roster": roster.mapIt(edHex(it)), "k": 2}
 
 # ── 1. the one list builds, and each kind is the family it says it is ─────────
@@ -90,7 +93,10 @@ block:
   doAssert kindsFor("statement") == @["threshold", "frost", "eip191", "unanimous"], $kindsFor("statement")
   doAssert kindsFor("split") == @["evm-split", "lez-split", "btc-split", "monero-split"], $kindsFor("split")   # the each locus (exo-a90.3, .9, exo-d17, exo-dcc.5)
   let j = kindsJson(@["safe", "threshold"])
-  doAssert j.len == Kinds.len
+  doAssert j.len == Kinds.countIt(not it.pending)
+  # a pending kind (built, conforming, not yet run by the room) is offered nowhere (exo-dcc.34)
+  doAssert kindInfo("xmr-msig").pending, "xmr-msig waits on its room setup (ADR-020 S2-S4)"
+  doAssert "xmr-msig" notin kindsFor("payment") and j.toSeq.allIt(it["kind"].getStr() != "xmr-msig")
   for o in j:
     doAssert o["admitted"].getBool() == (o["kind"].getStr() in ["safe", "threshold"])
     doAssert o.hasKey("family") and o.hasKey("label") and o.hasKey("composes") and o.hasKey("founding")

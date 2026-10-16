@@ -11,6 +11,7 @@ import std/[json, strutils]
 import ./driver
 import ./safe
 import ./threshold
+import ./xmr_msig
 import ./frost
 import ./invoke
 import ./eip191
@@ -77,6 +78,12 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
     # the registry builds from the config alone: the address is the one it derives
     if not ok and not detail.startsWith("the address"): raise newException(RegistryError, detail)
     newLezMultisigDriver(acct)
+  of "xmr-msig":
+    # A Monero room treasury (ADR-020): {chain, address, k, members: [room identity hex]}.
+    var members: seq[string]
+    for m in config{"members"}.getElems(): members.add m.getStr()
+    newXmrMsigDriver(XmrMsigAccount(chain: config{"chain"}.getStr(), address: config{"address"}.getStr(),
+                                    k: config{"k"}.getInt(2), members: members))
   of "btc-frost":
     # A FROST account (Phase D): {network, recovery: the ceremony's recovery data, hex}.
     newBtcFrostDriver(frostAccount(config{"network"}.getStr("regtest"), hexToBytes(config{"recovery"}.getStr())))

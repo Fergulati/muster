@@ -2594,3 +2594,4 @@
 {"type":"create","timestamp":"2026-10-16T14:00:11.879206674Z","issue_id":"exo-dbcd","payload":{"description":"Registry status, action corpus built, runbook for a room treasury on stagenet, CLAUDE.md.","priority":"2","title":"S5 xmr-msig: docs, atlas, runbook","type":"task"}}
 {"type":"rename","timestamp":"2026-10-16T14:00:12.161801682Z","issue_id":"exo-dbcd","payload":{"new_id":"exo-dcc.34.5"}}
 {"type":"dep_add","timestamp":"2026-10-16T14:00:12.161801682Z","issue_id":"exo-dcc.34.5","payload":{"dep_type":"parent-child","depends_on":"exo-dcc.34"}}
+{"type":"status_update","timestamp":"2026-10-16T14:36:45.912316787Z","issue_id":"exo-dcc.34.1","payload":{"status":"in_progress"}}

@@ -59,7 +59,10 @@ let kinds = @[
   ("evm-split", %*{"chain": "eip155:31337"}, "module/src/drivers/split.nim"),
   ("lez-split", %*{"chain": "lez:testnet"}, "module/src/drivers/split.nim"),
   ("btc-split", %*{"chain": "bip122:0f9188f13cb7b2c71f2a335e3a4fc328"}, "module/src/drivers/split.nim"),
-  ("monero-split", %*{"chain": "monero:76ee3cc98646292206cd3e86f74d88b4"}, "module/src/drivers/split.nim")]
+  ("monero-split", %*{"chain": "monero:76ee3cc98646292206cd3e86f74d88b4"}, "module/src/drivers/split.nim"),
+  ("xmr-msig", %*{"chain": "monero:76ee3cc98646292206cd3e86f74d88b4",
+                  "address": "5BpLD7mYyGDWmEgp6YtBo2WrAmNebRq6Y7wRzrJxKmHGK2fRkzmRW2qHqmtFgQ2QqmdBzzRLjD4Cyd8oS7W7mXSd8G6DTZw",
+                  "k": 2, "members": roster}, "module/src/drivers/xmr_msig.nim")]
 
 # ── 1. every registered kind declares a consistent profile ─────────────────────
 block:

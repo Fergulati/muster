@@ -13,7 +13,7 @@
 import std/[json, os, sets, strutils]
 import ../tools/action_corpus
 
-const Fixed = ["safe/transfer", "safe/contract-call", "safe/delegatecall",
+const Fixed = ["xmr-msig/spend", "safe/transfer", "safe/contract-call", "safe/delegatecall",
                "threshold/statement", "threshold/add-driver", "unanimous/statement",
                "frost/statement", "eip191/statement",
                "invoke/module-call", "invoke/lez-transfer",
