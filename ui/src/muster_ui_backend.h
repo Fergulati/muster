@@ -104,6 +104,10 @@ public:
     void frostCeremonyOpen(const QString &ceremonyId, const QString &network, const QString &t, const QString &n) override;
     void frostCeremonyJoin(const QString &ceremonyId) override;
     void loadFrostCeremonies() override;
+    void xmrMsigSetupOpen(const QString &ceremonyId, const QString &chain, const QString &k, const QString &membersJson) override;
+    void xmrMsigSetupJoin(const QString &ceremonyId) override;
+    void xmrMsigPropose(const QString &account, const QString &recipientsJson, const QString &feeCap, const QString &memo) override;
+    void loadXmrMsig() override;
     void loadFlow() override;
     void loadGraph(const QString &roomTopic) override;
     void setPolicy(const QString &kind) override;

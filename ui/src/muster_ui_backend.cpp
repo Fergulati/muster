@@ -487,6 +487,8 @@ void MusterUiBackend::loadIntents()
     setIntentsJson(modules().muster_module.coordinate_intents());
     // the room's FROST ceremonies advance on the same tick (the module's pump)
     loadFrostCeremonies();
+    // ... and so do the Monero multisig setups and spends (the module's pump)
+    loadXmrMsig();
     // The activity feed folds from the SAME log, so refresh it whenever the
     // intents do — every join, propose, contribute, submit, and periodic tick.
     loadActivity();
@@ -903,6 +905,39 @@ void MusterUiBackend::frostCeremonyJoin(const QString &ceremonyId)
 void MusterUiBackend::loadFrostCeremonies()
 {
     setFrostCeremoniesJson(modules().muster_module.frost_ceremonies());
+}
+
+void MusterUiBackend::xmrMsigSetupOpen(const QString &ceremonyId, const QString &chain, const QString &k, const QString &membersJson)
+{
+    // xmr_msig_setup_open → open + join; each member's own wallet runs its rounds on the
+    // intents tick, and the address is disclosed once every wallet is ready.
+    const QString r = modules().muster_module.xmr_msig_setup_open(ceremonyId.trimmed(), chain.trimmed(), k.trimmed(), membersJson.trimmed());
+    qInfo() << "[muster_ui] xmr_msig_setup_open" << ceremonyId << chain << k << "->" << r;
+    setXmrMsigSetupJson(asObjectJson(r, "error"));
+    loadXmrMsig();
+}
+
+void MusterUiBackend::xmrMsigSetupJoin(const QString &ceremonyId)
+{
+    const QString r = modules().muster_module.xmr_msig_setup_join(ceremonyId.trimmed());
+    qInfo() << "[muster_ui] xmr_msig_setup_join" << ceremonyId << "->" << r;
+    setXmrMsigSetupJson(asObjectJson(r, "error"));
+    loadXmrMsig();
+}
+
+void MusterUiBackend::xmrMsigPropose(const QString &account, const QString &recipientsJson, const QString &feeCap, const QString &memo)
+{
+    // coordinate_propose_xmr_msig → the intent id, or {error, detail}.
+    const QString r = modules().muster_module.coordinate_propose_xmr_msig(account.trimmed(), recipientsJson.trimmed(), feeCap.trimmed(), memo);
+    qInfo() << "[muster_ui] coordinate_propose_xmr_msig" << account << "->" << r;
+    setXmrMsigProposeJson(asObjectJson(r, "intentId"));
+    loadIntents();
+}
+
+void MusterUiBackend::loadXmrMsig()
+{
+    setXmrMsigSetupsJson(modules().muster_module.xmr_msig_setups());
+    setXmrMsigSpendsJson(modules().muster_module.xmr_msig_spends());
 }
 
 void MusterUiBackend::downloadAudit(const QString &intentId)

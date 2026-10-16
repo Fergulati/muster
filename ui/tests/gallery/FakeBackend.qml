@@ -5,7 +5,7 @@ import QtQuick
 
 QtObject {
     // the contract's PROP names, in .rep order (the recorder snapshots exactly these)
-    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "walletSummaryJson"]
+    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "walletSummaryJson"]
     // every SLOT call, in order: [{slot, args}]
     property var calls: []
     function record(slot, args) { calls.push({ slot: slot, args: Array.prototype.slice.call(args) }); }
@@ -49,6 +49,10 @@ QtObject {
     property string lezCreateJson: "{}"
     property string frostCeremoniesJson: "[]"
     property string frostCeremonyJson: "{}"
+    property string xmrMsigSetupsJson: "[]"
+    property string xmrMsigSetupJson: "{}"
+    property string xmrMsigSpendsJson: "[]"
+    property string xmrMsigProposeJson: "{}"
     property string flowJson: "{\"rows\":[],\"matrix\":{}}"
     property string graphJson: "{}"
     property string policyJson: "{\"policy\":\"threshold\",\"kind\":\"threshold\"}"
@@ -140,6 +144,10 @@ QtObject {
     function frostCeremonyOpen(ceremonyId, network, t, n) { record("frostCeremonyOpen", arguments); }
     function frostCeremonyJoin(ceremonyId) { record("frostCeremonyJoin", arguments); }
     function loadFrostCeremonies() { record("loadFrostCeremonies", arguments); }
+    function xmrMsigSetupOpen(ceremonyId, chain, k, membersJson) { record("xmrMsigSetupOpen", arguments); }
+    function xmrMsigSetupJoin(ceremonyId) { record("xmrMsigSetupJoin", arguments); }
+    function xmrMsigPropose(account, recipientsJson, feeCap, memo) { record("xmrMsigPropose", arguments); }
+    function loadXmrMsig() { record("loadXmrMsig", arguments); }
     function loadFlow() { record("loadFlow", arguments); }
     function loadGraph(roomTopic) { record("loadGraph", arguments); }
     function loadRlnStatus() { record("loadRlnStatus", arguments); }

@@ -284,6 +284,20 @@ class MusterUi
     SLOT(void frostCeremonyOpen(const QString &ceremonyId, const QString &network, const QString &t, const QString &n))
     SLOT(void frostCeremonyJoin(const QString &ceremonyId))
     SLOT(void loadFrostCeremonies())
+    // Monero multisig (ADR-020, exo-dcc.34): each member's OWN monero-wallet-rpc runs the
+    // setup; open a setup in the room and join it, or join one ("" chain = stagenet, ""
+    // members = the room's members). The last open/join result lands on xmrMsigSetupJson
+    // ({ceremony, chain, k, n} or {error, detail}); the room's setups on xmrMsigSetupsJson
+    // [{ceremony, chain, k, n, members, joined, rounds, mine, joinedByMe, address,
+    // disclosedBy, last, wallet}].
+    SLOT(void xmrMsigSetupOpen(const QString &ceremonyId, const QString &chain, const QString &k, const QString &membersJson))
+    SLOT(void xmrMsigSetupJoin(const QString &ceremonyId))
+    // Propose a spend from the room's Monero multisig: recipientsJson is
+    // [{address, amount}] in atomic units, feeCap in atomic units. The result lands on
+    // xmrMsigProposeJson ({intentId} or {error, detail}); the spends' progress on
+    // xmrMsigSpendsJson [{intentId, state, signers, synced, signed, txids, last, wallet}].
+    SLOT(void xmrMsigPropose(const QString &account, const QString &recipientsJson, const QString &feeCap, const QString &memo))
+    SLOT(void loadXmrMsig())
     // The information-flow view (coordinate_flow, exo-002.5): who could see what,
     // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
     // matrix:{observer:[fields]}}. A fold over the sealed log (no RPC), refreshed on
@@ -397,6 +411,10 @@ class MusterUi
     PROP(QString lezCreateJson="{}" READONLY)
     PROP(QString frostCeremoniesJson="[]" READONLY)
     PROP(QString frostCeremonyJson="{}" READONLY)
+    PROP(QString xmrMsigSetupsJson="[]" READONLY)
+    PROP(QString xmrMsigSetupJson="{}" READONLY)
+    PROP(QString xmrMsigSpendsJson="[]" READONLY)
+    PROP(QString xmrMsigProposeJson="{}" READONLY)
     // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
     // observer matrix + per-action rows; the store node is always present (FS-9).
     PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)

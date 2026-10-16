@@ -48,6 +48,7 @@ Item {
     // (exo-14f.2). View state only: it resets when the view does.
     property bool showRpc: false
     property bool showBtcRpc: false
+    property bool showXmrMsigRpc: false
     property bool showLezRpc: false
 
     // This node's RLN membership row (rln_status, exo-eb6.3): {level, detail, remedy?,
@@ -482,6 +483,62 @@ Item {
                                 onClicked: {
                                     if (settings.backend) settings.backend.setSetting("btc-rpc", btcRpcField.text);
                                     btcRpcField.text = "";
+                                }
+                            }
+                        }
+
+                        // ── the user's own Monero multisig wallet (ADR-020, exo-dcc.34) ──
+                        RowLayout {
+                            Layout.topMargin: Theme.spacing.small
+                            spacing: Theme.spacing.small
+                            LogosText {
+                                objectName: "settingsXmrMsigRpcNow"
+                                // bounded: one long value must not widen the whole column
+                                Layout.fillWidth: true
+                                elide: Text.ElideMiddle
+                                text: qsTr("Monero multisig wallet  ·  now: %1")
+                                      .arg(String((settings.s && (settings.showXmrMsigRpc ? settings.s.xmrMsigRpc
+                                                                                          : settings.s.xmrMsigRpcMasked))
+                                                  || "(none — a Monero multisig needs one)"))
+                                color: Theme.palette.textSecondary
+                                font.family: MusterStyle.mono
+                                font.pixelSize: MusterStyle.caption
+                            }
+                            ActionButton {
+                                objectName: "settingsXmrMsigRpcShow"
+                                visible: !!(settings.s && settings.s.xmrMsigRpc && settings.s.xmrMsigRpc !== settings.s.xmrMsigRpcMasked)
+                                text: settings.showXmrMsigRpc ? qsTr("Hide") : qsTr("Show")
+                                variant: LogosButton.Variant.Secondary
+                                onClicked: settings.showXmrMsigRpc = !settings.showXmrMsigRpc
+                            }
+                        }
+                        LogosText {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 460
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Your own monero-wallet-rpc on stagenet, started with --disable-rpc-login. It holds your key and does the multisig; Muster only asks it to take part.")
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: MusterStyle.caption
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.maximumWidth: 460
+                            Layout.alignment: Qt.AlignLeft
+                            spacing: Theme.spacing.small
+                            LogosTextField {
+                                id: xmrMsigRpcField
+                                objectName: "xmrMsigRpcField"
+                                Layout.fillWidth: true
+                                placeholderText: qsTr("your wallet, e.g. http://127.0.0.1:38088")
+                                font.family: MusterStyle.mono
+                            }
+                            ActionButton {
+                                objectName: "settingsXmrMsigRpcSave"
+                                text: qsTr("Save")
+                                enabled: xmrMsigRpcField.text.length > 0
+                                onClicked: {
+                                    if (settings.backend) settings.backend.setSetting("xmr-msig-rpc", xmrMsigRpcField.text);
+                                    xmrMsigRpcField.text = "";
                                 }
                             }
                         }

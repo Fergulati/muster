@@ -13,6 +13,7 @@ Repeatable scripts for demos and posts. Not specs — the specs are `docs/01-fur
   Monero wallet mints the address and confirms the payment; the payer pays from any wallet
   through a `monero:` link or QR. Stagenet. The payment and confirmation steps have not yet
   been done with a real payment, and are marked.
+- [`xmr-multisig.md`](xmr-multisig.md): three people set up a 2-of-3 Monero multisig in a room and spend from it, each with their own `monero-wallet-rpc` holding their key (ADR-020). Stagenet. Each step ran on regtest with real wallets; the stagenet run through the UI is what the page asks for.
 - [`client-tour.md`](client-tour.md) — try everything by hand, two instances on one
   machine. `scripts/try-infra.sh up` brings up every local chain it uses, funded (anvil
   with the real Safe and an ERC-20; Bitcoin Core on regtest with a miner), and

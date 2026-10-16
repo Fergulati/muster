@@ -127,6 +127,17 @@ Rectangle {
                         if (details.room.backend) details.room.backend.frostCeremonyOpen(cid, network, t, n);
                     }
                     onFrostJoinRequested: function (cid) { if (details.room.backend) details.room.backend.frostCeremonyJoin(cid); }
+                    xmrMsigSetups: details.room.xmrMsigSetups
+                    xmrMsigSetup: details.room.xmrMsigSetup
+                    xmrMsigPropose: details.room.xmrMsigPropose
+                    xmrMsigWalletSet: details.room.xmrMsigWalletSet
+                    onXmrMsigSetupRequested: function (cid, k) {
+                        if (details.room.backend) details.room.backend.xmrMsigSetupOpen(cid, "", k, "");
+                    }
+                    onXmrMsigJoinRequested: function (cid) { if (details.room.backend) details.room.backend.xmrMsigSetupJoin(cid); }
+                    onXmrMsigProposeRequested: function (account, recipients, feeCap, memo) {
+                        if (details.room.backend) details.room.backend.xmrMsigPropose(account, recipients, feeCap, memo);
+                    }
                     onDiscloseRequested: function (accountJson) { if (details.room.backend) details.room.backend.discloseAccount(accountJson); }
                     onLezMemberRequested: if (details.room.backend) details.room.backend.lezMemberAccount("")
                     onLezCreateRequested: function (threshold, members) {
