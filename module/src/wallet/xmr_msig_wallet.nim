@@ -17,6 +17,10 @@ import ./types
 import ./rpc_budget
 
 type
+  XmrWalletBusy* = object of WalletError
+    ## The wallet did not answer in time, or could not be reached: try again on the next
+    ## tick. A wallet syncing against a remote node holds its lock for seconds at a time
+    ## (seen on stagenet, 2026-10-16), so this is ordinary, never a refusal.
   XmrMsigWallet* = ref object of RootObj
     ## The seam: the real wallet-rpc below, or a test's scripted wallet.
   MsigState* = object
@@ -74,9 +78,10 @@ proc exchange(address: HttpAddress, body: string, connectBy, headersBy: Duration
     await session.closeWait()
 
 proc call*(w: RpcXmrMsigWallet, meth: string, params: JsonNode = newJObject(),
-           budget = readBudget()): JsonNode =
-  ## One JSON-RPC 2.0 call to /json_rpc under one deadline. An RPC error, a transport
-  ## failure or no answer within the budget raises WalletError.
+           budget = sendBudget()): JsonNode =
+  ## One JSON-RPC 2.0 call to /json_rpc under one deadline: by default the send budget,
+  ## since it is the member's own wallet, which may be busy syncing. An RPC error raises
+  ## WalletError; a transport failure or no answer within the budget, XmrWalletBusy.
   let body = $(%*{"jsonrpc": "2.0", "id": "muster", "method": meth, "params": params})
   let address = getHttpAddress(w.url & "/json_rpc").valueOr:
     raise newException(WalletError, "monero-wallet-rpc " & meth & ": not a wallet URL (" & $error & ")")
@@ -84,16 +89,20 @@ proc call*(w: RpcXmrMsigWallet, meth: string, params: JsonNode = newJObject(),
   var ans: Answer
   try: ans = bounded(exchange(address, body, connectBy, budget + 1.seconds), budget)
   except RpcTimeoutError:
-    raise newException(WalletError, "monero-wallet-rpc " & meth & ": no answer within " & $budget)
+    raise newException(XmrWalletBusy, "monero-wallet-rpc " & meth & ": no answer within " & $budget)
   except CatchableError as e:
-    raise newException(WalletError, "monero-wallet-rpc " & meth & ": unreachable: " & e.msg)
+    raise newException(XmrWalletBusy, "monero-wallet-rpc " & meth & ": unreachable: " & e.msg)
   var j: JsonNode
   try: j = parseJson(ans.body)
   except CatchableError:
     raise newException(WalletError, "monero-wallet-rpc " & meth & ": HTTP " & $ans.status & " " & ans.reason)
   let err = j{"error"}
   if err != nil and err.kind != JNull:
-    raise newException(WalletError, "monero-wallet-rpc " & meth & ": " & err{"message"}.getStr($err))
+    let msg = err{"message"}.getStr($err)
+    # the wallet's node went away (a remote node drops out for a while): try again later
+    if "no connection to daemon" in msg.toLowerAscii():
+      raise newException(XmrWalletBusy, "monero-wallet-rpc " & meth & ": " & msg)
+    raise newException(WalletError, "monero-wallet-rpc " & meth & ": " & msg)
   if j{"result"} == nil: raise newException(WalletError, "monero-wallet-rpc " & meth & ": no result")
   j["result"]
 

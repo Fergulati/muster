@@ -177,6 +177,8 @@ proc xmrSetupStep*(s: CoordinationSession, ks: Keystore, w: XmrMsigWallet, cid: 
     s.publishAuthored(ks, Event(key: XmsigPrefix & "/" & cid & "/kex/" & $r & "/" & me,
                                 value: $(%*{"info": res.info})))
     "round " & $r
+  except XmrWalletBusy as e:
+    "waiting: your wallet did not answer (" & e.msg & ")"
   except CatchableError as e:
     "refused: " & e.msg
 

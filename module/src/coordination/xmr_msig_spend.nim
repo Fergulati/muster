@@ -156,6 +156,7 @@ proc xmrSpendStep*(s: CoordinationSession, ks: Keystore, w: XmrMsigWallet, drive
         s.publish(finalEvent(intentId, chainRef = txids))
         return "final"
       return "seen " & $least & " of " & $XmrFinalDepth
+    except XmrWalletBusy as e: return "waiting: your wallet did not answer (" & e.msg & ")"
     except CatchableError as e: return "refused: " & e.msg
   else: discard
   if it.collection.round < 2 and not it.collection.complete:
@@ -173,10 +174,12 @@ proc xmrSpendStep*(s: CoordinationSession, ks: Keystore, w: XmrMsigWallet, drive
       for e in blobEvents(intentId, "xsync", me, w.exportInfo()): s.publishAuthored(ks, e)
       return "synced"
     var infos: seq[string]
+    var missing = 0
     for m in set:
       let (ok, hex) = readBlob(events, intentId, "xsync", m)
-      if not ok: return "waiting: sync from " & $(set.len - infos.len) & " signers"
-      if m != me: infos.add hex
+      if not ok: inc missing
+      elif m != me: infos.add hex
+    if missing > 0: return "waiting: sync from " & $missing & " of " & $set.len & " signers"
     let idx = set.find(me)
     if published(events, intentId, "xtx", me):
       if idx == set.len - 1 and it.state == lsExecutable:
@@ -206,5 +209,7 @@ proc xmrSpendStep*(s: CoordinationSession, ks: Keystore, w: XmrMsigWallet, drive
     let txids = w.submit(txset)
     s.publish(submitEvent(intentId, chainRef = txids.join(",")))
     "submitted " & txids.join(",")
+  except XmrWalletBusy as e:
+    "waiting: your wallet did not answer (" & e.msg & ")"
   except CatchableError as e:
     "refused: " & e.msg

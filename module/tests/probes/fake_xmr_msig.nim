@@ -20,6 +20,7 @@ type FakeMsigWallet* = ref object of XmrMsigWallet
   multisig*, ready*: bool
   k*, n*, done*: int
   peers*: seq[string]
+  busy*: int               ## the next `busy` state reads time out, as a syncing wallet's do
 
 proc keyOf(tag: string): array[32, byte] =
   ## a valid curve point, as fake_monero makes one
@@ -49,6 +50,9 @@ proc takeRound(w: FakeMsigWallet, infos: seq[string], round: int): seq[string] =
     result.add p[1]
 
 method isMultisig*(w: FakeMsigWallet): MsigState =
+  if w.busy > 0:
+    dec w.busy
+    raise newException(XmrWalletBusy, "monero-wallet-rpc is_multisig: no answer within 30 seconds")
   MsigState(multisig: w.multisig, ready: w.ready, threshold: w.k, total: w.n)
 
 method address*(w: FakeMsigWallet): string =
