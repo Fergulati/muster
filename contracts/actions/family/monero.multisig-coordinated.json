@@ -1,0 +1,384 @@
+{
+  "actions": [
+    {
+      "id": "monero.multisig-coordinated/setup",
+      "name": "Set up a Monero multisig wallet, with the room carrying the key exchange",
+      "summary": "Each member's own wallet runs prepare_multisig; the room carries each member's output to the others, then each wallet runs make_multisig with the threshold and exchange_multisig_keys once or twice, the room carrying every round's data in order. Muster holds none of the keys; it records who sent each round. The resulting address is disclosed into the room by the members whose wallets show the same address.",
+      "effect": {
+        "schema": "muster.effect.monero.multisig-setup.v0",
+        "fields": [
+          {
+            "name": "network",
+            "means": "the Monero network (CAIP-2 monero:<genesis prefix>); stagenet only while upstream calls the scheme experimental"
+          },
+          {
+            "name": "threshold",
+            "means": "M of N: how many members must sign a spend"
+          },
+          {
+            "name": "members",
+            "means": "the N room members whose wallets take part, by room identity"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 1,
+        "threshold": "every member taking part (N of N) agrees to the setup",
+        "finality": "immediate",
+        "domain": "muster.monero.multisig-setup.v0"
+      },
+      "requirements": [
+        {
+          "kind": "infra",
+          "name": "monero-multisig-wallet",
+          "party": "contributor",
+          "class": "infra",
+          "target": "the member's own Monero multisig wallet (monero-wallet-cli / monero-wallet-rpc, monero-multisig-gui), which holds their key and multisig state",
+          "field": ""
+        }
+      ],
+      "touches": [],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "multisig-setup-data",
+          "observer": "room-member",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "names the network, M and the N members.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://docs.getmonero.org/multisignature/"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "contributor",
+          "does": "each member's own wallet runs prepare_multisig, make_multisig and exchange_multisig_keys (once or twice); the room carries every round's output to the others in order.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "multisig-setup-data",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://docs.getmonero.org/multisignature/",
+            "https://web.getmonero.org/resources/user-guides/multisig-messaging-system.html"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "contributor",
+          "does": "each member discloses the address their wallet shows; the setup is done when all N match.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://docs.getmonero.org/multisignature/"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a disclosed address that differs between members",
+          "why": "the wallets did not reach the same multisig account",
+          "evidence": [
+            "https://docs.getmonero.org/multisignature/"
+          ]
+        }
+      ],
+      "ui": "Not built: a Key ceremony-style section of the room's accounts panel would carry the rounds.",
+      "area": "family",
+      "family": "monero.multisig-coordinated",
+      "status": "declared",
+      "invariants": [
+        1,
+        2,
+        3,
+        4,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "Muster holds no Monero key and no multisig state: each member's own wallet signs, and the room only carries the files",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A malicious member may be able to steal funds: upstream's warning for the scheme stands, so stagenet only",
+          "credibility": "exposed",
+          "party": "room-member"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://docs.getmonero.org/multisignature/",
+          "what": "Monero multisig: the setup, the sync before every spend, the signing steps, and the experimental warning"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.getmonero.org/rpc-library/wallet-rpc/",
+          "what": "wallet RPC: describe_transfer takes a multisig_txset and returns its recipients, amounts and fee; the multisig methods"
+        },
+        {
+          "kind": "source",
+          "url": "https://web.getmonero.org/resources/user-guides/multisig-messaging-system.html",
+          "what": "the Multisig Messaging System: Monero's own coordination layer over PyBitmessage"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/freigeist-m/monero-multisig-gui",
+          "what": "monero-multisig-gui: wallet2 embedded, peers over Tor onion services"
+        }
+      ],
+      "unverified": [
+        "the describe_transfer check against monero-multisig-gui's and monero-wallet-cli's transaction sets",
+        "any run: nothing is built (docs/design/monero-multisig-coordination.md)"
+      ]
+    },
+    {
+      "id": "monero.multisig-coordinated/spend",
+      "name": "Spend from a Monero multisig wallet, agreed in the room, signed by each member's own wallet",
+      "summary": "The room agrees the payment first: recipients and amounts. Before the spend, the members' wallets re-sync partial key images (export_multisig_info / import_multisig_info), the room carrying the blobs. One member's wallet builds the transaction set (transfer); the room carries it; each signer's own wallet runs describe_transfer on it and signs (sign_multisig) only if its recipients and amounts are the agreed ones; any wallet submits (submit_multisig). One spend at a time: the scheme needs a fresh sync after each.",
+      "effect": {
+        "schema": "muster.effect.monero.multisig-spend.v0",
+        "fields": [
+          {
+            "name": "network",
+            "means": "the Monero network (CAIP-2)"
+          },
+          {
+            "name": "account",
+            "means": "the multisig address disclosed at setup"
+          },
+          {
+            "name": "recipients",
+            "means": "each destination address and amount in atomic units"
+          },
+          {
+            "name": "feeCap",
+            "means": "the most fee the members accept, in atomic units"
+          }
+        ]
+      },
+      "agreement": {
+        "rounds": 2,
+        "threshold": "M of N members' wallets sign",
+        "finality": "the chain, at 10 confirmations",
+        "domain": "muster.monero.multisig-spend.v0"
+      },
+      "requirements": [
+        {
+          "kind": "infra",
+          "name": "monero-multisig-wallet",
+          "party": "contributor",
+          "class": "infra",
+          "target": "the member's own Monero multisig wallet (monero-wallet-cli / monero-wallet-rpc, monero-multisig-gui), which holds their key and multisig state",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "monero:<network>",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "effect",
+          "observer": "room-member",
+          "when": "propose"
+        },
+        {
+          "field": "contributions",
+          "observer": "room-member",
+          "when": "approve"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "always"
+        },
+        {
+          "field": "multisig-sync-data",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "transaction-set",
+          "observer": "room-member",
+          "when": "approve"
+        }
+      ],
+      "steps": [
+        {
+          "step": "propose",
+          "who": "proposer",
+          "does": "writes the recipients, amounts and fee cap.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://docs.getmonero.org/multisignature/"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "contributor",
+          "does": "each signer's wallet exports its multisig info; the room carries it; the builder's wallet imports the others' and builds the transaction set.",
+          "signs": "",
+          "reveals": [
+            {
+              "field": "multisig-sync-data",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://docs.getmonero.org/multisignature/"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "contributor",
+          "does": "each signer's own wallet runs describe_transfer on the transaction set and signs it with sign_multisig only if its recipients and amounts equal the agreed effect; the room carries it to the next signer.",
+          "signs": "sign_multisig, by the member's own wallet",
+          "reveals": [
+            {
+              "field": "transaction-set",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "https://docs.getmonero.org/rpc-library/wallet-rpc/",
+            "https://docs.getmonero.org/multisignature/"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "contributor",
+          "does": "any member's wallet submits the fully signed set (submit_multisig).",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://docs.getmonero.org/multisignature/"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "contributor",
+          "does": "each member's wallet sees the spend at 10 confirmations; the next spend starts with a fresh sync.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "https://docs.getmonero.org/multisignature/"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "signing a transaction set whose recipients or amounts differ from the agreed effect",
+          "why": "invariant 1, done by the member's own wallet: Muster cannot decode a Monero transaction set",
+          "evidence": [
+            "https://docs.getmonero.org/rpc-library/wallet-rpc/"
+          ]
+        },
+        {
+          "what": "a second spend before the first has settled and the members re-synced",
+          "why": "the scheme refuses stale multisig data ('This signature was made with stale data')",
+          "evidence": [
+            "https://docs.getmonero.org/multisignature/"
+          ]
+        }
+      ],
+      "ui": "Not built.",
+      "area": "family",
+      "family": "monero.multisig-coordinated",
+      "status": "declared",
+      "invariants": [
+        1,
+        2,
+        3,
+        4,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "Muster holds no Monero key and no multisig state: each member's own wallet signs, and the room only carries the files",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A malicious member may be able to steal funds: upstream's warning for the scheme stands, so stagenet only",
+          "credibility": "exposed",
+          "party": "room-member"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "url": "https://docs.getmonero.org/multisignature/",
+          "what": "Monero multisig: the setup, the sync before every spend, the signing steps, and the experimental warning"
+        },
+        {
+          "kind": "source",
+          "url": "https://docs.getmonero.org/rpc-library/wallet-rpc/",
+          "what": "wallet RPC: describe_transfer takes a multisig_txset and returns its recipients, amounts and fee; the multisig methods"
+        },
+        {
+          "kind": "source",
+          "url": "https://web.getmonero.org/resources/user-guides/multisig-messaging-system.html",
+          "what": "the Multisig Messaging System: Monero's own coordination layer over PyBitmessage"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/freigeist-m/monero-multisig-gui",
+          "what": "monero-multisig-gui: wallet2 embedded, peers over Tor onion services"
+        }
+      ],
+      "unverified": [
+        "the describe_transfer check against monero-multisig-gui's and monero-wallet-cli's transaction sets",
+        "any run: nothing is built (docs/design/monero-multisig-coordination.md)"
+      ]
+    }
+  ]
+}
