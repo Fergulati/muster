@@ -175,6 +175,38 @@ void MusterUiBackend::loadWalletSummary()
     setWalletSummaryJson(modules().muster_module.wallet_summary());
 }
 
+// ── FileShare (exo-4d0, docs/design/room-swarm.md) ─────────────────────────────────
+// The module seals, uploads, fetches and verifies; the backend only carries its answers.
+// Each action re-reads the list so the view follows reduce(log).
+void MusterUiBackend::loadFileShare()
+{
+    setFileShareJson(modules().muster_module.fileshare_files());
+}
+
+void MusterUiBackend::shareFile(const QString &path)
+{
+    setFileShareResultJson(modules().muster_module.fileshare_share(path));
+    loadFileShare();
+}
+
+void MusterUiBackend::fetchFile(const QString &fileId, const QString &folder, const QString &privately)
+{
+    setFileShareResultJson(modules().muster_module.fileshare_fetch(fileId, folder, privately));
+    loadFileShare();
+}
+
+void MusterUiBackend::seedFile(const QString &fileId, const QString &on)
+{
+    setFileShareResultJson(modules().muster_module.fileshare_seed(fileId, on));
+    loadFileShare();
+}
+
+void MusterUiBackend::retractFile(const QString &fileId)
+{
+    setFileShareResultJson(modules().muster_module.fileshare_retract(fileId));
+    loadFileShare();
+}
+
 void MusterUiBackend::loadWalletAccounts()
 {
     // Every account across chains, with a LEZ account's shareable address (the `share`
@@ -1324,6 +1356,46 @@ void MusterUiBackend::onContextReady()
                                 paid.insert(id);
                         }
                     }
+                }
+                // FileShare self-test (exo-4d0): MUSTER_AUTOFILESHARE=<path> shares that file
+                // once someone else is in the room; MUSTER_AUTOFILEFETCH=<folder> fetches every
+                // file this instance does not hold into it — privately with
+                // MUSTER_AUTOFILEPRIVATE — trying a failed fetch again every 10s, five times.
+                // The node, the list and its operations are logged each tick as FILESHARE.
+                const QString fsShare = QString::fromUtf8(qgetenv("MUSTER_AUTOFILESHARE"));
+                const QString fsFetch = QString::fromUtf8(qgetenv("MUSTER_AUTOFILEFETCH"));
+                if (!fsShare.isEmpty() || !fsFetch.isEmpty()) {
+                    static bool fsShared = false;
+                    static QHash<QString, int> fsTries;
+                    static QHash<QString, qint64> fsAgainAt;
+                    loadFileShare();
+                    const QJsonObject st = QJsonDocument::fromJson(fileShareJson().toUtf8()).object();
+                    const bool ready = st.value("ready").toBool();
+                    qInfo().noquote() << "[muster_ui] FILESHARE-NODE" << modules().muster_module.fileshare_status();
+                    if (!fsShare.isEmpty() && !fsShared && ready && membersJson().contains("\"self\":false")) {
+                        fsShared = true;
+                        shareFile(fsShare);
+                    }
+                    if (!fsFetch.isEmpty() && ready) {
+                        const qint64 now = QDateTime::currentSecsSinceEpoch();
+                        for (const auto &v : st.value("files").toArray()) {
+                            const QJsonObject f = v.toObject();
+                            const QString id = f.value("id").toString();
+                            if (f.value("held").toBool() || fsTries.value(id) >= 5 || now < fsAgainAt.value(id)) continue;
+                            bool running = false, done = false;
+                            for (const auto &o : st.value("ops").toArray()) {
+                                const QJsonObject op = o.toObject();
+                                if (op.value("file").toString() != id) continue;
+                                running = running || op.value("state").toString() == "running";
+                                done = done || op.value("state").toString() == "done";
+                            }
+                            if (running || done) continue;
+                            fsTries[id] += 1;
+                            fsAgainAt[id] = now + 10;
+                            fetchFile(id, fsFetch, qgetenv("MUSTER_AUTOFILEPRIVATE").isEmpty() ? "false" : "true");
+                        }
+                    }
+                    qInfo().noquote() << "[muster_ui] FILESHARE" << fileShareJson() << "result=" << fileShareResultJson();
                 }
                 qInfo() << "[muster_ui] SELFTEST pending=" << pendingJson()
                         << "members=" << membersJson()
