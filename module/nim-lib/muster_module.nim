@@ -3466,7 +3466,9 @@ proc musterConnectivity(): string =
       # their wallet on the chains they are owed on, any wallet where they only pay
       let owed = xmrOwedOn(gSession.roomEvents(), driverFor, toHex(moduleKeystore().encIdentity().toBytes()))
       facts.moneroWallet = moneroWalletProbe((if owed.len > 0: moneroBackend().walletStatus(cmPump)
-                                              else: WalletStatus()), owed)
+                                              else: WalletStatus()), owed,
+                                             (if owed.len > 0: moneroBackend().nodeHealth(cmPump)
+                                              else: NodeHealth()))
       probe = probeFromFacts(facts)
       probed = true
     let f = if r.kind == rqInfra: probe.infraConfigured else: probe.environmentReachable

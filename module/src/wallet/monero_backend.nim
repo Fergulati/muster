@@ -27,7 +27,7 @@ const
   MoneroUnlockIntent* = "monero.wallet.unlock" ## the wallet app's intent: it opens a wallet, the person types the password there
   MoneroReadMethods* = ["wallet_status", "receive_info", "create_subaddress", "history",
                         "caller_identity", "list_networks", "address_valid", "list_wallets",
-                        "balances"]
+                        "balances", "node_health"]
     ## Everything muster may ask the wallet backend: reads, and one mint
     ## (create_subaddress, which needs no role). Nothing that builds, signs or broadcasts
     ## a transfer, and nothing that changes the wallet's roles or opens a wallet.
@@ -303,6 +303,22 @@ proc balances*(b: MoneroBackend, mode = cmNow): Balances =
   let bal = atomicOf(j{"balance"})
   if bal.len == 0: return Balances(read: rsUnread, detail: "the Monero wallet backend's balance was unreadable")
   Balances(read: rsAnswered, balance: bal, unlocked: atomicOf(j{"unlocked"}))
+
+type NodeHealth* = object
+  ## node_health (exo-dcc.7): whose node the wallet syncs through. A read, naming no key.
+  read*: ReadState
+  detail*: string
+  mode*: string        ## "local" (monerod_module, the member's own node) or "remote"
+  reachable*: bool
+
+proc nodeHealth*(b: MoneroBackend, mode = cmNow): NodeHealth =
+  ## The active network's node, as the wallet backend reports it: local or remote.
+  let j = b.call("node_health", newJArray(), mode)
+  let (rd, d) = unread(j, "node_health")
+  if rd != rsAnswered: return NodeHealth(read: rd, detail: d)
+  NodeHealth(read: rsAnswered,
+             mode: (if j{"local"}.getBool(false): "local" else: j{"mode"}.getStr("remote")),
+             reachable: j{"reachable"}.getBool(false))
 
 proc listWallets*(b: MoneroBackend, mode = cmNow): WalletList =
   ## list_wallets(): every wallet the backend's registry knows, open or not

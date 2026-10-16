@@ -29,6 +29,8 @@ type
     rows*: seq[JsonNode]         ## history rows, as the backend writes them
     listing*: Answer             ## how list_wallets answers (exo-dcc.20)
     registry*: seq[Registered]   ## the wallets list_wallets names; empty = the open one alone
+    nodeMode*: string            ## node_health's mode: "local" (monerod_module) or "remote"; "" = remote
+    node*: Answer                ## how node_health answers
   Registered* = tuple[name, network: string, viewOnly: bool]
 
 proc keyOf(tag: string): array[32, byte] =
@@ -137,6 +139,14 @@ method invoke*(f: FakeMoneroBackend, meth: string, args: JsonNode, mode: CallMod
       ws.add %*{"name": r.name, "network": r.network, "label": "", "viewOnly": r.viewOnly,
                 "restoreHeight": 0, "address": ""}
     tstr(%*{"ok": true, "wallets": ws})
+  of "node_health":
+    case f.node
+    of anBusy: tstr(%*{"ok": false, "error": "busy"})
+    of anUnreachable: tstr(%*{"ok": false, "error": "unreachable"})
+    of anAnswered:
+      tstr(%*{"ok": true, "reachable": true, "synced": true,
+              "mode": (if f.nodeMode.len > 0: f.nodeMode else: "remote"),
+              "local": f.nodeMode == "local"})
   of "list_networks":
     tstr(%*{"active": (if f.network.len > 0: f.network else: "stagenet"),
             "networks": ["mainnet", "stagenet", "testnet", "regtest"], "ok": true})
