@@ -46,10 +46,13 @@ proc add(r: var ConformanceReport, name: string, ok: bool) =
   r.checks.add (name, ok)
 
 proc checkConformance*(d: Driver, effect, tampered: Effect,
-                       validContribution: Contribution): ConformanceReport =
+                       validContribution: Contribution,
+                       laterRounds: seq[Contribution] = @[]): ConformanceReport =
   ## `effect` and `tampered` must canonicalize to different bytes (a real change,
   ## e.g. a different amount). `validContribution` is one the driver accepts for
   ## `effect` — supplied by the caller because what is valid is driver-specific.
+  ## `laterRounds[i]` is the sample for round i+2, for a driver whose rounds sign
+  ## different messages; a round with no sample of its own reuses `validContribution`.
   result.add("describe is stable", d.describe() == d.describe())
 
   result.add("canonicalize is deterministic",
@@ -76,8 +79,10 @@ proc checkConformance*(d: Driver, effect, tampered: Effect,
   let desc = d.describeFor(effect)
   if d.verifyContribution(validContribution, 1):
     var col = startCollection(d, desc)
-    for _ in 0 ..< desc.threshold * max(1, desc.rounds):
-      submit(col, d, validContribution)
+    for r in 1 .. max(1, desc.rounds):
+      let c = (if r >= 2 and r - 2 < laterRounds.len: laterRounds[r - 2] else: validContribution)
+      for _ in 0 ..< desc.threshold:
+        submit(col, d, c)
     result.add("collection converges at the declared threshold (inv 6)", col.complete)
   else:
     result.add("collection convergence (sample not accepted — supply a valid one)", false)

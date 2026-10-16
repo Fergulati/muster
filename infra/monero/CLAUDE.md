@@ -3,6 +3,7 @@
 A private Monero regtest chain for experiments that need XMR but no real funds. Coins are mined locally (`monerod --regtest --offline --fixed-difficulty 1`), so nothing is funded from outside.
 
 - `multisig-regtest.py` runs a 2-of-3 multisig end to end with monero-wallet-rpc (exo-dcc.34): make, fund, sync, build, `describe_transfer`, sign, submit. It writes `report.json` into `$XMRMS_DIR`. Binaries come from `nix build nixpkgs#monero-cli`.
+- `regtest.sh up [N]` starts monerod on :38081 and N wallet RPCs on :38091…, each wallet empty and `--disable-rpc-login`, under `$XMR_REGTEST_DIR` (default `/tmp/muster-xmr-regtest`); `down` stops them. `module/tests/xmr_msig_regtest_e2e.nim` (`run-suite.sh e2e xmr_msig_regtest_e2e`) drives the xmr-msig driver against them (ADR-020 S1).
 
 Rules:
 - This is a lab, not Muster's runtime. Muster holds no Monero key (ADR-018). The wallets here belong to the experiment and are wiped on every run.

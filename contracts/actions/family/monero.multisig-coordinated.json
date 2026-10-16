@@ -3,6 +3,10 @@
     {
       "id": "monero.multisig-coordinated/setup",
       "name": "Set up a Monero multisig wallet, with the room carrying the key exchange",
+      "area": "family",
+      "family": "monero.multisig-coordinated",
+      "status": "partial",
+      "partialBecause": "ADR-020 S1: the driver and the wallet seam are built and run against real wallets on regtest; the room does not yet carry the setup rounds (S2).",
       "summary": "Each member's own wallet runs prepare_multisig; the room carries each member's output to the others, then each wallet runs make_multisig with the threshold and exchange_multisig_keys once or twice, the room carrying every round's data in order. Muster holds none of the keys; it records who sent each round. The resulting address is disclosed into the room by the members whose wallets show the same address.",
       "effect": {
         "schema": "muster.effect.monero.multisig-setup.v0",
@@ -78,7 +82,8 @@
             }
           ],
           "evidence": [
-            "https://docs.getmonero.org/multisignature/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         },
         {
@@ -93,8 +98,8 @@
             }
           ],
           "evidence": [
-            "https://docs.getmonero.org/multisignature/",
-            "https://web.getmonero.org/resources/user-guides/multisig-messaging-system.html"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         },
         {
@@ -104,7 +109,8 @@
           "signs": "",
           "reveals": [],
           "evidence": [
-            "https://docs.getmonero.org/multisignature/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         }
       ],
@@ -113,14 +119,12 @@
           "what": "a disclosed address that differs between members",
           "why": "the wallets did not reach the same multisig account",
           "evidence": [
-            "https://docs.getmonero.org/multisignature/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         }
       ],
       "ui": "Not built: a Key ceremony-style section of the room's accounts panel would carry the rounds.",
-      "area": "family",
-      "family": "monero.multisig-coordinated",
-      "status": "declared",
       "invariants": [
         1,
         2,
@@ -160,6 +164,16 @@
           "kind": "source",
           "url": "https://github.com/freigeist-m/monero-multisig-gui",
           "what": "monero-multisig-gui: wallet2 embedded, peers over Tor onion services"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_msig_test.nim",
+          "what": "the driver: the effect, the refusals, both rounds' signatures, the describe-check, conformance"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_msig_regtest_e2e.nim",
+          "what": "real monero-wallet-rpc on regtest: a 2-of-3 set up, the describe-check passing the agreed spend and refusing others, signed, submitted, 10 confirmations"
         }
       ],
       "unverified": [
@@ -169,7 +183,13 @@
     {
       "id": "monero.multisig-coordinated/spend",
       "name": "Spend from a Monero multisig wallet, agreed in the room, signed by each member's own wallet",
+      "area": "family",
+      "family": "monero.multisig-coordinated",
+      "kind": "xmr-msig",
+      "status": "partial",
+      "partialBecause": "ADR-020 S1: the driver (effect, refusals, two rounds, the describe-check) is built and conforms, and a spend ran on regtest; the room does not yet carry the sync, the transaction set or the signing rounds (S3), and no UI offers it (S4).",
       "summary": "The room agrees the payment first: recipients and amounts. Before the spend, the members' wallets re-sync partial key images (export_multisig_info / import_multisig_info), the room carrying the blobs. One member's wallet builds the transaction set (transfer); the room carries it; each signer's own wallet runs describe_transfer on it and signs (sign_multisig) only if its recipients and amounts are the agreed ones; any wallet submits (submit_multisig). One spend at a time: the scheme needs a fresh sync after each.",
+      "generated": "xmr-msig/spend",
       "effect": {
         "schema": "muster.effect.monero.multisig-spend.v0",
         "fields": [
@@ -191,60 +211,6 @@
           }
         ]
       },
-      "agreement": {
-        "rounds": 2,
-        "threshold": "M of N members' wallets sign",
-        "finality": "the chain, at 10 confirmations",
-        "domain": "muster.monero.multisig-spend.v0"
-      },
-      "requirements": [
-        {
-          "kind": "infra",
-          "name": "monero-multisig-wallet",
-          "party": "contributor",
-          "class": "infra",
-          "target": "the member's own Monero multisig wallet (monero-wallet-cli / monero-wallet-rpc, monero-multisig-gui), which holds their key and multisig state",
-          "field": ""
-        }
-      ],
-      "touches": [
-        {
-          "target": "monero:<network>",
-          "mode": "write"
-        }
-      ],
-      "disclosure": [
-        {
-          "field": "effect",
-          "observer": "room-member",
-          "when": "propose"
-        },
-        {
-          "field": "contributions",
-          "observer": "room-member",
-          "when": "approve"
-        },
-        {
-          "field": "timing",
-          "observer": "store-node",
-          "when": "always"
-        },
-        {
-          "field": "topic",
-          "observer": "store-node",
-          "when": "always"
-        },
-        {
-          "field": "multisig-sync-data",
-          "observer": "room-member",
-          "when": "act"
-        },
-        {
-          "field": "transaction-set",
-          "observer": "room-member",
-          "when": "approve"
-        }
-      ],
       "steps": [
         {
           "step": "propose",
@@ -258,7 +224,8 @@
             }
           ],
           "evidence": [
-            "https://docs.getmonero.org/multisignature/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         },
         {
@@ -273,7 +240,8 @@
             }
           ],
           "evidence": [
-            "https://docs.getmonero.org/multisignature/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         },
         {
@@ -288,8 +256,8 @@
             }
           ],
           "evidence": [
-            "https://docs.getmonero.org/rpc-library/wallet-rpc/",
-            "https://docs.getmonero.org/multisignature/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         },
         {
@@ -299,7 +267,8 @@
           "signs": "",
           "reveals": [],
           "evidence": [
-            "https://docs.getmonero.org/multisignature/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         },
         {
@@ -309,7 +278,8 @@
           "signs": "",
           "reveals": [],
           "evidence": [
-            "https://docs.getmonero.org/multisignature/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         }
       ],
@@ -318,21 +288,20 @@
           "what": "signing a transaction set whose recipients or amounts differ from the agreed effect",
           "why": "invariant 1, done by the member's own wallet: Muster cannot decode a Monero transaction set",
           "evidence": [
-            "https://docs.getmonero.org/rpc-library/wallet-rpc/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         },
         {
           "what": "a second spend before the first has settled and the members re-synced",
           "why": "the scheme refuses stale multisig data ('This signature was made with stale data')",
           "evidence": [
-            "https://docs.getmonero.org/multisignature/"
+            "module/tests/xmr_msig_test.nim",
+            "module/tests/xmr_msig_regtest_e2e.nim"
           ]
         }
       ],
       "ui": "Not built.",
-      "area": "family",
-      "family": "monero.multisig-coordinated",
-      "status": "declared",
       "invariants": [
         1,
         2,
@@ -372,6 +341,16 @@
           "kind": "source",
           "url": "https://github.com/freigeist-m/monero-multisig-gui",
           "what": "monero-multisig-gui: wallet2 embedded, peers over Tor onion services"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_msig_test.nim",
+          "what": "the driver: the effect, the refusals, both rounds' signatures, the describe-check, conformance"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/xmr_msig_regtest_e2e.nim",
+          "what": "real monero-wallet-rpc on regtest: a 2-of-3 set up, the describe-check passing the agreed spend and refusing others, signed, submitted, 10 confirmations"
         }
       ],
       "unverified": [

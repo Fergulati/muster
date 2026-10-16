@@ -3199,6 +3199,143 @@
         "touches": []
       },
       "signRefusal": ""
+    },
+    "xmr-msig/spend": {
+      "kind": "xmr-msig",
+      "variant": "spend",
+      "family": "monero.multisig-coordinated",
+      "effectExample": {
+        "schema": "muster.effect.monero.multisig-spend.v0",
+        "fields": {
+          "chain": "monero:76ee3cc98646292206cd3e86f74d88b4",
+          "account": "588mnoRbxwJj8HVUWfP3zEWGwT3o6REvdAG3LcQbkMVs3ggJ8wiFC1zRDPihjUMbR3cEpESD3UTe3arWoB3Yb8xH93PEA4g",
+          "feeCap": "1000000000",
+          "memo": "Rent",
+          "recipients": [
+            [
+              "73LhUiix4DVFMcKhsPRG51QmCsv8dYYbL6GcQoLwEEFvPvkVvc7BhebfA4pnEFF9Lq66hwvLqBvpHjTcqvpJMHmmNjPPBqa",
+              "250000000000"
+            ]
+          ]
+        }
+      },
+      "describe": {
+        "rounds": 2,
+        "threshold": 2,
+        "finality": "external",
+        "domain": "muster.monero.multisig-spend.v0"
+      },
+      "environment": "monero:76ee3cc98646292206cd3e86f74d88b4",
+      "profile": {
+        "declared": true,
+        "family": "monero.multisig-coordinated",
+        "settlement": "monero",
+        "locus": "aggregate",
+        "scheme": "aggregate-threshold",
+        "commits": "content",
+        "binding": "none",
+        "ordering": "dedup",
+        "expiry": "none",
+        "setup": "dkg",
+        "membershipChange": "new-address",
+        "approverCost": "none",
+        "reveals": {
+          "policy": "never",
+          "signers": "never",
+          "effect": "shielded"
+        },
+        "rounds": 2,
+        "secretState": true,
+        "maturity": "experimental",
+        "chain": "monero:76ee3cc98646292206cd3e86f74d88b4",
+        "account": "monero:76ee3cc98646292206cd3e86f74d88b4:588mnoRbxwJj8HVUWfP3zEWGwT3o6REvdAG3LcQbkMVs3ggJ8wiFC1zRDPihjUMbR3cEpESD3UTe3arWoB3Yb8xH93PEA4g",
+        "k": 2,
+        "n": 3,
+        "bypassesKnown": true,
+        "bypasses": []
+      },
+      "manifest": {
+        "declared": true,
+        "agreement": {
+          "rounds": 2,
+          "threshold": 2,
+          "finality": "external",
+          "domain": "muster.monero.multisig-spend.v0"
+        },
+        "requirements": [
+          {
+            "kind": "environment",
+            "name": "monero:76ee3cc98646292206cd3e86f74d88b4",
+            "party": "instance",
+            "needs": {
+              "class": "infra",
+              "target": "monero:76ee3cc98646292206cd3e86f74d88b4",
+              "field": ""
+            }
+          },
+          {
+            "kind": "infra",
+            "name": "xmr-msig-rpc",
+            "party": "contributor",
+            "needs": {
+              "class": "infra",
+              "target": "xmr-msig-rpc",
+              "field": ""
+            }
+          },
+          {
+            "kind": "authority",
+            "name": "account-member",
+            "party": "contributor",
+            "needs": {
+              "class": "authority",
+              "target": "account-member",
+              "field": ""
+            }
+          }
+        ],
+        "discloses": [
+          {
+            "field": "effect",
+            "to": "room-member"
+          },
+          {
+            "field": "contributions",
+            "to": "room-member"
+          },
+          {
+            "field": "timing",
+            "to": "store-node"
+          },
+          {
+            "field": "topic",
+            "to": "store-node"
+          },
+          {
+            "field": "transaction-exists",
+            "to": "chain-observer"
+          },
+          {
+            "field": "wallet-sync",
+            "to": "rpc-provider"
+          },
+          {
+            "field": "signed-tx",
+            "to": "rpc-provider"
+          }
+        ],
+        "touches": [
+          {
+            "target": "monero:76ee3cc98646292206cd3e86f74d88b4",
+            "mode": "write"
+          },
+          {
+            "target": "monero-msig-wallet:588mnoRbxwJj8HVUWfP3zEWGwT3o6REvdAG3LcQbkMVs3ggJ8wiFC1zRDPihjUMbR3cEpESD3UTe3arWoB3Yb8xH93PEA4g",
+            "mode": "write"
+          }
+        ]
+      },
+      "signRefusal": ""
     }
   }
 }

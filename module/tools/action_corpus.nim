@@ -34,6 +34,7 @@ import ../src/drivers/btc_multisig
 import ../src/drivers/btc_frost
 import ../src/drivers/lez_multisig
 import ../src/drivers/lez_frost
+import ../src/drivers/xmr_msig               # xmrMsigSpendJson (exo-dcc.34)
 import ../src/drivers/split                  # evenShares / splitEffectJson (exo-a90.3)
 import ../src/coordination/readiness        # toJson(ActionManifest), toJson(DriverDescriptor)
 import ../src/coordination/intent_events    # effectFromJson — the hosted propose path's parser
@@ -76,6 +77,8 @@ const LezTokenDefinition = "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d
 const LezModeBFrom = "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e"
 const XmrStagenet = "monero:76ee3cc98646292206cd3e86f74d88b4"   ## the monero-split fixture's chain (exo-dcc.5)
 ## a stagenet subaddress (monero-project tests/functional_tests, as monero_address_test holds it)
+const XmrMsigAccount = "588mnoRbxwJj8HVUWfP3zEWGwT3o6REvdAG3LcQbkMVs3ggJ8wiFC1zRDPihjUMbR3cEpESD3UTe3arWoB3Yb8xH93PEA4g"
+  ## a stagenet standard address standing for a 2-of-3 multisig wallet's (exo-dcc.34)
 const XmrPayTo = "73LhUiix4DVFMcKhsPRG51QmCsv8dYYbL6GcQoLwEEFvPvkVvc7BhebfA4pnEFF9Lq66hwvLqBvpHjTcqvpJMHmmNjPPBqa"
 ## a Bitcoin payee (bcrt1q… of the BIP-173 example program), as btc_settlement_test pays
 let BtcPayee = encodeSegwitAddress("bcrt", 0, hexToBytes("751e76e8199196d454941c45d1b3a323f1433bd6"))
@@ -117,6 +120,7 @@ proc configOf(kind: string): JsonNode =
   of "lez-split": %*{"chain": "lez:testnet", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   of "btc-split": %*{"chain": BtcRegtest, "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
   of "monero-split": %*{"chain": XmrStagenet, "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
+  of "xmr-msig": %*{"chain": XmrStagenet, "address": XmrMsigAccount, "k": 2, "members": roster}
   else: raise newException(ValueError, "no corpus fixture for kind " & kind)
 
 # ── the effects, built as the hosted composers build them ─────────────────────
@@ -249,6 +253,11 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
     let covers = @[Cover(intent: s1, debtor: SplitDebtors[0], creditor: SplitCreditor, amount: "300000", payTo: credTo),
                    Cover(intent: s2, debtor: SplitCreditor, creditor: SplitDebtors[0], amount: "200000", payTo: debtTo)]
     settleUpEffectJson(BtcRegtest, "BTC", covers, netTransfers(covers), "Cabin")
+  of "xmr-msig/spend":
+    # a spend from the members' 2-of-3 Monero multisig wallet: 0.25 XMR to one subaddress,
+    # in atomic units, the network fee capped at 0.001 XMR (ADR-020)
+    xmrMsigSpendJson(XmrStagenet, XmrMsigAccount,
+                     @[XmrRecipient(address: XmrPayTo, amount: "250000000000")], "1000000000", "Rent")
   else: raise newException(ValueError, "no corpus effect for " & kind & "/" & variant)
 
 const Variants* = [
@@ -259,7 +268,7 @@ const Variants* = [
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
   ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),
   ("evm-split", "split"), ("evm-split", "settle-up"), ("lez-split", "split"), ("btc-split", "split"), ("btc-split", "settle-up"),
-  ("monero-split", "request")]
+  ("monero-split", "request"), ("xmr-msig", "spend")]
 
 # ── JSON ──────────────────────────────────────────────────────────────────────
 proc cborJson(v: CborValue): JsonNode =
