@@ -2783,7 +2783,7 @@ proc musterFileshareFiles(): string =
                  "dest": o.dest, "private": o.private}
   $(%*{"ready": ready, "note": note, "files": files, "ops": ops})
 
-proc musterFileshareFetch(fileId, folder, private: string): string =
+proc musterFileshareFetch(fileId, folder, privately: string): string =
   if gSession == nil: return $(%*{"error": "not-joined"})
   let (ready, note) = fileShareReady()
   if not ready: return $(%*{"error": "not-ready", "detail": note})
@@ -2792,7 +2792,7 @@ proc musterFileshareFetch(fileId, folder, private: string): string =
     dir = getHomeDir() / "Downloads"
     createDir(dir)
   let node = swarmNode(gTopic)
-  let op = node.fetch(gSession, fileId, dir, private = private == "true")
+  let op = node.fetch(gSession, fileId, dir, private = privately == "true")
   for o in node.ops():
     if o.id == op and o.state == opFailed: return $(%*{"error": o.error})
   $(%*{"op": op})
