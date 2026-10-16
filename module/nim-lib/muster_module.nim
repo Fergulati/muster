@@ -116,6 +116,7 @@ import ../src/coordination/parts_lez    # …and privately on the LEZ, found by 
 import ../src/coordination/xmr_request  # …and in XMR: a monero: link to pay from any wallet, the creditor's own wallet confirms (exo-dcc.5)
 import ../src/wallet/monero_backend_lp  # …monero_wallet_backend over lp_*: reads and one mint, never a spend
 import ../src/storage/storage_lp       # FileShare: storage_module over lp_* (exo-4d0.2)
+import ../src/storage/storage_readiness # FileShare: where storage_module stands, registry first
 import ../src/coordination/swarm       # FileShare: the room as tracker (exo-4d0.4)
 import ../src/coordination/swarm_live  # FileShare: share, fetch and seed from a pump (exo-4d0.5)
 import std/mimetypes
@@ -2712,7 +2713,13 @@ var gStorage: LpStorage = nil
 var gSwarmNodes = initTable[string, SwarmNode]()
 
 proc storage(): LpStorage =
-  if gStorage == nil: gStorage = newLpStorage()
+  ## The storage node over lp_*. A node Muster has to start itself (the standalone runner)
+  ## keeps its data in THIS instance's folder, never in ~/.logos_storage/data, which another
+  ## app's node may hold (storage_lp.nim).
+  if gStorage == nil:
+    var dir = context().instancePersistencePath
+    if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
+    gStorage = newLpStorage(dir / "storage")
   gStorage
 
 proc swarmWorkDir(topic: string): string =
@@ -2726,25 +2733,30 @@ proc swarmNode(topic: string): SwarmNode =
                                       proc(): int64 = int64(epochTime()))
   gSwarmNodes[topic]
 
+proc fileShareReadiness(): FileShareReadiness =
+  ## Where storage_module stands: the host's registry first (installed? running?), and the
+  ## node only once the host says it is ready or cannot say (storage_readiness.nim).
+  fileShareReadiness(moduleFacts().moduleRecord(StoragePackage), proc(): NodeStatus = storage().status())
+
+proc fileShareReady(): (bool, string) =
+  let r = fileShareReadiness()
+  (r.ready, r.note)
+
 proc fileSharePump() =
   ## Finish what the storage node has done since the last tick, room by room.
-  if gStorage == nil: return
+  if gStorage == nil or not fileShareReadiness().ready: return
   for topic, node in gSwarmNodes:
     if topic in gSessions:
       try: node.pump(gSessions[topic])
       except CatchableError: discard
 
-proc fileShareReady(): (bool, string) =
-  let s = storage()
-  if s.ensure(): (true, "") else: (false, s.note)
-
 proc musterFileshareStatus(): string =
-  let (ready, note) = fileShareReady()
+  let rd = fileShareReadiness()
   var node = newJObject()
-  if ready:
+  if rd.ready:
     let r = storage().reach()
     node = %*{"peerId": r.peerId, "addrs": r.addrs, "network": r.network, "spr": storage().spr()}
-  $(%*{"ready": ready, "note": note, "node": node})
+  $(%*{"ready": rd.ready, "state": $rd.state, "note": rd.note, "install": rd.install, "node": node})
 
 proc musterFileshareShare(path: string): string =
   if gSession == nil: return $(%*{"error": "not-joined"})
@@ -2759,10 +2771,11 @@ proc musterFileshareShare(path: string): string =
   $(%*{"op": op})
 
 proc musterFileshareFiles(): string =
-  if gSession == nil: return $(%*{"ready": false, "note": "not-joined", "files": [], "ops": []})
+  if gSession == nil: return $(%*{"ready": false, "state": "not-joined", "note": "not-joined", "files": [], "ops": []})
   gSession.poll()
   fileSharePump()
-  let (ready, note) = fileShareReady()
+  let rd = fileShareReadiness()
+  let (ready, note) = (rd.ready, rd.note)
   let me = toHex(gSession.selfIdentity().toBytes()).toLowerAscii
   var files = newJArray()
   for f in reduceSwarm(gSession.roomEvents()):
@@ -2781,7 +2794,7 @@ proc musterFileshareFiles(): string =
       ops.add %*{"id": o.id, "kind": $o.kind, "state": $o.state, "error": o.error, "file": o.fid,
                  "name": o.name, "bytes": int64(o.bytes), "total": int64(o.total),
                  "dest": o.dest, "private": o.private}
-  $(%*{"ready": ready, "note": note, "files": files, "ops": ops})
+  $(%*{"ready": ready, "state": $rd.state, "note": note, "install": rd.install, "files": files, "ops": ops})
 
 proc musterFileshareFetch(fileId, folder, privately: string): string =
   if gSession == nil: return $(%*{"error": "not-joined"})
