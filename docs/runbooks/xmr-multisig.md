@@ -8,7 +8,7 @@
 > - **Stagenet only.** One spend at a time, about 20 minutes each.
 > - The wallet will need re-creating after Monero's FCMP++ upgrade.
 >
-> **Status.** The whole runbook ran on stagenet through the UI on 2026-10-17, with three runners on one machine: set up, funded, spent, and settled on all three cards. Labbook: `docs/labbook/monero-multisig-in-the-room.md` §8. If a wallet keeps saying *no connection to daemon*, point it at another stagenet node (`set_daemon`). If a member of the room is gone, the setup waits for them forever; for now, start a room with only the members who take part.
+> **Status.** The whole runbook ran on stagenet through the UI on 2026-10-17, with three runners on one machine: set up, funded, spent, and settled on all three cards. Labbook: `docs/labbook/monero-multisig-in-the-room.md` §8. If a wallet keeps saying *no connection to daemon*, point it at another stagenet node (`set_daemon`). Leave out any member who will not join from their own wallet: the setup waits for every member it names.
 
 ## 0. Set up, on each of three machines
 
@@ -30,7 +30,7 @@ One person opens a room and invites the other two (see [`xmr-payment-request.md`
 
 ## 2. Set up the wallet (about a minute)
 
-1. **One member:** open the room's details, then **Add an account → Monero multisig**. Under **Monero multisig (your own wallet)**, set **M** to `2` and press **Set up a Monero multisig**. You join it as you open it.
+1. **One member:** open the room's details, then **Add an account → Monero multisig**. Under **Monero multisig (your own wallet)**, the members are listed; tap any who should not take part (you always do). Set **M** to `2` and press **Set up a 2-of-3 Monero multisig**. You join it as you open it.
 2. **The other two:** the setup appears in the same section. Press **Join**.
 3. Nobody's wallet is asked anything until all three have joined. Then each wallet runs its rounds as the room carries them. Watch each member's round count go up, and the status line under the setup.
 4. ✓ The setup shows one address, **disclosed by 3 of 3**. Check that each wallet shows the same address: `curl -s http://127.0.0.1:38083/json_rpc -d '{"jsonrpc":"2.0","id":"0","method":"get_address"}'`.

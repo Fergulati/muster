@@ -156,7 +156,7 @@
       "step": "collect",
       "kind": "protects",
       "title": "Every driver passes one conformance suite",
-      "body": "Every driver is graded by the same conformance suite — the stub, Safe, threshold, FROST and invoke drivers, the split drivers (Ethereum, LEZ, Monero), and the ones the registry builds by kind; a driver feature does not merge with it red, so the coordination guarantees hold identically whichever driver a room runs.",
+      "body": "Every kind of account and decision is graded by the same conformance suite — the stub, Safe, threshold, FROST and invoke, the bill splits (Ethereum, LEZ, Bitcoin, Monero), the Monero multisig, and every kind the registry builds; nothing new merges with it red, so the room's guarantees hold the same whichever kind a room runs.",
       "requirement": "S-1",
       "test": "module/tests/conformance_test.nim",
       "credibility": "imperative"
