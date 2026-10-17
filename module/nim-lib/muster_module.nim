@@ -2208,6 +2208,7 @@ proc musterCoordinateAccounts(): string =
     # a Bitcoin disclosure is checked by re-deriving its address from the keys (the
     # address commits to the policy — no chain read); an EVM one against the chain
     let (st, detail) = (if a.family.startsWith("btc."): btcDisclosureCheck(a)
+                        elif a.family == XmrMsigFamily: xmrMsigDisclosureCheck(a)
                         else: checkAccount(a, chainViewOf(a)))
     arr[i]["check"] = %*{"status": $st, "detail": detail}
     # The ways around the threshold, READ from the chain (exo-a50.1.4): a Safe's enabled

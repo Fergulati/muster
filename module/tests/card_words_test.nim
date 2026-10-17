@@ -169,4 +169,16 @@ block:
   doAssert "a LEZ transfer: 0.0000001 LEZ → " in fc.text, fc.text
   echo "6. LEZ v0.3: a multisig proposal and a FROST call read in LEZ, by string arithmetic OK"
 
+# ── 7. a Monero multisig spend read in words (ADR-020): what leaves, to whom, the fee cap ──
+block:
+  let to = "57VTGxT3AW727aC8Df1WfxfkhrxwknsrZe8Wp2zvwCzt6CJvGjjtiW7Wiei8Y6XmGJjeQMHbZ4S5iFF7DbRqwc7dBsJnXeW"
+  let ej = $(%*{"effect": "monero-multisig-spend", "chain": "monero:76ee3cc98646292206cd3e86f74d88b4",
+                "account": "56G4oLtM", "recipients": [{"address": to, "amount": "500000000"}],
+                "feeCap": "1000000000", "memo": "rent"})
+  let s = effectSummary(ej)
+  doAssert s.kind == "payment" and s.amount == "500000000" and s.unit == "atomic" and s.to == to, $s
+  doAssert "a Monero multisig payment — rent: 0.0005 XMR → " in s.text and "fee at most 0.001 XMR" in s.text, s.text
+  doAssert "a proposal" notin s.text
+  echo "7. a Monero multisig spend reads as what it pays, in XMR, with its fee cap OK"
+
 echo "card_words_test: all OK"

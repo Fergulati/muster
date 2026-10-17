@@ -865,20 +865,25 @@ Rectangle {
             LogosText {
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
-                text: cardRoot.card && Number(cardRoot.card.threshold || 0) > 0
-                      ? qsTr("Signers: %1 of %2 fixed").arg(parent.signerCount).arg(cardRoot.card.threshold)
-                      : qsTr("Signers: %1 fixed").arg(parent.signerCount)
+                // until the first M have approved, nobody is a signer yet: say who will be
+                text: parent.signerCount === 0
+                      ? (Number(cardRoot.card && cardRoot.card.threshold || 0) > 0
+                         ? qsTr("Signers: the first %1 to approve, each from their own wallet").arg(cardRoot.card.threshold)
+                         : qsTr("Signers: the first to approve, each from their own wallet"))
+                      : qsTr("Signers: %1, each from their own wallet").arg(parent.signerCount)
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.cardCaption
             }
             LogosText {
                 Layout.fillWidth: true
+                visible: parent.signerCount > 0
                 text: qsTr("Synced: %1 of %2").arg((parent.m.synced || []).length).arg(parent.signerCount)
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.cardCaption
             }
             LogosText {
                 Layout.fillWidth: true
+                visible: parent.signerCount > 0
                 text: qsTr("Signed: %1 of %2").arg((parent.m.signed || []).length).arg(parent.signerCount)
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.cardCaption
