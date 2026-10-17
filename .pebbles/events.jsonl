@@ -2619,5 +2619,36 @@
 {"type":"comment","timestamp":"2026-10-17T12:20:32.853981787Z","issue_id":"exo-cb3","payload":{"body":"Cause: RoomThread's onShareAddress posted room.myAddress (muster's own key, unsigned) for ETH instead of calling coordinate_share_address, whose myEvmPayAddress is the keystore account. Fixed: every share goes through the module. Also hardened keystoreAttested against a stale caller_identity reply (AttestMemo, keystore_status_test §10). Verified on display: Bob shares 0xa9d043f3…4bfa6d."}}
 {"type":"close","timestamp":"2026-10-17T12:20:33.136511398Z","issue_id":"exo-cb3","payload":{}}
 {"type":"close","timestamp":"2026-10-17T12:20:33.136511398Z","issue_id":"exo-d4d.12","payload":{}}
+{"type":"create","timestamp":"2026-10-17T13:33:03.900946277Z","issue_id":"exo-cdc","payload":{"description":"The Monero multisig setup form names every current room member, so a member who is gone blocks the setup forever (seen in the stagenet UI run, labbook monero-multisig-in-the-room §8). Add a member picker to RoomAccounts' setup form; the module already takes members_json.","priority":"2","title":"xmr-msig setup: pick the members (a gone member blocks a setup)","type":"task"}}
+{"type":"rename","timestamp":"2026-10-17T13:33:07.231463503Z","issue_id":"exo-cdc","payload":{"new_id":"exo-dcc.34.6"}}
+{"type":"dep_add","timestamp":"2026-10-17T13:33:07.231463503Z","issue_id":"exo-dcc.34.6","payload":{"dep_type":"parent-child","depends_on":"exo-dcc.34"}}
 {"type":"comment","timestamp":"2026-10-17T15:30:40.225198985Z","issue_id":"exo-80b","payload":{"body":"Merged via Fergulati's #321 (2026-10-17): darwin-arm64 leg green in lgx variants run 38945358760; suite and release script run on macOS. Open: a Mac ↔ Linux room (R6), 0.3.1 muster_ui in Basecamp on macOS."}}
 {"type":"comment","timestamp":"2026-10-17T17:13:46.401526997Z","issue_id":"exo-408","payload":{"body":"Items 1, 10, 12 and 14 landed 2026-10-17 by reviving the 2026-10-12 PRs onto main: #328 (item 1, split pump in every room; supersedes #290), #329 (items 10 and 14; supersedes #288), #330 (item 12; supersedes #289). Still open: 11, 15."}}
+{"type":"comment","timestamp":"2026-10-17T19:12:26.748291962Z","issue_id":"exo-f49","payload":{"body":"Done: module/src/transport/delivery.nim; two instances converge over the live fleet (CLAUDE.md). Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:26.998693725Z","issue_id":"exo-f49","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:27.231379832Z","issue_id":"exo-6dc","payload":{"body":"Done: F-16 verified, cross-host membership + coordination over the fleet, R-4/R-6 rerun across two machines on 2026-10-02 (exo-a90.21 comment). Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:27.448312199Z","issue_id":"exo-6dc","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:27.697887047Z","issue_id":"exo-070","payload":{"body":"Superseded: releases muster-v0.3.0 and v0.3.1 ship AppImages built by scripts/release-appimage.sh (RELEASING.md). Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:27.935791483Z","issue_id":"exo-070","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:28.154781239Z","issue_id":"exo-2d5","payload":{"body":"Done: every child closed. Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:28.433381849Z","issue_id":"exo-2d5","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:28.656598796Z","issue_id":"exo-eb6.3.1","payload":{"body":"Done: PR #200 (8024841); scripts/rln-self-test.sh ran live. R2-R4 stay under exo-eb6.3. Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:28.914964822Z","issue_id":"exo-eb6.3.1","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:29.174559851Z","issue_id":"exo-149.3","payload":{"body":"Done: the evm.signing.approve round trip was seen on display in Basecamp 0.3.1 (exo-d4d.2, 2026-10-03); R6 passed. Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:29.44673449Z","issue_id":"exo-149.3","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:29.640384934Z","issue_id":"exo-149.4","payload":{"body":"Done: every EVM send goes through tx_sender_module, refused unless it is what the room agreed (wallet/tx_sender_lp.nim); R6 passed on Sepolia. Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:29.86775146Z","issue_id":"exo-149.4","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:30.121683562Z","issue_id":"exo-d4d.2","payload":{"body":"Done: c8d30f4; seen on display 2026-10-03. Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:30.362853771Z","issue_id":"exo-d4d.2","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:30.633052783Z","issue_id":"exo-dcc.15","payload":{"body":"Done: PR #323 (501d994) builds a 0.3.2 profile; infra/basecamp/bundle-0.3.2.tsv exists. Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:30.853382635Z","issue_id":"exo-dcc.15","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:31.115704747Z","issue_id":"exo-a2a","payload":{"body":"Done: the five probes exist in module/tests/probes/; a2d3819 grades the spec 7/7. Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:31.374476221Z","issue_id":"exo-a2a","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:31.63454758Z","issue_id":"exo-9eed","payload":{"body":"Done: 3ce8c12 caps the profile log at 64 MB plus one rotated copy; the remaining DEBUG noise is upstream (exo-8fc). Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:31.909749017Z","issue_id":"exo-9eed","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:32.175911122Z","issue_id":"exo-1ec.3","payload":{"body":"Done: part 1 PR #117, part 2 PR #118 (docs/design/cde-into-logos-core.md). Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:32.412311111Z","issue_id":"exo-1ec.3","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:12:32.637538847Z","issue_id":"exo-c6a","payload":{"body":"Overtaken: ADR-013 routed around it and P4 shipped; the upstream codegen bump it waited on is carried by exo-d4d.8. Closed in the 2026-10-17 tracker audit."}}
+{"type":"close","timestamp":"2026-10-17T19:12:32.868403251Z","issue_id":"exo-c6a","payload":{}}
+{"type":"close","timestamp":"2026-10-17T19:14:25.203980705Z","issue_id":"exo-dcc.34.6","payload":{}}
+{"type":"comment","timestamp":"2026-10-17T19:14:25.465046448Z","issue_id":"exo-dcc.34.6","payload":{"body":"Member picker in the setup form (you always in; tap to leave someone out; the button names the M-of-N). Seen live on a dev runner."}}

@@ -48,7 +48,19 @@ Item {
     property var xmrMsigSetup: ({})       // the last open/join result ({ceremony, ...} or {error, detail})
     property var xmrMsigPropose: ({})     // the last spend proposal ({intentId} or {error, detail})
     property bool xmrMsigWalletSet: false // whether this member's xmr-msig-rpc setting is set
-    signal xmrMsigSetupRequested(string ceremonyId, string k)
+    signal xmrMsigSetupRequested(string ceremonyId, string k, string membersJson)
+    property var roomMembers: []          // the room's roster [{identity, self, alias}], for the setup's member picker
+    property var xmrOut: ({})             // members left out of the next setup, by identity (exo-cdc)
+    // the members the next setup names: you, and everyone not left out
+    function xmrMembers() {
+        var out = [];
+        for (var i = 0; i < acc.roomMembers.length; ++i) {
+            var m = acc.roomMembers[i];
+            var id = String(m.identity || "");
+            if (id.length > 0 && (m.self || !acc.xmrOut[id])) out.push(id);
+        }
+        return out;
+    }
     signal xmrMsigJoinRequested(string ceremonyId)
     signal xmrMsigProposeRequested(string account, string recipientsJson, string feeCap, string memo)
     // the room's Monero multisig account, if a member disclosed one (its CAIP-10 id is the account)
@@ -638,11 +650,34 @@ Item {
                 spacing: Theme.spacing.small
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("How many must sign? Everyone in the room takes part, and each must join from their own wallet.")
+                    text: qsTr("Who takes part, and how many must sign? Each must join from their own wallet; one who never joins holds the setup up.")
                     color: Theme.palette.text
                     font.pixelSize: Theme.typography.secondaryText
                     font.weight: Theme.typography.weightMedium
                     wrapMode: Text.WordWrap
+                }
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.tiny
+                    Repeater {
+                        model: acc.roomMembers
+                        delegate: ActionButton {
+                            required property var modelData
+                            readonly property string ident: String(modelData.identity || "")
+                            objectName: "xmrMsigWho_" + ident.slice(0, 8)
+                            text: modelData.self ? qsTr("You")
+                                  : (modelData.alias && String(modelData.alias).length > 0)
+                                  ? String(modelData.alias) : ident.slice(0, 10) + "…"
+                            enabled: !modelData.self            // the one who sets it up takes part
+                            variant: (modelData.self || !acc.xmrOut[ident]) ? LogosButton.Variant.Primary
+                                                                             : LogosButton.Variant.Secondary
+                            onClicked: {
+                                var o = Object.assign({}, acc.xmrOut);
+                                if (o[ident]) delete o[ident]; else o[ident] = true;
+                                acc.xmrOut = o;
+                            }
+                        }
+                    }
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -657,10 +692,15 @@ Item {
                     ActionButton {
                         objectName: "xmrMsigSetupOpen"
                         Layout.fillWidth: true
-                        enabled: /^[0-9]+$/.test(xmrK.text.trim()) && Number(xmrK.text.trim()) >= 1
-                        text: qsTr("Set up a Monero multisig")
+                        // M of N with 2 <= M <= N and at least two members (the module refuses the rest)
+                        enabled: /^[0-9]+$/.test(xmrK.text.trim()) && Number(xmrK.text.trim()) >= 2
+                                 && Number(xmrK.text.trim()) <= acc.xmrMembers().length
+                        text: acc.xmrMembers().length < 2
+                              ? qsTr("A multisig needs at least two members")
+                              : qsTr("Set up a %1-of-%2 Monero multisig").arg(xmrK.text.trim()).arg(acc.xmrMembers().length)
                         variant: LogosButton.Variant.Secondary
-                        onClicked: acc.xmrMsigSetupRequested("xmr-" + Date.now(), xmrK.text.trim())
+                        onClicked: acc.xmrMsigSetupRequested("xmr-" + Date.now(), xmrK.text.trim(),
+                                                             JSON.stringify(acc.xmrMembers()))
                     }
                 }
             }

@@ -78,5 +78,5 @@ What the run showed, now fixed:
 
 Seen, not fixed:
 
-- **A dead member blocks the setup.** The setup form names every current member, so a member who is gone (here, an instance killed after it was admitted) blocks the setup forever. The form needs a member picker.
-- **A three-way autojoin goes wrong.** The self-test autopilot (`MUSTER_AUTOJOIN_TOPIC` + `MUSTER_AUTOADMIT` on every instance) is built for two instances. With three, the third founded its own copy of the room. Inviting by contact link, the UI's own path, worked.
+- **A dead member blocked the setup.** The setup form named every current member, so a member who was gone (here, an instance killed after it was admitted) held the setup up forever. **Fixed (exo-dcc.34.6):** the form now has a member picker. You always take part; tap a member to leave them out, and the button names the M-of-N it will open.
+- **A three-way autojoin went wrong, through the launcher.** The run's launcher set `MUSTER_AUTOADMIT` on every instance, so each acted as a founder, and the third founded its own copy of the room. The self-tests set it on the founder only (`scripts/two-instance-proof.sh`), so the autopilot is fine. Inviting by contact link, the UI's own path, worked.
