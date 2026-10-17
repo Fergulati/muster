@@ -32,6 +32,7 @@ export lifecycle.Intent, lifecycle.LifecycleState
 export provenance.InputClass    # so consumers can name a lineage entry's class
 
 import ./intent_events
+from ./effect_summary import inDecimals   # a split's total in its asset's own decimals
 export intent_events
 import ./effect_summary           # one reading of an effect for the card and the history (exo-59c)
 import ./attest                   # live attestations: the fold's gate + every surface's grade (exo-ef1)
@@ -740,7 +741,16 @@ proc summarizeEffect*(effectJson: string): string =
     of "add-driver": return "admit the driver kind: " & j{"kind"}.getStr()
     of "split":
       let n = j{"shares"}.getElems().len
-      return "split " & j{"total"}.getStr() & " " & j{"asset"}.getStr() & ": " & $n &
+      let asset = j{"asset"}.getStr()
+      let decimals = (case asset
+                      of "ETH": 18
+                      of "LEZ": 9
+                      of "BTC": 8
+                      of "XMR": 12
+                      else: -1)
+      let total = (if decimals >= 0: inDecimals(j{"total"}.getStr(), decimals) & " " & asset
+                   else: j{"total"}.getStr() & " base units of " & asset)   # a token: its decimals are not in the effect
+      return "split " & total & ": " & $n &
              (if n == 1: " person owes the creditor" else: " people owe the creditor")
     else:
       if j.hasKey("to") or j.hasKey("value"):

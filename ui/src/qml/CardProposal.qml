@@ -75,7 +75,7 @@ ColumnLayout {
             var amt = String((cardRoot.card && cardRoot.card.amount) || "");
             var den = String((cardRoot.card && cardRoot.card.denom) || "");
             var to = String((cardRoot.card && cardRoot.card.to) || "");
-            var lead = (amt + " " + den).trim();
+            var lead = cardRoot.amountText(amt, den);
             return to.length > 0 ? lead + "  →  " + to : lead;
         }
         color: Theme.palette.text

@@ -49,7 +49,10 @@ block:
     doAssert t.len > 0, kind & "/" & variant & ": no proposal line"
     doAssert "a payment: 0 → " notin t, kind & "/" & variant & " reads as a zero payment: " & t
   let v = $parseJson(eff("safe/transfer"))["value"].getBiggestInt()
-  doAssert ("a payment: " & v & " wei → 0x") in proposeTitle("safe", "transfer"), proposeTitle("safe", "transfer")
+  # in ETH, the way a person reads it, never a raw wei count (the card said
+  # "500000000000000 wei" until 2026-10-16); the exact base units stay in the details
+  doAssert ("a payment: " & inDecimals(v, 18) & " ETH → 0x") in proposeTitle("safe", "transfer"), proposeTitle("safe", "transfer")
+  doAssert " wei" notin proposeTitle("safe", "transfer"), proposeTitle("safe", "transfer")
   doAssert "contract call" in proposeTitle("safe", "contract-call"), proposeTitle("safe", "contract-call")
   doAssert "DELEGATECALL" in proposeTitle("safe", "delegatecall"), proposeTitle("safe", "delegatecall")
   doAssert "an action: delivery_module.send" in proposeTitle("invoke", "module-call"), proposeTitle("invoke", "module-call")

@@ -24,7 +24,7 @@ type
 proc short(s: string): string =
   if s.len > 12: s[0 ..< 6] & "…" & s[^4 .. ^1] else: s
 
-proc inDecimals(raw: string, decimals: int): string =
+proc inDecimals*(raw: string, decimals: int): string =
   ## Base units as a decimal in the asset's own decimals, by string (never a float):
   ## "600000000000000000", 18 -> "0.6"; "100", 9 -> "0.0000001".
   var r = raw.strip()
@@ -245,7 +245,8 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     if hasData:
       return EffectSummary(kind: "contract-call", to: to,
         amount: (if value != "0": value else: ""), unit: (if value != "0": "wei" else: ""),
-        text: "a contract call to " & short(to) & (if value != "0": ", sending " & value & " wei" else: ""))
+        text: "a contract call to " & short(to) & (if value != "0": ", sending " & inDecimals(value, 18) & " ETH" else: ""))
+    # the words read in ETH; .amount/.unit stay the exact wei (the card's details show them)
     return EffectSummary(kind: "payment", amount: value, unit: "wei", to: to,
-                         text: "a payment: " & value & " wei → " & short(to))
+                         text: "a payment: " & inDecimals(value, 18) & " ETH → " & short(to))
   EffectSummary(kind: "unknown", text: "a proposal" & (if kind.len > 0: " (" & kind & ")" else: ""))

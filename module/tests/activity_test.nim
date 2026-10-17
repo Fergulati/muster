@@ -33,7 +33,7 @@ block:
   let a = reduceActivity(ev, fold)
   doAssert a.len == 1, "propose alone yields one entry, got " & $a.len
   doAssert a[0].kind == "propose"
-  doAssert "a payment: 7" in a[0].title, "the effect is summarized: " & a[0].title
+  doAssert "a payment: 0.000000000000000007 ETH" in a[0].title, "the effect is summarized: " & a[0].title
   doAssert not ("ready" in a.mapIt(it.kind)), "not ready on a bare propose"
   echo "1. propose → one 'propose' entry OK"
 

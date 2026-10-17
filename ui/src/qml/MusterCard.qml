@@ -121,14 +121,35 @@ Rectangle {
     }
 
     // The verify rows, built off `card` (guarded — a missing field is normal).
+    // An amount in base units, read the way a person reads it: wei as ETH, sat as BTC. The
+    // exact base units stay in Details ("checked"); this is the words on the card.
+    function amountText(amt, den) {
+        var a = String(amt || ""), d = String(den || "");
+        if (a.length === 0 || !/^[0-9]+$/.test(a)) return (a + " " + d).trim();
+        var dec = d === "wei" ? 18 : d === "sat" ? 8 : -1;
+        if (dec < 0) return (a + " " + d).trim();
+        var s = a.replace(/^0+/, "");
+        if (s.length === 0) s = "0";
+        while (s.length <= dec) s = "0" + s;
+        var whole = s.slice(0, s.length - dec), frac = s.slice(s.length - dec).replace(/0+$/, "");
+        return (frac.length > 0 ? whole + "." + frac : whole) + " " + (d === "wei" ? "ETH" : "BTC");
+    }
     function verifyShown() {
         var stmt = String((cardRoot.card && cardRoot.card.statement) || "");
         if (stmt.length > 0)
             return "“" + stmt + "”";
+        // a split shows what its card says: the total, the memo, and where shares are paid
+        if (cardRoot.split) {
+            var memo = String(cardRoot.split.memo || "");
+            var payTo = String(cardRoot.split.payTo || "");
+            return (cardRoot.eth(cardRoot.split.total) + " " + cardRoot.unit
+                    + (memo.length > 0 ? " · " + memo : "")
+                    + (payTo.length > 0 ? "  →  " + cardRoot.shortPayTo(payTo) : "")).trim();
+        }
         var amt = String((cardRoot.card && cardRoot.card.amount) || "");
         var den = String((cardRoot.card && cardRoot.card.denom) || "");
         var to = String((cardRoot.card && cardRoot.card.to) || "");
-        var lead = (amt + " " + den).replace(/\s+/g, " ").trim();
+        var lead = cardRoot.amountText(amt, den);
         return to.length > 0 ? lead + "  →  " + to : lead;
     }
     // the card's fixed rows (exo-a50.1.6) and a lookup by key
