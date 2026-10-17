@@ -5,23 +5,26 @@
 #   scripts/basecamp-profile.sh alice [--fresh] [--xvfb :97] [--no-launch]
 #
 # It installs into .run/basecamp/<name>/ (Basecamp's --user-dir):
-#   1. the release AppImage (infra/basecamp/release-0.3.1.env), downloaded once and checked;
-#   2. the default-catalog packages muster depends on (infra/basecamp/catalog-0.3.1.tsv),
-#      each checked against the catalog's sha256: keystore_module and its signer and
-#      custodian UIs, eth_rpc_module, fee_module, tx_sender_module, delivery_module,
-#      lez_core, the RLN modules. A local install resolves no dependencies, so these go first;
+#   1. the release AppImage (infra/basecamp/release-0.3.2.env), downloaded once and checked;
+#   2. the Logos Official packages, each checked against its sha256: muster's dependencies
+#      (infra/basecamp/bundle-0.3.2.tsv, the set the release AppImage bakes in:
+#      keystore_module, eth_rpc_module, fee_module, tx_sender_module, delivery_module,
+#      lez_core, the RLN modules) and what a person adds from the default catalog
+#      (infra/basecamp/catalog-0.3.2.tsv: the keystore, signer and RPC UIs, token_list_module,
+#      verified_proxy_module). A local install resolves no dependencies, so these go first;
 #   3. muster_module and muster_ui from this tree, as .#lgx-portable (the release accepts
 #      only the portable variant);
 # then launches Basecamp on that profile. Nothing is seeded: no MUSTER_* variable is set.
+# Linux only, as the AppImage is (docs/design/platforms.md).
 #
 #   --fresh      wipe the profile first (its keys, its chains, muster's identity)
 #   --xvfb :N    run on a virtual display (Qt's software renderer), for a machine with no
 #                screen; screenshots: import -display :N -window root shot.png
 #   --no-launch  install only
 #
-# The AppImage's sha256 is the one first downloaded here (2026-10-03): the release
-# publishes none. Logs: .run/basecamp/<name>.log, capped (scripts/lib/caplog.py, exo-9eed).
+# Logs: .run/basecamp/<name>.log, capped (scripts/lib/caplog.py, exo-9eed).
 set -euo pipefail
+[ "$(uname -s)" = Linux ] || { echo "Basecamp's AppImage runs on Linux only; elsewhere install Muster from its catalogue (docs/runbooks/install-from-catalogue.md)" >&2; exit 2; }
 cd "$(dirname "$0")/.."
 ROOT=$PWD
 NAME=${1:-}; shift || true
@@ -37,7 +40,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 SUB=(--extra-substituters https://cache.nix.logos.co)
-. infra/basecamp/release-0.3.1.env
+. infra/basecamp/release-0.3.2.env
 BASE=$ROOT/.run/basecamp
 PROFILE=$BASE/$NAME
 mkdir -p "$BASE/catalog"
@@ -53,7 +56,7 @@ fi
 LGPM=$(nix build "$LGPM_FLAKE" "${SUB[@]}" --no-link --print-out-paths | tail -1)/bin/lgpm
 
 # 2. the catalog packages
-grep -v '^#' infra/basecamp/catalog-$BASECAMP_TAG.tsv | while IFS=$'\t' read -r pkg url sha; do
+grep -hv '^#' infra/basecamp/bundle-$BASECAMP_TAG.tsv infra/basecamp/catalog-$BASECAMP_TAG.tsv | while IFS=$'\t' read -r pkg url sha; do
   f=$BASE/catalog/$pkg.lgx
   [ -f "$f" ] && echo "$sha  $f" | sha256sum -c --quiet 2>/dev/null && continue
   curl -sSL -o "$f" "$url"
@@ -80,7 +83,8 @@ echo "profile $PROFILE: $("$LGPM" --modules-dir "$PROFILE/modules" --ui-plugins-
 LOG=$BASE/$NAME.log
 if [ -n "$XDISPLAY" ]; then
   if ! [ -e "/tmp/.X11-unix/X${XDISPLAY#:}" ]; then
-    XV=$(ls -d /nix/store/*-xvfb-21*/bin 2>/dev/null | head -1)/Xvfb
+    # || true: with no such store path ls fails, and set -e would exit before the fallback
+    XV=$(ls -d /nix/store/*-xvfb-21*/bin 2>/dev/null | head -1 || true)/Xvfb
     [ -x "$XV" ] || XV=$(nix build nixpkgs#xvfb --no-link --print-out-paths | tail -1)/bin/Xvfb
     "$XV" "$XDISPLAY" -screen 0 1400x900x24 -nolisten tcp >/dev/null 2>&1 &
     sleep 2

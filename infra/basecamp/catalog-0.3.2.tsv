@@ -1,0 +1,11 @@
+# Beside Muster's own dependencies (bundle-0.3.2.tsv), what a person adds from Basecamp 0.3.2's
+# default catalog to use Muster on Ethereum (exo-dcc.15): the apps that answer the intents
+# muster_ui raises — Keystore (evm.accounts.manage), Signer (evm.signing.approve), Ethereum RPC
+# (evm.rpc.configure) — and their optional modules: token_list_module (the Signer's) and
+# verified_proxy_module (eth_rpc_module's). scripts/basecamp-profile.sh installs both files.
+# name<TAB>url<TAB>sha256 — the Logos Official index of 2026-10-14, the bundle's.
+evm_signer_ui	https://github.com/logos-co/logos-modules-release/releases/download/evm_signer_ui-v0.1.0/evm_signer_ui-0.1.0.lgx	efb40b786cf41c492e9398c1f24f07a66cd877836dce11055fddee256e07affa
+evm_keystore_ui	https://github.com/logos-co/logos-modules-release/releases/download/evm_keystore_ui-v0.1.0/evm_keystore_ui-0.1.0.lgx	5fffc54187dcb11c108a8a6fc39589c8243ce2f668e4457d0ebf442ee2461f2a
+eth_rpc_ui	https://github.com/logos-co/logos-modules-release/releases/download/eth_rpc_ui-v0.1.0/eth_rpc_ui-0.1.0.lgx	aaad7c8e2971e5d6a7c76d2dc76fad71f516ec2d6ae2c44361f7bcf3ca5bb2c3
+verified_proxy_module	https://github.com/logos-co/logos-modules-release/releases/download/verified_proxy_module-v0.1.3/verified_proxy_module-0.1.3.lgx	e61b50a0bdbf6dd8b723ff40ddea99a604d906764c937b2581e5470ee042e633
+token_list_module	https://github.com/logos-co/logos-modules-release/releases/download/token_list_module-v0.1.0/token_list_module-0.1.0.lgx	8a6bf6458e66c8657d7c77d146eedf7c086935ed84b2b99670c6023898dfee07

@@ -90,6 +90,8 @@ are the UI's own join request, re-sent every few seconds.
 ## Still open
 
 - **CLAUDE.md** still says muster pins delivery v0.3.0, in its Testnet v0.3 paragraph.
+- **Resolved 2026-10-16 (exo-dcc.15):** the harness runs Basecamp 0.3.2 and installs delivery
+  0.3.2 from `infra/basecamp/bundle-0.3.2.tsv`. What follows was true until then.
 - **The Basecamp harness** installs delivery 0.3.0 from `infra/basecamp/catalog-0.3.1.tsv`.
   A run on Basecamp 0.3.2 wants that catalog's 0.3.2.
 - **PR #220 (exo-6dc.1)** has to land. Until it does, a founder who relaunches before
