@@ -2620,3 +2620,4 @@
 {"type":"close","timestamp":"2026-10-17T12:20:33.136511398Z","issue_id":"exo-cb3","payload":{}}
 {"type":"close","timestamp":"2026-10-17T12:20:33.136511398Z","issue_id":"exo-d4d.12","payload":{}}
 {"type":"comment","timestamp":"2026-10-17T15:30:40.225198985Z","issue_id":"exo-80b","payload":{"body":"Merged via Fergulati's #321 (2026-10-17): darwin-arm64 leg green in lgx variants run 38945358760; suite and release script run on macOS. Open: a Mac ↔ Linux room (R6), 0.3.1 muster_ui in Basecamp on macOS."}}
+{"type":"comment","timestamp":"2026-10-17T17:13:46.401526997Z","issue_id":"exo-408","payload":{"body":"Items 1, 10, 12 and 14 landed 2026-10-17 by reviving the 2026-10-12 PRs onto main: #328 (item 1, split pump in every room; supersedes #290), #329 (items 10 and 14; supersedes #288), #330 (item 12; supersedes #289). Still open: 11, 15."}}
