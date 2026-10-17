@@ -8,7 +8,7 @@
 > - **Stagenet only.** One spend at a time, about 20 minutes each.
 > - The wallet will need re-creating after Monero's FCMP++ upgrade.
 >
-> **Status.** The whole flow ran on stagenet on 2026-10-16, through the room code with three real wallets on one machine (setup, funding, a spend, final at 10). It did not go through the UI. The UI has never been seen on a display with a Monero account in the room, and that is what this page is for. If a wallet keeps saying *no connection to daemon*, point it at another stagenet node (`set_daemon`). Labbook: `docs/labbook/monero-multisig-in-the-room.md` §7.
+> **Status.** The whole runbook ran on stagenet through the UI on 2026-10-17, with three runners on one machine: set up, funded, spent, and settled on all three cards. Labbook: `docs/labbook/monero-multisig-in-the-room.md` §8. If a wallet keeps saying *no connection to daemon*, point it at another stagenet node (`set_daemon`). If a member of the room is gone, the setup waits for them forever; for now, start a room with only the members who take part.
 
 ## 0. Set up, on each of three machines
 

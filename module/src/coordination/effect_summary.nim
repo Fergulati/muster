@@ -129,6 +129,25 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
                          text: "an action: " & call & " (" & $n & (if n == 1: " arg)" else: " args)"))
   of "btc-spend":
     return btcSummary(j)
+  of "monero-multisig-spend":
+    # a spend from the room's Monero multisig (ADR-020): what leaves, to whom, the fee cap
+    var total = 0'u64
+    var payees: seq[string]
+    for r in j{"recipients"}.getElems():
+      let (payee, amt) =
+        if r.kind == JArray and r.len >= 2: (r[0].getStr(), r[1].getStr())
+        else: (r{"address"}.getStr(), r{"amount"}.getStr())
+      payees.add payee
+      try: total += parseBiggestUInt(amt).uint64
+      except ValueError: discard
+    let memo = j{"memo"}.getStr()
+    let cap = j{"feeCap"}.getStr()
+    return EffectSummary(kind: "payment", amount: $total, unit: "atomic",
+      to: (if payees.len > 0: payees[0] else: ""),
+      text: "a Monero multisig payment" & (if memo.len > 0: " — " & memo else: "") & ": " &
+            inDecimals($total, 12) & " XMR → " & (if payees.len > 0: short(payees[0]) else: "nobody") &
+            (if payees.len > 1: " and " & $(payees.len - 1) & " more" else: "") &
+            (if cap.len > 0: "  ·  fee at most " & inDecimals(cap, 12) & " XMR" else: ""))
   of "settle-up":
     # several splits netted (exo-3c6): how many payments settle how many shares, and from
     # how many splits — never dressed up as one payment

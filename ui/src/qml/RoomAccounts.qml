@@ -600,7 +600,7 @@ Item {
             ColumnLayout {
                 objectName: "xmrMsigWarning"
                 Layout.fillWidth: true
-                spacing: 2
+                spacing: Theme.spacing.small
                 Repeater {
                     model: [
                         qsTr("Your own Monero wallet holds the key, outside Basecamp."),
@@ -611,7 +611,7 @@ Item {
                     delegate: LogosText {
                         required property var modelData
                         Layout.fillWidth: true
-                        text: String(modelData)
+                        text: "• " + String(modelData)
                         color: Theme.palette.warning
                         font.pixelSize: MusterStyle.caption
                         wrapMode: Text.WordWrap
@@ -635,7 +635,7 @@ Item {
                 spacing: Theme.spacing.small
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("Set up a Monero multisig")
+                    text: qsTr("How many must sign? Everyone in the room takes part, and each must join from their own wallet.")
                     color: Theme.palette.text
                     font.pixelSize: Theme.typography.secondaryText
                     font.weight: Theme.typography.weightMedium
@@ -675,7 +675,8 @@ Item {
                         LogosText {
                             Layout.fillWidth: true
                             wrapMode: Text.WordWrap
-                            text: qsTr("%1 of %2 · joined %3 of %2").arg(modelData.k).arg(modelData.n).arg(modelData.joined)
+                            text: qsTr("%1 of %2 · joined %3 of %2").arg(modelData.k).arg(modelData.n)
+                                  .arg((modelData.joined || []).length)
                             color: Theme.palette.textSecondary
                             font.family: MusterStyle.mono
                             font.pixelSize: MusterStyle.caption
@@ -743,6 +744,14 @@ Item {
                     Layout.fillWidth: true
                     placeholderText: qsTr("recipient's Monero address")
                     font.family: MusterStyle.mono
+                }
+                LogosText {
+                    Layout.fillWidth: true
+                    // the fee cap is prefilled, so its placeholder never shows: say what each field is
+                    text: qsTr("Amount, then the most the network fee may be (both in XMR)")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
                 }
                 RowLayout {
                     Layout.fillWidth: true

@@ -53,3 +53,30 @@ Two failures, both from the remote node and both transient, were wrongly treated
   - In this run the member's wallet was pointed at another node (`set_daemon`). The UI has no way to tell the member their node is the problem. It shows the wallet's message under "Your wallet:".
 
 A test room lives only in its process, so a run can stop after funding. `XMR_STAGE_RESUME=<tag>` reopens the funded wallets in a new room, where each member re-discloses the address its wallet reports.
+
+## 8. The UI run on stagenet (2026-10-17)
+
+Three runners were each on their own Xvfb display, with one `monero-wallet-rpc` per member on stagenet, each against a different public node. They drove the real UI with xdotool, built from `7b29c16`.
+
+- **The room.** A opened "Just talk" with B's contact link, then invited C. B and C joined from their Home invitations.
+- **Setup:** Room details → Accounts → Add an account → Monero multisig → **Set up a Monero multisig** (M = 2). B and C each pressed **Join**.
+  - All three wallets were ready as a 2-of-3 a few minutes later, at one address (`57dk4YLX…eNu3`). The account was disclosed by 3 of 3.
+- **Funding.** 0.002 XMR from the payer, unlocked after 10 blocks.
+- **The spend:** **Send from the multisig** with 0.0005 XMR to the payer and the fee cap of 0.001.
+  - A and C pressed **Approve**.
+  - Within a minute both wallets had synced, built, checked, signed and sent it (`4f7902cb…`).
+  - "Your wallet: seen n of 10" counted up on every card, B's included, even though B was not a signer.
+  - The card read **Settled** on all three, and the payer's wallet saw the 0.0005.
+
+What the run showed, now fixed:
+
+- **A count printed as an id.** The setup row printed a member's whole id where it meant how many had joined.
+- **The card didn't say what it pays.** It showed "a proposal (monero-multisig-spend)" with no amount or recipient. `effect_summary` now reads it as *a Monero multisig payment: 0.0005 XMR → 57VT…, fee at most 0.001 XMR*.
+- **The account check said "couldn't check".** It now says what the account rests on: every member's own wallet reports the address, and no chain read can check a Monero multisig (`xmrMsigDisclosureCheck`).
+- **"Signers: 0 of 2 fixed" before anyone approved.** It now says "the first 2 to approve, each from their own wallet". Synced and Signed show only once the signers are fixed.
+- **Copy.** The warnings were run together; each is now its own bulleted line. The fee-cap field, prefilled, had no label. The form's second heading repeated the button.
+
+Seen, not fixed:
+
+- **A dead member blocks the setup.** The setup form names every current member, so a member who is gone (here, an instance killed after it was admitted) blocks the setup forever. The form needs a member picker.
+- **A three-way autojoin goes wrong.** The self-test autopilot (`MUSTER_AUTOJOIN_TOPIC` + `MUSTER_AUTOADMIT` on every instance) is built for two instances. With three, the third founded its own copy of the room. Inviting by contact link, the UI's own path, worked.

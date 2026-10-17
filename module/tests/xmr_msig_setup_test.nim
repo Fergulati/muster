@@ -102,6 +102,11 @@ block:
   var t = accts[0]
   t.threshold = 1
   doAssert not xmrMsigAccountOf(t).ok
+  # the room's account check says what it rests on: every member's wallet, no chain read
+  doAssert xmrMsigDisclosureCheck(accts[0]).status == acVerified
+  doAssert xmrMsigDisclosureCheck(accts[0]).detail.contains("every member's own wallet")
+  doAssert xmrMsigDisclosureCheck(a).status == acUnknown
+  doAssert xmrMsigDisclosureCheck(c).status == acDisagrees
   echo "4. an account fewer than all its members disclosed, or disclosed differently, is refused OK"
 
 # ── 5. refusals: a used wallet, another network, an outsider, a forgery ───────

@@ -257,6 +257,15 @@ proc frostDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail: 
   let (ok, _, detail) = frostDisclosureOf(a)
   ((if ok: acVerified else: acDisagrees), detail)
 
+proc xmrMsigDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail: string] =
+  ## A Monero multisig's address cannot be derived by anyone outside its wallets, so the
+  ## check is the members' own: every member's wallet reported this address (ADR-020).
+  let (ok, acct, detail) = xmrMsigAccountOf(a)
+  if ok: (acVerified, "every member's own wallet reports this address (" & $acct.k & " of " &
+          $acct.members.len & "); no chain read can check a Monero multisig")
+  elif a.conflict: (acDisagrees, detail)
+  else: (acUnknown, detail)
+
 proc btcDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail: string] =
   ## A Bitcoin disclosure is verified WITHOUT a chain read: the address commits to the
   ## policy, so re-deriving it from the disclosed keys and k either reproduces it
