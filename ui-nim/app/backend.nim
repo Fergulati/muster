@@ -147,6 +147,11 @@ proc loadActivityDo(o: MusterUi, d: Done = nil) =
 proc loadFrostCeremoniesDo(o: MusterUi, d: Done = nil) =
   ask mm.frost_ceremoniesAsync(proc (r: string) = o.setFrostCeremoniesJson(r); fin(d, r))
 
+proc loadWalletSummaryDo(o: MusterUi, d: Done = nil) =
+  # The Wallet page: only the wallets this instance was given (exo-f37). The module
+  # decides; the backend holds nothing.
+  ask mm.wallet_summaryAsync(proc (r: string) = o.setWalletSummaryJson(r); fin(d, r))
+
 proc loadXmrMsigDo(o: MusterUi, d: Done = nil) =
   ask mm.xmr_msig_setupsAsync(proc (r: string) = o.setXmrMsigSetupsJson(r))
   ask mm.xmr_msig_spendsAsync(proc (r: string) = o.setXmrMsigSpendsJson(r); fin(d, r))
@@ -1181,6 +1186,7 @@ proc xmrMsigSetupJoinImpl(o: MusterUi, ceremonyId: string) = o.xmrMsigSetupJoinD
 proc xmrMsigProposeImpl(o: MusterUi, account, recipientsJson, feeCap, memo: string) =
   o.xmrMsigProposeDo(account, recipientsJson, feeCap, memo)
 proc loadXmrMsigImpl(o: MusterUi) = o.loadXmrMsigDo()
+proc loadWalletSummaryImpl(o: MusterUi) = o.loadWalletSummaryDo()
 proc loadFlowImpl(o: MusterUi) = o.loadFlowDo()
 proc loadGraphImpl(o: MusterUi, roomTopic: string) = o.loadGraphDo(roomTopic)
 proc loadRlnStatusImpl(o: MusterUi) = o.loadRlnStatusDo()
