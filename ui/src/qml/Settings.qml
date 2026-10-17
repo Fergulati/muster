@@ -41,6 +41,18 @@ Item {
         catch (e) { return ({}); }
     }
     readonly property var identity: (settings.s && settings.s.identity) ? settings.s.identity : ({})
+    // one row per Bitcoin payer address, naming every network that shares it (testnet,
+    // testnet4 and signet all use tb1…)
+    readonly property var btcPayerRows: {
+        var rows = [], at = {}, ps = (settings.identity && settings.identity.btcPayers) || [];
+        for (var i = 0; i < ps.length; i++) {
+            var a = String(ps[i].address || "");
+            if (a.length === 0) continue;
+            if (at[a] === undefined) { at[a] = rows.length; rows.push({ address: a, networks: String(ps[i].network) }); }
+            else rows[at[a]].networks += " · " + String(ps[i].network);
+        }
+        return rows;
+    }
 
     // A hosted endpoint's URL may carry its key (a /v3/<key> path) or user:pass@. Each one
     // shows masked (scheme://host:port, *** for the rest, as the module's redactUrl gives
@@ -290,6 +302,52 @@ Item {
                                 text: qsTr("Copy")
                                 enabled: btcKeyField.text.length > 0
                                 onClicked: { btcKeyField.selectAll(); btcKeyField.copy(); btcKeyField.deselect(); }
+                            }
+                        }
+
+                        // where a Bitcoin split's share is paid from (exo-408 item 12): wpkh of the key
+                        // above, one address per bech32 prefix, naming the networks that share it
+                        LogosText {
+                            Layout.fillWidth: true
+                            Layout.topMargin: Theme.spacing.small
+                            visible: settings.btcPayerRows.length > 0
+                            wrapMode: Text.WordWrap
+                            text: qsTr("Your Bitcoin address. A Bitcoin split's share is paid from it, and paid to you at it: "
+                                     + "fund it from your own node on the split's network.")
+                            color: Theme.palette.textTertiary
+                            font.pixelSize: MusterStyle.caption
+                        }
+                        Repeater {
+                            model: settings.btcPayerRows
+                            delegate: RowLayout {
+                                required property var modelData
+                                objectName: "settingsBtcPayer"
+                                Layout.fillWidth: true
+                                spacing: Theme.spacing.small
+                                LogosText {
+                                    Layout.preferredWidth: 150
+                                    text: String(modelData.networks)
+                                    color: Theme.palette.textSecondary
+                                    font.pixelSize: MusterStyle.caption
+                                    elide: Text.ElideRight
+                                }
+                                TextEdit {
+                                    id: payerField
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignVCenter
+                                    readOnly: true
+                                    selectByMouse: true
+                                    wrapMode: TextEdit.WrapAnywhere
+                                    text: String(modelData.address)
+                                    color: Theme.palette.textSecondary
+                                    selectionColor: Theme.palette.primary
+                                    font.family: MusterStyle.mono
+                                    font.pixelSize: MusterStyle.caption
+                                }
+                                ActionButton {
+                                    text: qsTr("Copy")
+                                    onClicked: { payerField.selectAll(); payerField.copy(); payerField.deselect(); }
+                                }
                             }
                         }
 

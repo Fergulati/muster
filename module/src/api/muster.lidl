@@ -4,7 +4,7 @@ module muster_module {
 
   method health() -> tstr description "Liveness probe. Returns \"ok\" when the module is loaded and dispatching."
 
-  method identity() -> tstr description "Return this module's persistent coordination identity, as JSON: {address, pubkey}. The identity is a secp256k1 key minted on first run and persisted (FS-4) under the host-provided instance path; it is stable across restarts, and is the same key that signs Safe transactions and does epoch key-agreement (ADR-010, one curve). A UI shows this as \"who am I in the room\"."
+  method identity() -> tstr description "Return this module's persistent coordination identity, as JSON: {address, ed25519, x25519, btcPubKey, btcPayers:[{network, chain, address}]}. Two bound keypairs minted on first run and persisted (FS-4) under the host-provided instance path, stable across restarts (F-14, ADR-010 revisit): the secp256k1 authorization key (address; btcPubKey, its compressed public half, which a Bitcoin multisig names you by) and the Ed25519/X25519 encryption identity the room encrypts to. btcPayers is wpkh(btcPubKey) on each Bitcoin network: the address a Bitcoin split's share is paid from and paid at, which your own node must hold coins at (exo-408). A UI shows this as \"who am I in the room\"."
 
   method describe() -> tstr description "Return the coordination account this module is configured against, as JSON: {chainId, safe, threshold, owners, environment}. Every intent's safeTxHash commits to chainId+safe, so a UI shows the domain it was told rather than one it assumed."
 
