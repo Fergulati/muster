@@ -1290,6 +1290,15 @@ void MusterUiBackend::onContextReady()
                             proposeSplit(QString::fromUtf8(qgetenv("MUSTER_AUTOSPLIT_CHAIN")),
                                          QString::fromUtf8(autosplit), shares,
                                          QStringLiteral("split self-test"));
+                            // MUSTER_AUTOAWAY_TOPIC (exo-408 item 1): then switch to another
+                            // room, so the split's room is not the one on screen when it is paid
+                            const QByteArray away = qgetenv("MUSTER_AUTOAWAY_TOPIC");
+                            if (!away.isEmpty()) {
+                                QTimer::singleShot(3000, this, [this, away]() {
+                                    joinRoom(QString::fromUtf8(away));
+                                    qInfo().noquote() << "[muster_ui] AUTOAWAY joined" << QString::fromUtf8(away);
+                                });
+                            }
                         } else {
                             proposeInRoom(QStringLiteral("{\"to\":\"0x1111111111111111111111111111111111111111\",\"value\":1000,\"nonce\":0}"));
                         }
