@@ -121,3 +121,19 @@ proc keystoreRow*(i: KeystoreInputs): JsonNode =
   r["approvers"] = %approvers
   r["accounts"] = accountRows(i)
   r
+
+# ── is muster attested? ──────────────────────────────────────────────────────────
+
+type AttestMemo* = object
+  ## Whether keystore_module attributes muster's calls to muster_module, remembered (exo-cb3).
+  ## The reply is read asynchronously and goes stale after 30 s, but who the host says is
+  ## calling does not change during a run: so an unread reply after a yes stays a yes, and
+  ## only a reply that names someone else withdraws it. Every choice that rests on it
+  ## (which address a person shares, pays from, is paid at) would otherwise flip on a timer.
+  seen: bool
+
+proc attested*(m: var AttestMemo, identity: JsonNode): bool =
+  ## `identity` is caller_identity's reply, nil when unread or stale.
+  if identity != nil and okReply(identity) and identity{"kind"} != nil:
+    m.seen = identity{"kind"}.getStr() == "module" and identity{"identity"}.getStr() == Ours
+  m.seen

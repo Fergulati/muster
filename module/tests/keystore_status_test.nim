@@ -103,4 +103,22 @@ block replyUnwrap:
   doAssert ksReply("") == nil and ksReply("not json") == nil and ksReply("\"\"") == nil
   echo "9. a reply arrives bare, as JSON in a string, or in the lp envelope; a failed one is nil OK"
 
+# ── 10. attestation is a fact about the host: once seen, it holds ─────────────────
+block:
+  # Seen 2026-10-16 (exo-cb3): keystore_module's caller_identity reply is refreshed only when
+  # something reads it, and read as unread after 30 s. The first call after a quiet stretch
+  # read "not attested", so "Share an address" shared muster's own key, not the person's
+  # keystore account. Who keystore_module says is calling does not change during a run.
+  let yes = %*{"ok": true, "kind": "module", "identity": "muster_module"}
+  let other = %*{"ok": true, "kind": "module", "identity": "someone_else"}
+  var m: AttestMemo
+  doAssert not m.attested(nil), "never answered: not attested"
+  doAssert not m.attested(other), "attributed to someone else: not attested"
+  doAssert m.attested(yes)
+  doAssert m.attested(nil), "a stale or unread reply after a yes: still attested"
+  doAssert not m.attested(other), "but a reply naming someone else withdraws it"
+  doAssert not m.attested(nil), "and stays withdrawn until the host attests again"
+  doAssert m.attested(yes)
+  echo "10. once keystore_module attests muster, an unread reply does not take it back OK"
+
 echo "keystore_status_test: all passed"

@@ -542,13 +542,15 @@ proc contactBook(): ContactBook =
 
 proc keystoreProbe(): KeystoreProbe   ## forward — keystore_module, read over lp_* (below)
 
+var gAttest: AttestMemo   ## remembered: a stale reply must not flip which address is mine (exo-cb3)
 proc keystoreAttested(): bool =
   ## keystore_module answers and attributes our calls to muster_module: under Basecamp or
   ## logoscore 0.3.x, never in the standalone runner (labbook keystore-caller-attribution).
-  try:
-    let id = keystoreRow(keystoreProbe().read()){"identity"}
-    id != nil and id{"kind"}.getStr() == "module" and id{"identity"}.getStr() == "muster_module"
-  except CatchableError: false
+  ## Once seen, it holds until a reply names someone else (keystore_status.AttestMemo).
+  var identity: JsonNode = nil
+  try: identity = keystoreProbe().read().identity
+  except CatchableError: discard
+  gAttest.attested(identity)
 
 proc keystoreOn(): bool =
   ## Whether a keystore_module account may approve in-room (exo-149.2, exo-d4d.2):
@@ -3687,9 +3689,7 @@ proc musterCoordinateSubmit(intentId: string): string =
     # history back to this intent (exo-d4d.5); a payload that is not JSON is sent as it is
     let pj = parseJson(tx.payload)
     if pj.kind == JObject:
-      let memo = (try: parseJson(effectJson){"memo"}.getStr("") except CatchableError: "")
-      pj["purpose"] = %("Settle " & (if memo.len > 0: "'" & memo & "'" else: "an intent") &
-                        ", agreed in a Muster room")
+      pj["purpose"] = %settlePurpose(effectJson, splitPolicy(policy)[1])
       pj["meta"] = %*{"muster": {"intent": intentId}}
       tx.payload = $pj
   except CatchableError: discard

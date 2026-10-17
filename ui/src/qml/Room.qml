@@ -963,15 +963,6 @@ Item {
     }
     readonly property bool enoughToPropose: room.members.length >= room.requiredToPropose
 
-    // This account's own address (from settings/identity) — what an address-share
-    // answers a priming request with, so it's YOUR address, not a demo one.
-    readonly property string myAddress: {
-        try {
-            var s = JSON.parse(backend ? backend.settingsJson : "{}");
-            return (s && s.identity && s.identity.address) ? String(s.identity.address) : "";
-        } catch (e) { return ""; }
-    }
-
     // Project one folded intent view onto the card vocabulary. The module's
     // lifecycle names (draft/proposed/collecting/executable/submitted/final) map to
     // the card's shorter rail (proposed/collecting/ready/paid). The one per-viewer claim,
