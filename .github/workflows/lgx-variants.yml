@@ -1,18 +1,19 @@
-# Build muster_module and muster_ui for every Linux platform Basecamp ships on, and merge
-# each into ONE .lgx holding all of its variants (docs/design/platforms.md).
+# Build muster_module and muster_ui for every platform Basecamp ships on but Windows, and
+# merge each into ONE .lgx holding all of its variants (docs/design/platforms.md).
 #
 # A .lgx is a container of native builds, one directory per platform under variants/, and
 # Basecamp installs the one matching its own platform. Until 2026-10-15 Muster built only
 # linux-amd64, on whatever machine ran scripts/catalog-release.sh. This workflow builds each
 # variant natively on a GitHub-hosted runner of that platform (linux-arm64 on
-# ubuntu-24.04-arm, free for public repositories), the way the official catalogue does
+# ubuntu-24.04-arm, darwin-arm64 on macos-latest, both free for public repositories), the
+# way the official catalogue does
 # (logos-co/logos-modules-release-action, release.yml@v1.9), then merges them with `lgx merge`.
 #
 # It publishes nothing. The merged packages are the run's `lgx-merged` artifact;
 # scripts/catalog-release.sh --from-run <id> takes them into a release.
 #
-# darwin-arm64 and windows-x86_64 are not built yet: docs/design/platforms.md says what each
-# needs. Adding one is a matrix row here once the flake builds it.
+# windows-x86_64 is not built yet: docs/design/platforms.md says what it needs. Adding it is a
+# matrix row here once the flake builds it.
 name: lgx variants
 
 on:
@@ -38,13 +39,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [linux-amd64, linux-arm64]
+        variant: [linux-amd64, linux-arm64, darwin-arm64]
         package: [module, ui]
         include:
           - variant: linux-amd64
             runs-on: ubuntu-latest
           - variant: linux-arm64
             runs-on: ubuntu-24.04-arm
+          # Apple Silicon; the Basecamp DMG is aarch64 only
+          - variant: darwin-arm64
+            runs-on: macos-latest
     runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 180
     steps:
@@ -53,24 +57,40 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
-      # Nix, reading the Logos caches (cache.nix.logos.co and its Attic): the Qt and
-      # module closures for both platforms are already there, so a leg builds muster only.
+      # Nix, reading the Logos caches (cache.nix.logos.co and its Attic) for the Logos
+      # closures and cache.nixos.org for Qt, so a leg mostly builds muster only.
       - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      # As the official action does on macOS (release.yml@v1.9). Both packages built on a Mac
+      # with the Command Line Tools alone, no `metal`; this costs nothing when it is present.
+      - name: Ensure Metal Toolchain
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if /usr/bin/xcrun metal --version >/dev/null 2>&1; then
+            echo "Metal Toolchain present"
+            exit 0
+          fi
+          echo "Metal Toolchain missing, downloading..."
+          xcodebuild -downloadComponent MetalToolchain
+          /usr/bin/xcrun metal --version
       - name: Build ${{ matrix.package }} .#lgx-portable
         shell: bash
         run: |
           set -euo pipefail
           # The PORTABLE bundle: self-contained, tagged with the canonical variant name
-          # (linux-amd64, linux-arm64). The dev bundle (.#lgx) points into /nix/store and
-          # tags its variant "-dev", which a release Basecamp refuses.
+          # (linux-amd64, linux-arm64, darwin-arm64). The dev bundle (.#lgx) points into
+          # /nix/store and tags its variant "-dev", which a release Basecamp refuses.
           # the ui takes THIS checkout's module, as scripts/catalog-release.sh builds it
+          # (${extra[@]+…}: macOS's /bin/bash 3.2 calls an empty array unbound under set -u)
           extra=()
           [ "${{ matrix.package }}" = ui ] && extra=(--override-input muster_module "git+file://$PWD?dir=module")
-          out=$(nix build "git+file://$PWD?dir=${{ matrix.package }}#lgx-portable" "${extra[@]}" \
+          out=$(nix build "git+file://$PWD?dir=${{ matrix.package }}#lgx-portable" ${extra[@]+"${extra[@]}"} \
                   --print-out-paths --no-link)
           lgx=$(find "$out" -maxdepth 2 -name '*.lgx' | head -n1)
           [ -n "$lgx" ] || { echo "::error::nix build produced no .lgx"; exit 1; }
-          name=$(case "${{ matrix.package }}" in module) echo muster_module ;; ui) echo muster_ui ;; esac)
+          # (not $(case … in module) …): bash 3.2 cannot parse a case's `)` inside $(…))
+          name=muster_${{ matrix.package }}
           mkdir -p _out
           cp "$lgx" "_out/${name}-${{ matrix.variant }}.lgx"
           # the variant directory this build carries must be the one this leg is for
@@ -108,7 +128,7 @@ jobs:
           mkdir -p _merged
           for name in muster_module muster_ui; do
             mapfile -t parts < <(find _per-variant -name "${name}-*.lgx" | sort)
-            [ "${#parts[@]}" -ge 2 ] || { echo "::error::${name}: ${#parts[@]} variant(s) built, expected 2"; exit 1; }
+            [ "${#parts[@]}" -ge 3 ] || { echo "::error::${name}: ${#parts[@]} variant(s) built, expected 3"; exit 1; }
             lgx merge "${parts[@]}" -o "_merged/${name}.lgx" -y
             lgx verify "_merged/${name}.lgx"
             echo "${name}: $(tar -tzf "_merged/${name}.lgx" | grep -o '^variants/[^/]*/' | sort -u | tr '\n' ' ')"

@@ -23,9 +23,14 @@
 #   --allow-dirty      build even if module/ or ui/ has uncommitted changes (never for a release)
 #   --from-run ID      take the packages from a successful run of the `lgx variants` workflow
 #                      (.github/workflows/lgx-variants.yml) instead of building here: one .lgx
-#                      per package holding every Linux variant (linux-amd64, linux-arm64). The
-#                      run must have built exactly HEAD. Assets are then named
-#                      <package>-<version>.lgx, as the official catalogue names its own.
+#                      per package holding every variant it builds (linux-amd64, linux-arm64,
+#                      darwin-arm64). The run must have built exactly HEAD. Assets are then
+#                      named <package>-<version>.lgx, as the official catalogue names its own.
+#
+# Without --from-run the packages are built here, for this host's platform
+# (scripts/lib/portable.sh): linux-amd64, linux-arm64 or darwin-arm64. A release carries
+# linux-amd64, as every published muster version does, so a release built on any other host
+# is refused; --local is open to every platform, e.g. for a Mac to test its own build.
 #
 # The catalogue publishes ONLY muster_module and muster_ui. Every dependency resolves from the
 # official Logos catalogue, which Basecamp enables by default and searches alongside ours
@@ -40,6 +45,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
+. scripts/lib/portable.sh
 
 # Pins. index.py is one stdlib-only Python file; the hash is of that file at TOOL_REV.
 TOOL_REV=94462e6633f2b536424c10ceda3c371f7ec8e09d
@@ -51,7 +57,6 @@ LGX_FLAKE=github:logos-co/logos-package/c25a1167578aef5cbd9a9b6f822ffe2ae4fd6a89
 REPO_URL=https://raw.githubusercontent.com/corpetty/muster/main/catalog/logos-repo.json
 INDEX_URL=https://raw.githubusercontent.com/corpetty/muster/main/catalog/index.json
 RELEASES=https://github.com/corpetty/muster/releases/download
-PLATFORMS="linux-amd64"            # the variants each package must carry (--from-run: every Linux one)
 SUB=(--extra-substituters https://cache.nix.logos.co)
 
 TAG=""; URL_BASE=""; LOCAL=""; BASE_URL=""; ALLOW_DIRTY=0; FROM_RUN=""
@@ -63,7 +68,7 @@ while [ $# -gt 0 ]; do
     --base-url) BASE_URL=${2:?--base-url needs a URL}; shift ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
     --from-run) FROM_RUN=${2:?--from-run needs a workflow run id}; shift ;;
-    -h|--help) sed -n '2,42p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR > 1 { if (/^set -euo/) exit; print }' "$0"; exit 0 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
   shift
@@ -82,7 +87,16 @@ VERSION=$(ver module/metadata.json)
   echo "module/metadata.json ($VERSION) and ui/metadata.json ($(ver ui/metadata.json)) disagree; bump both" >&2; exit 1; }
 TAG=${TAG:-muster-v$VERSION}
 URL_BASE=${URL_BASE:-$RELEASES/$TAG}
-[ -n "$FROM_RUN" ] && PLATFORMS="linux-amd64 linux-arm64"
+# The variants each package must carry: every one the workflow builds, or this host's.
+if [ -n "$FROM_RUN" ]; then PLATFORMS="linux-amd64 linux-arm64 darwin-arm64"; else PLATFORMS=$(lgx_variant); fi
+if [ -z "$LOCAL" ]; then
+  case " $PLATFORMS " in
+    *" linux-amd64 "*) ;;
+    *) echo "a release carries linux-amd64, as every published muster version does; one built here would carry only $PLATFORMS." >&2
+       echo "Release from the lgx variants workflow (--from-run), or build here with --local to test." >&2
+       exit 1 ;;
+  esac
+fi
 # one platform: <package>-<version>-<platform>.lgx (every release before 0.3.1); several: the
 # official catalogue's <package>-<version>.lgx
 asset() { if [ "$PLATFORMS" = "${PLATFORMS%% *}" ]; then echo "$1-$VERSION-$PLATFORMS.lgx"; else echo "$1-$VERSION.lgx"; fi; }
@@ -97,12 +111,18 @@ COMMIT=$(git rev-parse HEAD)
 WORK=$ROOT/.run/catalog-release
 mkdir -p "$WORK/tool"
 
-# index.py at its pinned rev, checked.
+# index.py at its pinned rev, checked. (Not `echo … | sha256sum -c --quiet`: Darwin's -c reads
+# stdin only when given `-`, and older macOS has no sha256sum.)
 TOOL=$WORK/tool/index-$TOOL_REV.py
-if ! echo "$TOOL_SHA256  $TOOL" | sha256sum -c --quiet >/dev/null 2>&1; then
+if [ "$(sha256_of "$TOOL" 2>/dev/null)" != "$TOOL_SHA256" ]; then
   curl -sSfL -o "$TOOL" "https://raw.githubusercontent.com/logos-co/logos-modules-release-tool/$TOOL_REV/index.py"
-  echo "$TOOL_SHA256  $TOOL" | sha256sum -c --quiet
+  [ "$(sha256_of "$TOOL")" = "$TOOL_SHA256" ] \
+    || { echo "$TOOL: sha256 $(sha256_of "$TOOL"), expected $TOOL_SHA256" >&2; exit 1; }
 fi
+# index.py annotates with `str | None`, which Python 3.9 (macOS's /usr/bin/python3) cannot
+# even import; say so now, not after the build.
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' \
+  || { echo "index.py needs python3 >= 3.10; $(command -v python3) is $(python3 -V 2>&1)" >&2; exit 1; }
 LGX=$(nix build "$LGX_FLAKE" "${SUB[@]}" --no-link --print-out-paths 2>/dev/null | tail -1)/bin
 [ -x "$LGX/lgx" ] || { echo "could not build lgx ($LGX_FLAKE)" >&2; exit 1; }
 export PATH="$LGX:$PATH"
@@ -137,14 +157,14 @@ UI=$(nix build "git+file://$ROOT?dir=ui#lgx-portable" "${SUB[@]}" --no-eval-cach
 fi
 
 # Each package's embedded manifest must carry the name and version the catalogue claims.
-declare -A SRC
 for pair in "muster_module:$MOD" "muster_ui:$UI"; do
   pkg=${pair%%:*}; f=$(ls "${pair#*:}"/*.lgx | head -1)
   lgx verify "$f" >/dev/null
   got=$(lgx manifest "$f" --json | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m["name"], m["version"], " ".join(sorted(m.get("main", {}))))')
-  want="$pkg $VERSION $(tr ' ' '\n' <<<"$PLATFORMS" | sort | paste -sd' ')"
+  want="$pkg $VERSION $(tr ' ' '\n' <<<"$PLATFORMS" | sort | paste -sd' ' -)"
   [ "$got" = "$want" ] || { echo "$f: manifest says '$got', expected '$want'" >&2; exit 1; }
-  SRC[$pkg]=$f
+  # No `declare -A` (bash 3.2 on macOS): a variable per package.
+  case $pkg in muster_module) SRC_MOD=$f ;; muster_ui) SRC_UI=$f ;; esac
 done
 
 # 2. Where the files go.
@@ -163,7 +183,8 @@ else
 fi
 mkdir -p "$ASSETS"
 for pkg in muster_module muster_ui; do
-  install -m 0644 "${SRC[$pkg]}" "$ASSETS/$(asset "$pkg")"
+  case $pkg in muster_module) src=$SRC_MOD ;; muster_ui) src=$SRC_UI ;; esac
+  install -m 0644 "$src" "$ASSETS/$(asset "$pkg")"
 done
 
 # 3. The identity card. The committed one points at main; a local one at its server.
@@ -217,7 +238,7 @@ EOF
 echo
 echo "commit $COMMIT, version $VERSION"
 for pkg in muster_module muster_ui; do
-  echo "  $(sha256sum "$ASSETS/$(asset "$pkg")" | cut -c1-64)  $ASSETS/$(asset "$pkg")"
+  echo "  $(sha256_of "$ASSETS/$(asset "$pkg")")  $ASSETS/$(asset "$pkg")"
 done
 if [ -n "$LOCAL" ]; then
   echo

@@ -137,7 +137,7 @@ cd demo && make app && make alice               # the speed build (demo/README.m
 
 ```
 cd module && nix build .#lgx            # muster-module.lgx (dev, keyed linux-amd64-dev)
-cd module && nix build .#lgx-portable   # portable variant (keyed linux-amd64; logoscore's default resolver wants this one)
+cd module && nix build .#lgx-portable   # portable variant (keyed by the host: linux-amd64, linux-arm64, or darwin-arm64 on an Apple Silicon Mac — docs/runbooks/macos.md; logoscore's default resolver wants this one)
 cd ui     && nix build .#lgx            # muster-ui.lgx (follows module's builder pins)
 module/tests/run-suite.sh probes                    # the invariant probes (no host); a single test: run-suite.sh <substring>
 # Load headless: lgpm install --file ./result*/*.lgx --modules-dir <dir>; logoscore -m <dir> -l muster_module -c 'muster_module.health()' --quit-on-finish

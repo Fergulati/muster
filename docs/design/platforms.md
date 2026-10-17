@@ -1,6 +1,6 @@
 # Muster on every platform Basecamp ships on
 
-**As of 2026-10-15 (exo-b89).** What it takes to build Muster for each platform Basecamp
+**As of 2026-10-15 (exo-b89); darwin-arm64 2026-10-16.** What it takes to build Muster for each platform Basecamp
 0.3.2 is released for, and what is left for the ones not built yet. The code and the
 workflow win over this page.
 
@@ -19,7 +19,7 @@ same four (`logos-co/logos-modules-release-action`, `release.yml@v1.9`):
 |---|---|---|
 | `linux-amd64` | AppImage | built since the first release |
 | `linux-arm64` | AppImage (aarch64) | **built** by `.github/workflows/lgx-variants.yml` on `ubuntu-24.04-arm` (exo-b89) |
-| `darwin-arm64` | `.dmg` | not built; mapped below |
+| `darwin-arm64` | `.dmg` (aarch64) | a matrix row in the same workflow, on `macos-latest`; built and checked by hand on a Mac (below), not yet on the runner |
 | `windows-x86_64` | `setup.exe` | not built; mapped below |
 
 ## How the variants are built and released
@@ -32,12 +32,15 @@ requests that touch `module/` or `ui/`, on `v*` tags, and by hand. It publishes 
 
 `scripts/catalog-release.sh --from-run <run id>` takes those packages into a release. The
 run must be that workflow, it must have succeeded, and it must have built exactly HEAD.
-Each package's manifest must carry every Linux variant. The assets are named
+Each package's manifest must carry every variant the workflow builds. The assets are named
 `<package>-<version>.lgx`, as the official catalogue names its own. Without `--from-run`,
-the script still builds `linux-amd64` locally, as before.
+the script builds this host's variant locally; a release carries `linux-amd64`, so one built
+on any other host is refused (`--local` stays open, e.g. for a Mac to test its own build).
 
-Adding a platform means: the flake builds it, a matrix row for it in the workflow, and the
-platform added to `PLATFORMS` in the release script.
+Adding a platform means: the flake builds it; a matrix row for it in the workflow, and the
+merge job's expected variant count; the platform added to the `--from-run` `PLATFORMS` in the
+release script; and, for local builds there, its spelling in `lgx_variant`
+(`scripts/lib/portable.sh`).
 
 ## What Muster depends on, per platform
 
@@ -56,30 +59,53 @@ Each dependency's newest version in the official catalogue index, 2026-10-15:
 
 linux-arm64 and darwin-arm64 have every dependency. Windows lacks two that Muster requires.
 
-## darwin-arm64: what is left
+## darwin-arm64: checked on a Mac
 
-Every dependency exists, and the builder supports macOS: it names libraries `.dylib`, sets
-`install_name` to `@rpath`, and links Apple with `@loader_path`. The work:
+Checked on macOS 26.5 (Apple Silicon) with Basecamp 0.3.2's `aarch64` DMG, 2026-10-15/16, on
+Muster 0.3.0 (`15f7dc2`) and 0.3.1. The steps this page listed:
 
-1. **Bundle libsodium.** It is Muster's only external native library: secp256k1 and BearSSL
-   are compiled from source inside their Nim packages, and nothing links OpenSSL. On Linux
-   the fork's RUNPATH commit finds libsodium. On macOS the Apple branch never applies that
-   suffix, so libsodium would resolve through its absolute `/nix/store` install name and
-   fail outside nix. **Recommended: link libsodium statically (`.a`) on every platform.**
-   That fixes macOS, removes the need for the Linux-only RUNPATH commit, and is what Windows
-   needs anyway. The alternative is copying the `.dylib` in and rewriting its install name.
-2. **A matrix row** `darwin-arm64` on `macos-latest`, with the official action's "Ensure
-   Metal Toolchain" step.
-3. **Check the fork's Nim link line on Apple.** It links the Nim static library plus
-   `pthread` there, which looks right, but nothing has built it yet.
-4. **The test harness is Linux-only.** `module/tests/run-suite.sh` and
-   `tests/probes/config.nims` look for `libsodium.so` and pass `-Wl,-rpath`, and
-   `probe_return_marshalling_host` searches `/nix/store` for `lib*.so`. A release does not
-   need the suite to run on a Mac. Running it there would be the confidence check.
-5. **Acceptance:** install the merged packages into Basecamp's `.dmg` on a Mac and run a room
-   between it and a Linux instance, as R6 did (`docs/labbook/muster-in-basecamp-031.md`).
+1. **libsodium was already bundled.** The concern was that it would resolve through its
+   absolute `/nix/store` install name. It does not: the portable bundle's `nix-bundle-dir`
+   copies `libsodium.26.dylib` beside the plugin and rewrites the reference to
+   `@loader_path/./libsodium.26.dylib`, as it does for OpenSSL and Boost. No load command or
+   rpath in either package names `/nix/store` (`otool -L`, `otool -l`). The plugin links as
+   the catalogue's `blockchain_module` 0.3.2 does, with Qt and `libintl` resolving on
+   `@rpath` to the app's `Contents/lib → Frameworks`. So macOS needs no static libsodium. A
+   static one would still let the module drop the fork's Linux-only RUNPATH commit (#226,
+   R8), and Windows needs one (below).
+2. **The matrix row** is `darwin-arm64` on `macos-latest`, with the official action's "Ensure
+   Metal Toolchain" step (both packages built on a Mac with the Command Line Tools alone, no
+   `metal`, so it should find nothing to do). The build step parses under macOS's
+   `/bin/bash` 3.2, which is what `shell: bash` runs there: no `$(case …)`, and empty arrays
+   as `${a[@]+"${a[@]}"}`. It was run locally with this leg's values. The merge job expects
+   three variants.
+3. **The fork's Nim link line on Apple** builds and loads. The plugin's protocol stamp is
+   `0.2.0`, and it defines the 0.2 export set as on Linux, with nothing undefined
+   (`nm -u … | grep _logos_module_` is empty). That matters on macOS, where
+   `-undefined dynamic_lookup` would otherwise hide a missing export until load.
+4. **The test harness.** `module/tests/run-suite.sh` runs on a Mac: 262 passed, 0 failed for
+   Muster 0.3.1, 2026-10-16. Two tests needed fixing for it:
+   - `rpc_budget_test`'s SYN-dropping fixture, because macOS does not read `listen(0)` as a
+     one-slot queue;
+   - `host_return_harness`'s `main`, whose `void*` argv clang refuses.
 
-Estimate: small, once a Mac is available to accept it.
+   `tests/probes/config.nims` and the grader path of `probe_return_marshalling_host` still
+   look for `libsodium.so`. `scripts/grade-specs.sh` has not been run on a Mac.
+5. **Acceptance, so far.**
+   - **Basecamp, 0.3.0 build.** Installed with the macOS lgpm 0.3.1 release into a
+     `--user-dir` profile of the DMG, with `infra/basecamp/bundle-0.3.2.tsv`'s dependencies:
+     Needs you rendered, a room opened live, and a message sent.
+   - **logosctl 0.3.2's macOS build.** `muster_module` 0.3.0 and 0.3.1 loaded, and `health`
+     answered `ok`.
+   - **A merged package.** One carrying `darwin-arm64` and `linux-amd64` (0.3.0) installed
+     its `darwin-arm64` variant.
+   - **Not yet:**
+     - the workflow's macOS leg on GitHub's runner;
+     - a room between a Mac and a Linux instance, as R6 did
+       (`docs/labbook/muster-in-basecamp-031.md`);
+     - the 0.3.1 `muster_ui` in Basecamp.
+
+How to build and check it on a Mac: [`docs/runbooks/macos.md`](../runbooks/macos.md).
 
 ## windows-x86_64: what is left
 
@@ -97,7 +123,8 @@ Larger, and it rests on two things outside Muster's code.
 2. **Nim cross-compiles to mingw.** The fork runs the native `nim c --app:staticlib`; Windows
    needs `--os:windows --cpu:amd64` with the mingw gcc. On the link line,
    `pthread dl m` becomes `ws2_32 bcrypt advapi32`, since chronos needs Winsock.
-3. **libsodium for mingw:** a static `pkgsCross.mingwW64.libsodium` (see darwin step 1).
+3. **libsodium for mingw:** a static `pkgsCross.mingwW64.libsodium`. (macOS needed none:
+   its portable bundle carries the dylib; see darwin step 1.)
 4. **Two required dependencies have no Windows build:** `lez_core` and
    `liblogos_lez_rln_module`. Either:
    - upstream builds them for Windows; or

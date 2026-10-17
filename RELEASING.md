@@ -5,7 +5,7 @@ A release is one GitHub release, `muster-v<version>`, carrying two ways to run M
 | Asset | For whom | What it is |
 |---|---|---|
 | `Muster-<version>-Basecamp-<tag>-linux-x86_64.AppImage` | someone who wants to download one file and run it | Basecamp's own released AppImage with Muster and the Logos Official modules it needs already installed inside. `chmod +x`, run, click **Muster**. |
-| `muster_module-<version>-linux-amd64.lgx`, `muster_ui-<version>-linux-amd64.lgx` | someone who already runs Basecamp, or `logoscore` | the two portable packages. Basecamp installs them from Muster's catalogue (`catalog/`, [`docs/runbooks/install-from-catalogue.md`](docs/runbooks/install-from-catalogue.md)) and fetches the dependencies from Logos Official; `lgpm install --file` installs them by hand. |
+| `muster_module-<version>-linux-amd64.lgx`, `muster_ui-<version>-linux-amd64.lgx` (or `muster_module-<version>.lgx`, `muster_ui-<version>.lgx`, one per package holding every platform, from `--from-run`) | someone who already runs Basecamp, or `logoscore` | the two portable packages. Basecamp installs them from Muster's catalogue (`catalog/`, [`docs/runbooks/install-from-catalogue.md`](docs/runbooks/install-from-catalogue.md)) and fetches the dependencies from Logos Official; `lgpm install --file` installs them by hand. |
 
 Both are built from the same commit, and the AppImage contains exactly the two `.lgx` files the release publishes.
 
@@ -13,7 +13,7 @@ Both are built from the same commit, and the AppImage contains exactly the two `
 
 1. **Version.** Bump `"version"` in `module/metadata.json` and `ui/metadata.json` (both the same), merge it, and update a clean local `main`.
 2. **Green.** `module/tests/run-suite.sh` and `scripts/ui-parity.sh` (`MUSTER_FLEET=local` needs no fleet; the split test needs foundry on `PATH`, e.g. `nix shell nixpkgs#foundry`).
-3. **The packages and the catalogue.** `scripts/catalog-release.sh`. It builds both `.#lgx-portable` from the committed tree into `.run/catalog-release/muster-v<version>/` and writes `catalog/index.json` and `catalog/icons/`. The release targets this commit, so it must be on GitHub.
+3. **The packages and the catalogue.** `scripts/catalog-release.sh`. It builds both `.#lgx-portable` from the committed tree into `.run/catalog-release/muster-v<version>/` and writes `catalog/index.json` and `catalog/icons/`. The release targets this commit, so it must be on GitHub. To carry every platform the `lgx variants` workflow builds (`linux-amd64`, `linux-arm64`, `darwin-arm64`), run it as `scripts/catalog-release.sh --from-run <run id>` with a successful run of that workflow on this commit instead ([`docs/design/platforms.md`](docs/design/platforms.md)).
 4. **The AppImage, from those same files.**
 
    ```bash

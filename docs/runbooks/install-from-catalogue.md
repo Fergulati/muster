@@ -6,7 +6,7 @@
 
 ## What you need
 
-- **Linux on x86_64.** Muster is built for nothing else yet, so Basecamp on another platform cannot install it.
+- **Linux on x86_64.** The releases published so far carry only `linux-amd64`, so Basecamp on another platform cannot install Muster from the catalogue yet. On a Mac with Apple Silicon, build and run it from source instead: [`macos.md`](macos.md).
 - **Logos Basecamp 0.3.2**, from [its releases](https://github.com/logos-co/logos-basecamp/releases).
 - **About 650 MB of downloads and ten minutes.** Most of it is Muster's dependencies, which come from the official Logos catalogue.
 

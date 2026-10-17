@@ -76,6 +76,8 @@ nix build .#lgx            # muster-module.lgx (dev, keyed linux-amd64-dev)
 nix build .#lgx-portable   # portable variant (logoscore's default resolver wants this one)
 ```
 
+The variant is the build host's: `linux-amd64` on x86_64 Linux, `linux-arm64` on aarch64 Linux, `darwin-arm64` on an Apple Silicon Mac (`docs/runbooks/macos.md`), each with its `-dev` form for `.#lgx`.
+
 Load it headless and answer one call:
 
 ```bash

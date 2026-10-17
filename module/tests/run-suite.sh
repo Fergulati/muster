@@ -18,6 +18,10 @@
 # TEST_TIMEOUT (seconds per test, default 900), OUT (log dir, default a fresh mktemp).
 # TEST_ARGS (appended to each selected test's command line — an e2e test's own
 # arguments, e.g. TEST_ARGS="$SAFE" for coordinate_submit_anvil; see tests/README.md).
+#
+# macOS (Darwin): nixpkgs' libsodium.dylib, no nixpkgs gcc; with no nim on PATH, the nim and
+# the clang the .lgx compiles with (the builder's nixpkgs, as a lock pins it); with no
+# timeout(1), nixpkgs coreutils'. The stock /bin/bash 3.2 runs it.
 set -uo pipefail
 
 MODULE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,14 +51,62 @@ NIMPKGS="$(tools/nim-closure.sh)" || exit 1
 # every test at run time ("GLIBC_ABI_GNU2_TLS not found") — so a run that borrows
 # nixpkgs' libsodium compiles with nixpkgs' gcc, whose wrapper links its own glibc.
 # MUSTER_SODIUM (a host libsodium) keeps the host's compiler.
+# macOS has no glibc to drift from: a nix-built dylib links libSystem and names itself by
+# its store path, so whichever clang nim drives links nixpkgs' libsodium as is.
+# HOST_OS, not OS: a caller's exported OS would carry our value into every test.
+HOST_OS="$(uname -s)"
+SOEXT=so; [ "$HOST_OS" = Darwin ] && SOEXT=dylib
 if [ -n "${MUSTER_SODIUM:-}" ]; then
   SODIUM="$MUSTER_SODIUM"
+elif [ "$HOST_OS" = Darwin ]; then
+  SODIUM="$(nix build nixpkgs#libsodium.out --no-link --print-out-paths 2>/dev/null | tail -1)"
 else
   { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null)
   [ -n "${NIXGCC:-}" ] && [ -x "$NIXGCC/bin/gcc" ] || { echo "nixpkgs#gcc not found (set MUSTER_SODIUM to use the host's compiler)"; exit 1; }
   export PATH="$NIXGCC/bin:$PATH"
 fi
-[ -f "$SODIUM/lib/libsodium.so" ] || { echo "libsodium not found (set MUSTER_SODIUM)"; exit 1; }
+[ -f "$SODIUM/lib/libsodium.$SOEXT" ] || { echo "libsodium not found (set MUSTER_SODIUM)"; exit 1; }
+# macOS with no nim on PATH: the nim and the clang the .lgx compiles with. Its
+# libmuster_module is lib/mkLogosModule.nix's codegen.nim, `nim c` under the builder's own
+# pkgs.nim (2.2.4 at c10a94c, the store path the darwin .lgx used) in that nixpkgs' stdenv.
+# On aarch64-darwin nixpkgs' nim wrapper sets no NIM_CONFIG_PATH, so the CC it exports goes
+# unread: nim takes `clang` off PATH — stdenv.cc in the build (the .lgx's objects say sdk
+# 11.3), Apple's here (sdk 26) — so stdenv.cc goes first, as nixpkgs' gcc does on Linux.
+# The pin is read off a lock, never by evaluating the flake (>7 GB, CLAUDE.md): this
+# directory's flake.lock when there is one, else, since flake.lock is gitignored and a fresh
+# clone has none, the builder's own lock (flake.nix overrides none of the builder's
+# nixpkgs), which `nix flake metadata` fetches without evaluating.
+if [ "$HOST_OS" = Darwin ] && ! command -v nim >/dev/null 2>&1; then
+  # A function, not $(python3 <<'PY' …): bash 3.2 matches quotes inside a heredoc in $(…).
+  builder_nixpkgs() {
+    if [ -f flake.lock ]; then cat flake.lock
+    else nix flake metadata "$(grep -o 'github:corpetty/logos-module-builder/[0-9a-f]\{40\}' flake.nix | head -1)" --json 2>/dev/null
+    fi | python3 -c '
+import json, sys
+d = json.load(sys.stdin); lock = d.get("locks", d); nodes = lock["nodes"]
+def node(ref):   # an input is a node name, or a follows path walked from the root
+    if isinstance(ref, str): return ref
+    n = lock["root"]
+    for k in ref: n = node(nodes[n]["inputs"][k])
+    return n
+# the root of flake.lock is this flake, the root of the metadata the builder itself
+lmb = lock["root"] if "locks" in d else node(nodes[lock["root"]]["inputs"]["logos-module-builder"])
+k = nodes[node(nodes[lmb]["inputs"]["nixpkgs"])]["locked"]
+print("github:%s/%s/%s" % (k["owner"], k["repo"], k["rev"]))'
+  }
+  NIXPKGS_PIN="$(builder_nixpkgs)"
+  NIMDIR="$(nix build "$NIXPKGS_PIN#nim" --no-link --print-out-paths 2>/dev/null | tail -1)"
+  NIXCC="$(nix build "$NIXPKGS_PIN#stdenv.cc" --no-link --print-out-paths 2>/dev/null | tail -1)"
+  [ -x "$NIMDIR/bin/nim" ] && [ -x "$NIXCC/bin/clang" ] || { echo "no nim on PATH, and the builder's nixpkgs#nim or #stdenv.cc ($NIXPKGS_PIN) did not build"; exit 1; }
+  export PATH="$NIMDIR/bin:$NIXCC/bin:$PATH"
+fi
+# macOS ships no timeout(1): take GNU coreutils' from nixpkgs, the one Linux runs. Last on
+# PATH, so it supplies only what the host lacks (timeout) and shadows none of its tools.
+if [ "$HOST_OS" = Darwin ] && ! command -v timeout >/dev/null 2>&1; then
+  CU="$(nix build nixpkgs#coreutils --no-link --print-out-paths 2>/dev/null | tail -1)"
+  [ -x "$CU/bin/timeout" ] || { echo "no timeout(1) on PATH, and nixpkgs#coreutils did not build"; exit 1; }
+  export PATH="$PATH:$CU/bin"
+fi
 # probe_return_marshalling_host builds the module into a host harness against a system
 # libsecp256k1; supply nixpkgs' unless the caller already pointed it somewhere.
 if [ -z "${MUSTER_SECP256K1_LIB:-}" ] && ! pkg-config --exists libsecp256k1 2>/dev/null; then
@@ -72,7 +124,7 @@ FLAGS=(-d:release --threads:on --hints:off
   --path:"$P/nim-web3" --path:"$P/nim-chronos" --path:"$P/nim-chronicles" --path:"$P/nim-bearssl"
   --path:"$P/nim-faststreams" --path:"$P/nim-json-rpc" --path:"$P/nim-serialization"
   --path:"$P/nim-json-serialization" --path:"$P/nim-http-utils" --path:"$P/logos-nim-sdk/src"
-  --passL:"$SODIUM/lib/libsodium.so" --passL:"-Wl,-rpath,$SODIUM/lib")
+  --passL:"$SODIUM/lib/libsodium.$SOEXT" --passL:"-Wl,-rpath,$SODIUM/lib")
 
 # 2. Select.
 E2E+=(lez_frost_v030_e2e lez_frost_room_v030_e2e)    # on a local LEZ v0.3 zone (exo-eb6.4 L3)
@@ -90,12 +142,13 @@ case "$GROUP" in
   probes)  sel=("${probes[@]}") ;;
   e2e)     sel=("${e2e[@]}"); [ ${#FILTERS[@]} -gt 0 ] || { echo "e2e needs a test name: ${E2E[*]}"; exit 2; } ;;
   all)     sel=("${unit[@]}" "${probes[@]}" "${e2e[@]}") ;;
-  *)       FILTERS=("$GROUP" "${FILTERS[@]}"); sel=("${unit[@]}" "${probes[@]}") ;;
+  # ${a[@]+"${a[@]}"}: bash < 4.4 (macOS's /bin/bash is 3.2) calls an empty array unbound under set -u
+  *)       FILTERS=("$GROUP" ${FILTERS[@]+"${FILTERS[@]}"}); sel=("${unit[@]}" "${probes[@]}") ;;
 esac
 if [ ${#FILTERS[@]} -gt 0 ]; then
   keep=()
   for f in "${sel[@]}"; do for q in "${FILTERS[@]}"; do [[ "$f" == *"$q"* ]] && { keep+=("$f"); break; }; done; done
-  sel=("${keep[@]}")
+  sel=(${keep[@]+"${keep[@]}"})
 fi
 [ ${#sel[@]} -gt 0 ] || { echo "no tests match"; exit 2; }
 
