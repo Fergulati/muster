@@ -311,8 +311,9 @@ proc resetDo(o: MusterUi) =
 # ── the wallet ──────────────────────────────────────────────────────────────────
 
 proc previewLezSendDo(o: MusterUi, fromId, to, raw: string) =
-  # The rail and disclosure, before anything is sent.
-  ask mm.wallet_estimate_feeAsync("lez:testnet", to, "LEZ", raw,
+  # The rail and disclosure, before anything is sent, from the account the send will
+  # spend: its form picks the rail (exo-408 item 14), as the C++ backend's preview does.
+  ask mm.wallet_estimate_feeAsync("lez:testnet", fromId, to, "LEZ", raw,
     proc (r: string) = o.setLezPreviewJson(r))
 
 proc sendLezDo(o: MusterUi, fromId, to, raw: string) =

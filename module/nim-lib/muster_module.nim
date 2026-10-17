@@ -4715,11 +4715,16 @@ proc musterWalletSummary(): string =
   result = $walletSummary(inputs)
   lpDebugOnChange("wallet-summary", result)
 
-proc musterWalletEstimateFee(chain, to, assetSymbol, raw: string): string =
+proc accountFormOf(w: Wallet, chain, id: string): AccountForm
+
+proc musterWalletEstimateFee(chain, fromId, to, assetSymbol, raw: string): string =
   let w = moduleWallet()
   try:
     let asset = assetBySymbol(w, chain, assetSymbol)
-    let src = accountOn(w, chain)
+    # priced from the account the send will spend: on the LEZ its form picks the rail and
+    # what it discloses, so a shielded source must not preview the public rail (exo-408)
+    let src = (if fromId.len > 0: Account(chain: chain, form: accountFormOf(w, chain, id = fromId), id: fromId)
+               else: accountOn(w, chain))
     let fee = w.estimateFee(chain, src, to, amount(asset, raw))
     var o = %*{"fee": fee.fee.display(), "raw": fee.fee.raw, "note": fee.note}
     # LEZ preview: name the rail + what it would disclose, so the sender sees the

@@ -185,9 +185,9 @@ void MusterUiBackend::loadWalletAccounts()
 void MusterUiBackend::previewLezSend(const QString &fromId, const QString &to, const QString &raw)
 {
     // Preview the rail + disclosure without committing — the honesty before you send.
-    Q_UNUSED(fromId);
+    // From the account the send will spend: its form picks the rail (exo-408 item 14).
     setLezPreviewJson(modules().muster_module.wallet_estimate_fee(
-        QStringLiteral("lez:testnet"), to, QStringLiteral("LEZ"), raw));
+        QStringLiteral("lez:testnet"), fromId, to, QStringLiteral("LEZ"), raw));
 }
 
 void MusterUiBackend::sendLez(const QString &fromId, const QString &to, const QString &raw)

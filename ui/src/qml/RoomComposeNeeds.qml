@@ -106,6 +106,13 @@ ColumnLayout {
         text: room.composeBlockers.length > 0
               ? qsTr("Propose is off until %1 runs here.")
                     .arg(room.composeBlockers.map(function (n) { return String(n.name || ""); }).join(", "))
+              // a switch the module refused never completes (exo-408 item 10): say so, and why,
+              // rather than "waits" — the policy still in force is the previous one
+              : room.pickPending && room.policyError && room.policyError.error !== undefined
+              ? qsTr("Propose is off: this proposal could not switch to %1. %2")
+                    .arg(((room.kindInfo(room.pickedKind) || {}).label) || room.pickedKind)
+                    .arg(room.chainErrorWords(String(room.policyError.error), room.policyError.detail)
+                         || String(room.policyError.error))
               : room.pickPending
               ? qsTr("Propose waits while this proposal switches to %1.")
                     .arg(((room.kindInfo(room.pickedKind) || {}).label) || room.pickedKind)
