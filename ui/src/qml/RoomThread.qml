@@ -226,6 +226,14 @@ Rectangle {
                                         .arg(room.weiToEth(String(room.splitResult.amount || "0"),
                                                            Number(((msg.liveIntent && msg.liveIntent.split) || {}).decimals || 18)))
                                         .arg(String(((msg.liveIntent && msg.liveIntent.split) || {}).asset || "ETH"))
+                                     // through the platform (Basecamp): nothing is sent until the person
+                                     // approves it in the Logos Signer, and the reference is a request,
+                                     // not a transaction ("txs:…", exo-d4d.5)
+                                     : String(room.splitResult.pending || "").indexOf("txs:") === 0
+                                     ? qsTr("Paying %1 %2 through the Logos Signer: approve it there. It shows as paid once it lands.")
+                                        .arg(room.weiToEth(String(room.splitResult.amount || "0"),
+                                                           Number(((msg.liveIntent && msg.liveIntent.split) || {}).decimals || 18)))
+                                        .arg(String(((msg.liveIntent && msg.liveIntent.split) || {}).asset || "ETH"))
                                      : qsTr("Sent %1 %2 from your wallet (%3) — it shows as paid once it settles.")
                                         .arg(room.weiToEth(String(room.splitResult.amount || "0"),
                                                            Number(((msg.liveIntent && msg.liveIntent.split) || {}).decimals || 18)))
@@ -693,19 +701,11 @@ Rectangle {
                     askedOfName: (msg.parsedCard && msg.parsedCard["for"])
                                  ? room.memberLabel(String(msg.parsedCard["for"])) : ""
                     onShareAddress: {
-                        // a Bitcoin address is my own key's on that network: the module
-                        // knows it, not this view (exo-a90.17)
-                        if (room.backend && ["BTC", "XMR", "LEZ"].indexOf(String((msg.parsedCard || {}).asset || "ETH")) >= 0) {
-                            room.backend.shareAddress(String((msg.parsedCard || {}).chain || ""));
-                            return;
-                        }
+                        // my address on that chain is the module's to say, never this view's: on
+                        // Basecamp an Ethereum one is the keystore account I pay from and am paid
+                        // at, not muster's own key (exo-cb3), and the module signs the share as mine
                         if (room.backend)
-                            room.backend.postMessage(JSON.stringify({
-                                kind: "address-share", asset: "ETH",
-                                address: room.myAddress.length > 0 ? room.myAddress
-                                         : "0x0000000000000000000000000000000000000000",
-                                form: 1
-                            }));
+                            room.backend.shareAddress(String((msg.parsedCard || {}).chain || ""));
                     }
                     // A peer disclosed an address in answer to the ask — drop it
                     // straight into the payment recipient and open the composer, so

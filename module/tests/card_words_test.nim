@@ -184,4 +184,15 @@ block:
   doAssert "a proposal" notin s.text
   echo "7. a Monero multisig spend reads as what it pays, in XMR, with its fee cap OK"
 
+# ── 8. the settle transaction says what it settles, in the signer (exo-132) ─────────────
+block:
+  # R6 (2026-10-07): the Logos Signer showed only "Settle an intent" for execTransaction
+  let pay = """{"to":"0x00000000000000000000000000000000000000aa","value":300000000000000,"data":"0x","operation":0,"nonce":2}"""
+  let p = settlePurpose(pay, "eip155:11155111:0x21b6e7328d4b2cbaec21d2504dc41fdfffcb86ef")
+  doAssert p == "Settle a payment: 0.0003 ETH → 0x0000…00aa, from the Safe 0x21b6…86ef, agreed in a Muster room", p
+  doAssert settlePurpose("""{"memo":"venue deposit","to":"0x00000000000000000000000000000000000000aa","value":1}""", "") ==
+           "Settle 'venue deposit', agreed in a Muster room"
+  doAssert settlePurpose("", "") == "Settle a proposal, agreed in a Muster room"
+  echo "8. the settle transaction names what it settles and from which account OK"
+
 echo "card_words_test: all OK"

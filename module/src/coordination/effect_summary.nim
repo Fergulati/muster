@@ -250,3 +250,17 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     return EffectSummary(kind: "payment", amount: value, unit: "wei", to: to,
                          text: "a payment: " & inDecimals(value, 18) & " ETH → " & short(to))
   EffectSummary(kind: "unknown", text: "a proposal" & (if kind.len > 0: " (" & kind & ")" else: ""))
+
+proc settlePurpose*(effectJson, account: string): string =
+  ## What the person approving a settle transaction in the platform's signer reads as its
+  ## purpose (exo-d4d.5, exo-132): the effect's memo when it has one, else what it moves, and
+  ## the account it moves from (a CAIP-10 `account`, its address shortened).
+  var memo = ""
+  try: memo = parseJson(effectJson){"memo"}.getStr("")
+  except CatchableError: discard
+  var what = "'" & memo & "'"
+  if memo.len == 0:
+    what = effectSummary(effectJson).text
+    let parts = account.split(':')
+    if parts.len >= 3 and parts[^1].startsWith("0x"): what.add ", from the Safe " & short(parts[^1])
+  "Settle " & what & ", agreed in a Muster room"

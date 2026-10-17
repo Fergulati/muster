@@ -34,6 +34,9 @@ Item {
     signal discloseSuggested()
     property bool suggestionAvailable: true   // describe()'s test Safe can work here (exo-d4d.6)
     property string defaultChainId: "31337"   // where a Safe disclosure starts: describe()'s defaultChainId
+    // where a Bitcoin form starts: the local regtest node in the developer runner (where the
+    // local test Safe also works), a public test network in a real install (exo-132)
+    readonly property string defaultBtcNetwork: acc.suggestionAvailable ? "regtest" : "signet"
     signal lezMemberRequested()
     signal lezCreateRequested(string threshold, string members)
     property var frostCeremonies: []      // the room's FROST key ceremonies (Phase D)
@@ -499,7 +502,7 @@ Item {
                     objectName: "btcNetwork"
                     Layout.fillWidth: true
                     placeholderText: qsTr("network")
-                    text: "regtest"
+                    text: acc.defaultBtcNetwork
                 }
             }
             LogosTextField {
@@ -568,7 +571,7 @@ Item {
                 objectName: "frostNetwork"
                 Layout.fillWidth: true
                 placeholderText: qsTr("network")
-                text: "regtest"
+                text: acc.defaultBtcNetwork
             }
             ActionButton {
                 objectName: "frostOpen"
