@@ -835,7 +835,8 @@ ColumnLayout {
                                 objectName: "roomSplitXmrDepth"
                                 Layout.preferredWidth: 70
                                 text: "10"
-                                onTextChanged: room.splitXmrDepth = String(text)
+                                // the composer exists before a room does (Start something): set it only in one
+                                onTextChanged: if (room) room.splitXmrDepth = String(text)
                             }
                         }
                     }
