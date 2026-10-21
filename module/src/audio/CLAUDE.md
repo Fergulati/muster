@@ -27,10 +27,14 @@ given (`MUSTER_VOICE_SINK`, the offscreen self-test) (§7, §9).
 
 Rules:
 - The ctl functions stay `{.varargs.}`, every SET value a `cint`, every GET argument a
-  `ptr cint`. A fixed-arity binding passes garbage on Apple arm64 (§3.1); every setting is
+  `ptr cint`. A fixed-arity binding hands libopus whatever is on the stack on Apple arm64: in
+  the prototype a silent 300000 bitrate (§3.1), in this build `OPUS_BAD_ARG`. Every setting is
   read back after it is set (`newClipEncoder`, `voice_codec_test` §1).
-- libopus reads room-supplied bytes only after `voice_clip.decodeRecord` accepted the record
-  and every packet is one 20 ms frame. A refusal is a value naming why, never a raise.
+- libopus decodes room-supplied bytes only after `voice_clip.decodeRecord` accepted the
+  record and every packet carries 20 ms of audio: 960 samples, as `opus_packet_get_nb_samples`
+  reads them off the TOC byte (and a code-3 packet's frame count). That is a sample count, not
+  one frame: several frames adding up to 20 ms pass. A refusal is a value naming why, never a
+  raise.
 - The coordination layer (the room's fold, thread rows) imports `voice_clip` only, never
   `opus` or `voice_codec`: the fold must not link a codec (§6).
 - A change to any clip constant or the record's fields strands notes already sent: it is a
@@ -63,7 +67,8 @@ Rules:
 - No test opens a real device: `abNull` only. A real-device test sits behind
   `MUSTER_VOICE_REAL`, in run-suite's E2E list (S11).
 - Tests: `module/tests/voice_clip_test.nim` (pure), `module/tests/voice_codec_test.nim`
-  (libopus; `run-suite.sh` links nixpkgs' libopus, `MUSTER_OPUS` picks another),
+  (libopus; `run-suite.sh` links the builder pin's on macOS, the .lgx's 1.5.2, and nixpkgs'
+  beside libsodium on Linux; `MUSTER_OPUS` picks another; §1 prints the version),
   `module/tests/audio_io_test.nim` (the seam with no device), and
   `module/tests/audio_io_null_test.nim` (miniaudio's null device thread; `run-suite.sh` puts
   the pin's checkout on `--path`).

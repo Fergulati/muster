@@ -15,21 +15,24 @@ tests/run-suite.sh e2e <name>       # one chain-bound test, by name (below)
 The runner materializes the Nim closure at the revs `../metadata.json` pins
 (`codegen.nim.packages`) with [`../tools/nim-closure.sh`](../tools/nim-closure.sh),
 into `~/.cache/muster/nimpkgs`, so a local run compiles against the same sources the
-`.lgx` does. It takes libsodium and libopus from nixpkgs (and, for the host-return
-probe, secp256k1 and `g++`), and builds every test with one flag set: the union of the
-`$SECP`, `$STINT`, web3, SDK, libsodium, libopus and miniaudio flags below. An extra
+`.lgx` does. It takes libsodium from nixpkgs, libopus from the builder's nixpkgs on macOS
+(the one the `.lgx` ships) and from nixpkgs beside libsodium on Linux (and, for the
+host-return probe, secp256k1 and `g++`), and builds every test with one flag set: the
+union of the `$SECP`, `$STINT`, web3, SDK, libsodium, libopus and miniaudio flags below. An extra
 `--path` is harmless to a pure-Nim test. Each test's log lands in `$OUT` (a fresh temp
 dir unless set), and the summary names every failure. Env: `JOBS` (8), `TEST_TIMEOUT` (900 s),
 `TEST_ARGS` (appended to each selected test's command line, for an e2e test's own
 arguments), `MUSTER_NIMPKGS` (the closure dir), `MUSTER_SODIUM` / `MUSTER_OPUS` (a
-libsodium / libopus prefix in place of nixpkgs'; on Linux set both, since a host
-libsodium means the host's compiler, which cannot link nixpkgs' glibc).
+libsodium / libopus prefix in place of the default; on Linux `MUSTER_SODIUM` needs
+`MUSTER_OPUS` beside it, and the run stops without it, since a host libsodium means the
+host's compiler, which cannot link nixpkgs' glibc).
 
 **On macOS** (arm64) the same command runs under the stock `/bin/bash` 3.2, given Nix
 and a working `git` and `python3` (the closure fetch needs both; `/usr/bin`'s are the
-Xcode Command Line Tools'). It links nixpkgs' `libsodium.dylib` and `libopus.dylib` (no
-glibc to match, so no nixpkgs gcc). With no `nim` on `PATH` it takes the nim and the clang the `.lgx`
-compiles with: `nixpkgs#nim` and `#stdenv.cc` at the nixpkgs `../flake.lock` pins under
+Xcode Command Line Tools'). It links nixpkgs' `libsodium.dylib` and `libopus.dylib` at
+the builder's nixpkgs, 1.5.2 at `e9f00bd`, the `.lgx`'s (no glibc to match, so no nixpkgs
+gcc); `voice_codec_test` §1 prints the version it ran on. With no `nim` on `PATH` it takes
+the nim and the clang the `.lgx` compiles with: `nixpkgs#nim` and `#stdenv.cc` at the nixpkgs `../flake.lock` pins under
 `logos-module-builder` (in a fresh clone, which has no `flake.lock` until a first build,
 the builder's own lock, read with `nix flake metadata`), the clang first on `PATH`, since
 nim runs `clang` from there. With no `timeout` it uses nixpkgs coreutils'.
@@ -133,8 +136,8 @@ wants (below), which the runner supplies.
 
 **Voice notes (`docs/design/voice-notes.md`).**
 
-- `voice_clip_test` (§3.2, §5 — the clip record: a round trip re-encodes byte for byte, one small record held to hand-computed CDE bytes; every refusal a value naming why (codec settings, packet lengths 1..1275, samples over 60 s, a packet count other than ceil((samples + preskip) / 960), the shape, a 3,000-mutation fuzz); `maxClipBytes` is 126,119 at 60 s and 1,166 at 500 ms; pure Nim, no libopus)
-- `voice_codec_test` (§3.1 — libopus at the fixed settings: every ctl read back (a fixed-arity `opus_encoder_ctl` turns §1 red on Apple arm64); every packet 40 B for a tone, silence and a mix, none padded; a 1 kHz tone back at exactly its length, in phase, its power kept; a packet that is not one 20 ms frame, or bytes that are not a record, refused before libopus decodes; the 60 s cap; `$OPUS`)
+- `voice_clip_test` (§3.2, §5 — the clip record: a round trip re-encodes byte for byte, one small record held to hand-computed CDE bytes; every refusal a value naming why (codec settings, packet lengths 1..1275, samples over 60 s, a packet count other than ceil((samples + preskip) / 960), the shape, a 3,000-mutation fuzz); `maxClipBytes` is 126,119 at 60 s and 1,166 at 500 ms, and refuses a negative or over-cap length; pure Nim, no libopus)
+- `voice_codec_test` (§3.1 — libopus at the fixed settings: every ctl read back (a fixed-arity `opus_encoder_ctl` turns §1 red on Apple arm64); every packet 40 B for a tone, silence and a mix, none padded; a 1 kHz tone back at exactly its length, in phase, its power kept; a packet that does not carry 20 ms of audio (960 samples by its TOC), or bytes that are not a record, refused before libopus decodes; the 60 s cap; prints `opus_get_version_string`; `$OPUS`)
 - `audio_io_test` (§9 — the device seam with no device, on `SyntheticAudioIo` and `FileAudioIo`, through the `captureInto` / `playFrom` the device callback runs: a capture paced 48 frames a millisecond, its write index monotone, exactly the cap then `capped`, frames past it dropped; the peak, reset on read (32768 for int16.low); playback consumed whole, zeros past the end, then `done` once the buffer's `tail` of silence followed the last sample (0 for these sinks; 1,200 pinned on `playFrom` itself); a WAV source paced by the clock, refused unless 48 kHz mono s16 (`wav-format`) or when cut short (`wav-truncated`); the PCM sink exactly the samples played; `busy`; a nil buffer refused as `no-buffer` before anything opens; pure Nim)
 - `audio_io_null_test` (§9 — `MiniaudioIo` on miniaudio's null backend: a real device thread, no device, no permission prompt, at most about 1 s a block: capture frames within 1 s, all zero, stop and close idempotent; every stream read back as 48 kHz mono s16 (`streamFormat`; otherwise `device-format`); a 0.2 s cap stops at 9,600 frames and sets `capped`; playback 48,000 frames a second ±5%, measured between two reads; a short buffer `done` only after the device's 1,920-frame tail of silence; a second start while one runs is `busy`, a nil buffer `no-buffer`; `backendNames`: abNull is Null alone, abSystem never Null and never empty; `$MA`)
 

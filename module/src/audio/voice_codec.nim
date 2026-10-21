@@ -13,10 +13,12 @@
 ## value (opus.nim) refuses to encode rather than make clips of the wrong size.
 ##
 ## Decoding reads bytes another member wrote, inside the core: `decodeClip` checks the record
-## with voice_clip first, then requires every packet to be one 20 ms frame
-## (`opus_packet_get_nb_samples` reads only the TOC), and only then lets libopus decode. A
-## refusal is a value naming why. Audio plaintext stays in this process: nothing here writes
-## a file or returns PCM across IPC (§7, §9).
+## with voice_clip first, then requires every packet to carry 20 ms of audio, 960 samples as
+## `opus_packet_get_nb_samples` counts them (it reads only the TOC byte, and a code-3
+## packet's frame count; several frames that add up to 20 ms pass, and opus_decode takes any
+## packet of 960 samples or fewer), and only then lets libopus decode. A refusal is a value
+## naming why. Audio plaintext stays in this process: nothing here writes a file or returns
+## PCM across IPC (§7, §9).
 
 import ./opus
 import ./voice_clip
@@ -157,8 +159,9 @@ proc encodeClip*(pcm: openArray[int16]): tuple[ok: bool, clip: VoiceClip, why: s
 
 proc decodeClip*(record: openArray[byte]): tuple[ok: bool, pcm: seq[int16], why: string] =
   ## The PCM a clip record carries, exactly `samples` long, or a refusal: any word
-  ## voice_clip.decodeRecord refuses with, "packet-frame" for a packet that is not one 20 ms
-  ## frame, "decode" when libopus refuses a packet.
+  ## voice_clip.decodeRecord refuses with, "packet-frame" for a packet whose TOC does not
+  ## make 20 ms of audio (960 samples, opus_packet_get_nb_samples), "decode" when libopus
+  ## refuses a packet.
   let r = decodeRecord(record)
   if not r.ok: return (false, @[], r.why)
   let c = r.clip

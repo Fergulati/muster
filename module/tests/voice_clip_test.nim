@@ -151,6 +151,11 @@ block:
     doAssert maxClipBytes(ms) == worst, $ms & ": " & $maxClipBytes(ms) & " vs " & $worst
     for preskip in [0, 1, 24, 312]:
       doAssert encodeRecord(clipOf(ms * 48, preskip)).len <= maxClipBytes(ms)
-echo "3. maxClipBytes(60 s) = 126,119, (500 ms) = 1,166 OK"
+  # a length no clip can have is refused, never sized: a negative ms once wrapped through
+  # cbUint to a 121-byte budget, and one past the cap would size a clip decodeRecord refuses
+  for ms in [-1, -20, low(int), VoiceMaxMs + 1, high(int)]:
+    let r = (try: $maxClipBytes(ms) except ValueError: "refused")
+    doAssert r == "refused", "maxClipBytes(" & $ms & ") = " & r
+echo "3. maxClipBytes(60 s) = 126,119, (500 ms) = 1,166; a negative or over-cap length refused OK"
 
 echo "voice_clip_test: all OK"

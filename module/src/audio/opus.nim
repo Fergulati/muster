@@ -6,11 +6,14 @@
 ##
 ## The ctl functions are C variadics (`int opus_encoder_ctl(OpusEncoder *st, int request,
 ## ...)`, opus.h:328, :522) and MUST stay `{.varargs.}`. Apple arm64 passes variadic
-## arguments on the stack and fixed ones in registers, so a fixed-arity prototype hands
-## libopus's va_arg whatever is on the stack: SET_BITRATE(16000) returned OPUS_OK and read
-## back 300000. AAPCS64 Linux and SysV x86_64 pass both alike, which is why only a Mac shows
-## it. Every SET value is a `cint` (opus_int32), never a Nim `int` (64-bit), and every GET
-## argument a `ptr cint`. voice_codec_test §1 reads every setting back.
+## arguments on the stack and fixed ones in registers, so a fixed-arity declaration hands
+## libopus's va_arg whatever is on the stack, and what happens depends on what is there. In
+## the prototype (design §3.1) SET_BITRATE(16000) returned OPUS_OK and read back 300000 (a
+## large value, clamped for mono); in this build on darwin-arm64 a fixed-arity SET failed
+## with OPUS_BAD_ARG instead. AAPCS64 Linux and SysV x86_64 pass both alike, which is why
+## only a Mac shows it. Every SET value is a `cint` (opus_int32), never a Nim `int` (64-bit),
+## and every GET argument a `ptr cint`. Either failure is caught: a SET's return code is
+## checked, and newClipEncoder and voice_codec_test §1 read every setting back.
 ##
 ## The request numbers below are libopus's own (opus_defines.h, the same in 1.5.2 and
 ## 1.6.1); re-check them against the -dev headers when the pin moves.

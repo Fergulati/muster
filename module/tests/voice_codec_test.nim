@@ -1,8 +1,10 @@
 ## The voice codec (docs/design/voice-notes.md §3.1–§3.2): libopus at the fixed settings —
 ## 48 kHz mono, 20 ms frames, hard CBR at 16 kbps, DTX and FEC off — the clip record it
-## fills, and a decode that refuses a record before libopus reads a byte of it. Synthetic
-## PCM only: no microphone, no device. Needs libopus (run-suite.sh links nixpkgs' libopus,
-## as it does libsodium).
+## fills, and a decode that checks the record without libopus, then reads each packet's
+## length in samples off its first bytes (opus_packet_get_nb_samples), before libopus
+## decodes any of it. Synthetic PCM only: no microphone, no device. Needs libopus
+## (run-suite.sh links the builder pin's on macOS, the one the .lgx ships, and nixpkgs' on
+## Linux); §1 prints the version opus_get_version_string reports.
 
 import std/[math, random]
 import ../src/audio/[opus, voice_clip, voice_codec]
@@ -39,8 +41,10 @@ for i in 0 ..< ClipRate: mixed[i] = 0                  # the first second silent
 
 # 1. Every setting reads back as set. The ctl functions are C variadics; bound fixed-arity,
 #    Apple arm64 passes the value in a register where libopus's va_arg reads the stack, so
-#    SET_BITRATE(16000) returned OPUS_OK and read back 300000 (§3.1). CBR's packet size, and
-#    so the clip's fixed size, follows from the bitrate.
+#    what libopus gets is whatever is there. In the prototype (§3.1) SET_BITRATE(16000)
+#    returned OPUS_OK and read back 300000; in this build a fixed-arity SET failed with
+#    OPUS_BAD_ARG instead. Either way this goes red. CBR's packet size, and so the clip's
+#    fixed size, follows from the bitrate.
 block:
   let e = newClipEncoder()
   doAssert e.readBack(OPUS_GET_BITRATE_REQUEST) == VoiceBitrate, $e.readBack(OPUS_GET_BITRATE_REQUEST)
@@ -52,7 +56,7 @@ block:
   doAssert e.readBack(OPUS_GET_MAX_BANDWIDTH_REQUEST) == OPUS_BANDWIDTH_WIDEBAND
   doAssert e.readBack(OPUS_GET_LOOKAHEAD_REQUEST) == e.preskip
   doAssert e.preskip in 0 .. MaxPreskip, $e.preskip
-  echo "   libopus ", opusVersion(), ", preskip ", e.preskip
+  echo "   ", opusVersion(), ", preskip ", e.preskip      # opus_get_version_string
 echo "1. ctl read-back: bitrate 16000, VBR 0, DTX 0, FEC 0, complexity 5, voice, wideband OK"
 
 # 2. Hard CBR: every packet is exactly 40 bytes for a tone, for silence and for the two mixed,
@@ -98,9 +102,11 @@ block:
   echo "   P(1k)/P(3.1k) = ", p1k / p3k, ", correlation at lag 0 = ", c0
 echo "3. 1 kHz round trip: exact length, in phase, P(1k) >= 100 x P(3.1k) OK"
 
-# 4. Decode refuses, as a value: a packet that is not one 20 ms frame (a 10 ms packet, a
-#    two-frame 40 ms one), bytes that are not a record. Random packet bytes inside a valid
-#    record never crash libopus: they are refused, or decode to exactly the clip's length.
+# 4. Decode refuses, as a value: a packet that does not carry 20 ms of audio (960 samples,
+#    as opus_packet_get_nb_samples reads them off its TOC byte, and a code-3 packet's frame
+#    count: a 10 ms packet, a two-frame 40 ms one), bytes that are not a record. Random
+#    packet bytes inside a valid record never crash libopus: they are refused, or decode to
+#    exactly the clip's length.
 block:
   var err: cint
   let st = opus_encoder_create(ClipRate.int32, ClipChannels.cint, OPUS_APPLICATION_VOIP, addr err)

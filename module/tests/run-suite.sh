@@ -15,15 +15,17 @@
 #
 # Env: MUSTER_NIMPKGS (closure dir, default ~/.cache/muster/nimpkgs; tools/nim-closure.sh
 # fills it on first run), MUSTER_SODIUM (libsodium prefix; unset: nixpkgs' libsodium, built
-# with nixpkgs' gcc), MUSTER_OPUS (libopus prefix, the voice codec's; unset: nixpkgs'
-# libopus, from the same nix build as libsodium), JOBS (default 8),
+# with nixpkgs' gcc), MUSTER_OPUS (libopus prefix, the voice codec's; unset: on macOS the
+# builder pin's libopus, the .lgx's; on Linux nixpkgs', from the same nix build as libsodium
+# and the gcc; required beside MUSTER_SODIUM on Linux), JOBS (default 8),
 # TEST_TIMEOUT (seconds per test, default 900), OUT (log dir, default a fresh mktemp).
 # TEST_ARGS (appended to each selected test's command line — an e2e test's own
 # arguments, e.g. TEST_ARGS="$SAFE" for coordinate_submit_anvil; see tests/README.md).
 #
-# macOS (Darwin): nixpkgs' libsodium.dylib and libopus.dylib, no nixpkgs gcc; with no nim on
-# PATH, the nim and the clang the .lgx compiles with (the builder's nixpkgs, as a lock pins
-# it); with no timeout(1), nixpkgs coreutils'. The stock /bin/bash 3.2 runs it.
+# macOS (Darwin): nixpkgs' libsodium.dylib and the builder pin's libopus.dylib, no nixpkgs
+# gcc; with no nim on PATH, the nim and the clang the .lgx compiles with (the builder's
+# nixpkgs, as a lock pins it); with no timeout(1), nixpkgs coreutils'. The stock /bin/bash
+# 3.2 runs it.
 set -uo pipefail
 
 MODULE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -58,40 +60,18 @@ NIMPKGS="$(tools/nim-closure.sh)" || exit 1
 # HOST_OS, not OS: a caller's exported OS would carry our value into every test.
 HOST_OS="$(uname -s)"
 SOEXT=so; [ "$HOST_OS" = Darwin ] && SOEXT=dylib
-# libopus (the voice codec, docs/design/voice-notes.md §3.1) rides the same nix build as
-# libsodium on each OS, so on Linux it shares the gcc's glibc; MUSTER_OPUS picks a host one
-# (set it with MUSTER_SODIUM, whose host compiler cannot link nixpkgs' glibc).
-if [ -n "${MUSTER_SODIUM:-}" ]; then
-  SODIUM="$MUSTER_SODIUM"
-elif [ "$HOST_OS" = Darwin ]; then
-  { read -r SODIUM; read -r NIXOPUS; } < <(nix build nixpkgs#libsodium.out nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null)
-else
-  { read -r SODIUM; read -r NIXGCC; read -r NIXOPUS; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null)
-  [ -n "${NIXGCC:-}" ] && [ -x "$NIXGCC/bin/gcc" ] || { echo "nixpkgs#gcc not found (set MUSTER_SODIUM to use the host's compiler)"; exit 1; }
-  export PATH="$NIXGCC/bin:$PATH"
-fi
-[ -f "$SODIUM/lib/libsodium.$SOEXT" ] || { echo "libsodium not found (set MUSTER_SODIUM)"; exit 1; }
-if [ -n "${MUSTER_OPUS:-}" ]; then OPUS="$MUSTER_OPUS"
-elif [ -n "${NIXOPUS:-}" ]; then OPUS="$NIXOPUS"
-else OPUS="$(nix build nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null | tail -1)"
-fi
-[ -f "$OPUS/lib/libopus.$SOEXT" ] || { echo "libopus not found (set MUSTER_OPUS)"; exit 1; }
-# macOS with no nim on PATH: the nim and the clang the .lgx compiles with. Its
-# libmuster_module is lib/mkLogosModule.nix's codegen.nim, `nim c` under the builder's own
-# pkgs.nim (2.2.4 at c10a94c, the store path the darwin .lgx used) in that nixpkgs' stdenv.
-# On aarch64-darwin nixpkgs' nim wrapper sets no NIM_CONFIG_PATH, so the CC it exports goes
-# unread: nim takes `clang` off PATH — stdenv.cc in the build (the .lgx's objects say sdk
-# 11.3), Apple's here (sdk 26) — so stdenv.cc goes first, as nixpkgs' gcc does on Linux.
-# The pin is read off a lock, never by evaluating the flake (>7 GB, CLAUDE.md): this
-# directory's flake.lock when there is one, else, since flake.lock is gitignored and a fresh
-# clone has none, the builder's own lock (flake.nix overrides none of the builder's
-# nixpkgs), which `nix flake metadata` fetches without evaluating.
-if [ "$HOST_OS" = Darwin ] && ! command -v nim >/dev/null 2>&1; then
-  # A function, not $(python3 <<'PY' …): bash 3.2 matches quotes inside a heredoc in $(…).
-  builder_nixpkgs() {
-    if [ -f flake.lock ]; then cat flake.lock
-    else nix flake metadata "$(grep -o 'github:corpetty/logos-module-builder/[0-9a-f]\{40\}' flake.nix | head -1)" --json 2>/dev/null
-    fi | python3 -c '
+# The builder's nixpkgs, the one the .lgx is built from (macOS takes its libopus, and with
+# no nim on PATH its nim and clang, from here). The pin is read off a lock, never by
+# evaluating the flake (>7 GB, CLAUDE.md): this directory's flake.lock when there is one,
+# else, since flake.lock is gitignored and a fresh clone has none, the builder's own lock
+# (flake.nix overrides none of the builder's nixpkgs), which `nix flake metadata` fetches
+# without evaluating. `builder_pin` reads it once into NIXPKGS_PIN: call it as a statement,
+# never inside $(…), whose subshell would drop the value.
+# A function, not $(python3 <<'PY' …): bash 3.2 matches quotes inside a heredoc in $(…).
+builder_nixpkgs() {
+  if [ -f flake.lock ]; then cat flake.lock
+  else nix flake metadata "$(grep -o 'github:corpetty/logos-module-builder/[0-9a-f]\{40\}' flake.nix | head -1)" --json 2>/dev/null
+  fi | python3 -c '
 import json, sys
 d = json.load(sys.stdin); lock = d.get("locks", d); nodes = lock["nodes"]
 def node(ref):   # an input is a node name, or a follows path walked from the root
@@ -103,8 +83,46 @@ def node(ref):   # an input is a node name, or a follows path walked from the ro
 lmb = lock["root"] if "locks" in d else node(nodes[lock["root"]]["inputs"]["logos-module-builder"])
 k = nodes[node(nodes[lmb]["inputs"]["nixpkgs"])]["locked"]
 print("github:%s/%s/%s" % (k["owner"], k["repo"], k["rev"]))'
-  }
+}
+NIXPKGS_PIN=""
+builder_pin() {
+  [ -n "$NIXPKGS_PIN" ] && return 0
   NIXPKGS_PIN="$(builder_nixpkgs)"
+  [ -n "$NIXPKGS_PIN" ] || { echo "the builder's nixpkgs pin could not be read (flake.lock, or the builder's own lock)"; exit 1; }
+}
+# libopus (the voice codec, docs/design/voice-notes.md §3.1), the one the .lgx ships where the
+# host allows it. macOS: nixpkgs#libopus at the builder's pin (metadata.json's
+# nix.packages.runtime "libopus", 1.5.2 at e9f00bd), so the codec test runs on the shipping
+# codec. Linux: as libsodium, from the one nix build with the gcc, so it shares that gcc's
+# glibc (nixpkgs' current libopus, not the pin's); a host libsodium means the host's
+# compiler, which cannot link nixpkgs' glibc, so MUSTER_SODIUM needs a host MUSTER_OPUS beside
+# it. MUSTER_OPUS picks any other prefix on either OS; voice_codec_test prints the version.
+if [ -n "${MUSTER_SODIUM:-}" ]; then
+  SODIUM="$MUSTER_SODIUM"
+  [ "$HOST_OS" = Darwin ] || [ -n "${MUSTER_OPUS:-}" ] || { echo "MUSTER_SODIUM is set: set MUSTER_OPUS too (the host's compiler cannot link nixpkgs' libopus)"; exit 1; }
+elif [ "$HOST_OS" = Darwin ]; then
+  SODIUM="$(nix build nixpkgs#libsodium.out --no-link --print-out-paths 2>/dev/null | tail -1)"
+else
+  { read -r SODIUM; read -r NIXGCC; read -r NIXOPUS; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null)
+  [ -n "${NIXGCC:-}" ] && [ -x "$NIXGCC/bin/gcc" ] || { echo "nixpkgs#gcc not found (set MUSTER_SODIUM to use the host's compiler)"; exit 1; }
+  export PATH="$NIXGCC/bin:$PATH"
+fi
+[ -f "$SODIUM/lib/libsodium.$SOEXT" ] || { echo "libsodium not found (set MUSTER_SODIUM)"; exit 1; }
+if [ -n "${MUSTER_OPUS:-}" ]; then OPUS="$MUSTER_OPUS"
+elif [ "$HOST_OS" = Darwin ]; then
+  builder_pin
+  OPUS="$(nix build "$NIXPKGS_PIN#libopus.out" --no-link --print-out-paths 2>/dev/null | tail -1)"
+else OPUS="${NIXOPUS:-}"
+fi
+[ -f "$OPUS/lib/libopus.$SOEXT" ] || { echo "libopus not found (set MUSTER_OPUS)"; exit 1; }
+# macOS with no nim on PATH: the nim and the clang the .lgx compiles with. Its
+# libmuster_module is lib/mkLogosModule.nix's codegen.nim, `nim c` under the builder's own
+# pkgs.nim (2.2.4 at c10a94c, the store path the darwin .lgx used) in that nixpkgs' stdenv.
+# On aarch64-darwin nixpkgs' nim wrapper sets no NIM_CONFIG_PATH, so the CC it exports goes
+# unread: nim takes `clang` off PATH — stdenv.cc in the build (the .lgx's objects say sdk
+# 11.3), Apple's here (sdk 26) — so stdenv.cc goes first, as nixpkgs' gcc does on Linux.
+if [ "$HOST_OS" = Darwin ] && ! command -v nim >/dev/null 2>&1; then
+  builder_pin
   NIMDIR="$(nix build "$NIXPKGS_PIN#nim" --no-link --print-out-paths 2>/dev/null | tail -1)"
   NIXCC="$(nix build "$NIXPKGS_PIN#stdenv.cc" --no-link --print-out-paths 2>/dev/null | tail -1)"
   [ -x "$NIMDIR/bin/nim" ] && [ -x "$NIXCC/bin/clang" ] || { echo "no nim on PATH, and the builder's nixpkgs#nim or #stdenv.cc ($NIXPKGS_PIN) did not build"; exit 1; }

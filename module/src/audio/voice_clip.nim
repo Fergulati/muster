@@ -23,7 +23,10 @@ const
   VoiceMaxMs* = 60_000          ## the cap the device callback enforces (§3.4, §9)
   MaxSamples* = VoiceMaxMs * (ClipRate div 1000)    ## 2,880,000
   PacketBytes* = VoiceBitrate * 20 div 8000         ## 40: one CBR packet of 20 ms
-  MaxPacketBytes* = 1275        ## the largest single-frame Opus packet (opus.h, RFC 6716 §3.2.1)
+  MaxPacketBytes* = 1275        ## the largest Opus frame (RFC 6716 §3.2.1). A single-frame
+                                ## packet is its TOC byte plus the frame, so up to 1,276
+                                ## (opus.h, opus_repacketizer_out_range), but §3.2 refuses a
+                                ## packet over 1,275; this encoder's are 40
   MaxPreskip* = ClipFrame - 1   ## a lookahead under one frame: libopus's is 312 at 48 kHz
   RecordFields = ["v", "codec", "rate", "ch", "frame", "br", "preskip", "samples", "packets"]
 
@@ -110,6 +113,10 @@ proc maxClipBytes*(ms: int): int =
   ## The largest record a clip of `ms` milliseconds encodes to, at any preskip this version
   ## reads: MaxPreskip gives the most packets and the widest preskip head. §5's budget: 60 s
   ## is 3,001 packets of 42 bytes (a 2-byte bstr head on 40 bytes) plus a 77-byte header.
+  ## Raises ValueError for `ms` outside 0..VoiceMaxMs: no clip has that length, and a
+  ## negative one would wrap through cbUint into a budget that sizes nothing.
+  if ms < 0 or ms > VoiceMaxMs:
+    raise newException(ValueError, "no voice clip is " & $ms & " ms long (0.." & $VoiceMaxMs & ")")
   let samples = ms * (ClipRate div 1000)
   let packets = packetCount(samples, MaxPreskip)
   # the header is every byte but the packets array: encode it with no packets (a 1-byte
