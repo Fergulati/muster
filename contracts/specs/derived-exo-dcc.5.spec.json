@@ -1,7 +1,7 @@
 {
   "id": "derived-exo-dcc.5",
-  "original_statement": "exo-dcc.5: the XMR payment request (monero.split, ADR-018). A payee requests XMR in a room; each payer pays from any wallet through a monero: link; the payee's own wallet confirms the payment (a subaddress per request, the exact share, 10 confirmations). Muster holds no Monero key and never spends.",
-  "restatement": "Whatever the input, an XMR payment request keeps seven guarantees: (s1) The payment is derived from the agreed request: the monero: link a debtor is shown carries exactly the agreed payTo and that debtor's agreed share, in atomic units, never typed by hand. Any other address or amount is a different link, and nothing else changes it. (s2) payTo is the creditor's own subaddress on the agreed network: the creditor's client refuses to propose or agree to a payTo its own wallet does not list, an address for another network, or an integrated address; no client treats as payable a request whose payTo fails Monero address validation for its chain. (s3) Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed. (s4) One incoming transfer settles one part: a transfer already used to confirm one part never confirms another, and two debtors owing the same amount at the same subaddress are refused at proposal. (s5) The request is final only when every part is confirmed, and every member's client folds the room's events to the same state whatever the order or duplication of events; a report alone never finalizes. (s6) Muster never spends: on the request's paths it calls only the wallet backend's read and mint methods (wallet status, receive info, create subaddress, history, caller identity) and never a method that builds, signs or broadcasts a transfer or changes the wallet's roles. (s7) No confirmation across networks: if the creditor's open wallet is on a different network from the agreed chain, nothing is confirmed from it; a stagenet agreement is never settled by mainnet history, or the reverse.",
+  "original_statement": "exo-dcc.5: the XMR payment request (monero.split, ADR-018). A payee requests XMR in a room; each payer pays from any wallet through a monero: link; the payee's own wallet confirms the payment (a subaddress per request, the exact share, 10 confirmations). Muster holds no Monero key and never spends. Amended 2026-10-21 (exo-e16), from the Monero community's feedback (stasher.news, comment 341272): the payee names how many confirmations a payment needs before it counts — \"I don't need 10 confirmations if I'm selling somebody a 10 mXMR USB Type-C cable.\"",
+  "restatement": "Whatever the input, an XMR payment request keeps seven guarantees: (s1) The payment is derived from the agreed request: the monero: link a debtor is shown carries exactly the agreed payTo and that debtor's agreed share, in atomic units, never typed by hand. Any other address or amount is a different link, and nothing else changes it. (s2) payTo is the creditor's own subaddress on the agreed network: the creditor's client refuses to propose or agree to a payTo its own wallet does not list, an address for another network, or an integrated address; no client treats as payable a request whose payTo fails Monero address validation for its chain. (s3) Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least the confirmation depth the agreed request names — a whole number of blocks from 1 to 720, and 10 when the request names none. The depth is part of what everyone agreed to and signed: the same request with another depth is a different request no one agreed to, and a depth outside 1–720, or a depth named on a split that is not a Monero split, is refused. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations than the agreed depth, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed. (s4) One incoming transfer settles one part: a transfer already used to confirm one part never confirms another, and two debtors owing the same amount at the same subaddress are refused at proposal. (s5) The request is final only when every part is confirmed, and every member's client folds the room's events to the same state whatever the order or duplication of events; a report alone never finalizes. (s6) Muster never spends: on the request's paths it calls only the wallet backend's read and mint methods (wallet status, receive info, create subaddress, history, caller identity) and never a method that builds, signs or broadcasts a transfer or changes the wallet's roles. (s7) No confirmation across networks: if the creditor's open wallet is on a different network from the agreed chain, nothing is confirmed from it; a stagenet agreement is never settled by mainnet history, or the reverse.",
   "restatement_clauses": [
     {
       "id": "s1",
@@ -13,7 +13,7 @@
     },
     {
       "id": "s3",
-      "text": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed."
+      "text": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least the confirmation depth the agreed request names — a whole number of blocks from 1 to 720, and 10 when the request names none. The depth is part of what everyone agreed to and signed: the same request with another depth is a different request no one agreed to, and a depth outside 1–720, or a depth named on a split that is not a Monero split, is refused. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations than the agreed depth, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed."
     },
     {
       "id": "s4",
@@ -36,7 +36,7 @@
   "acceptance_criteria": [
     "The payment is derived from the agreed request: the monero: link a debtor is shown carries exactly the agreed payTo and that debtor's agreed share, in atomic units, never typed by hand. Any other address or amount is a different link, and nothing else changes it.",
     "payTo is the creditor's own subaddress on the agreed network: the creditor's client refuses to propose or agree to a payTo its own wallet does not list, an address for another network, or an integrated address; no client treats as payable a request whose payTo fails Monero address validation for its chain.",
-    "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed.",
+    "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least the confirmation depth the agreed request names — a whole number of blocks from 1 to 720, and 10 when the request names none. The depth is part of what everyone agreed to and signed: the same request with another depth is a different request no one agreed to, and a depth outside 1–720, or a depth named on a split that is not a Monero split, is refused. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations than the agreed depth, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed.",
     "One incoming transfer settles one part: a transfer already used to confirm one part never confirms another, and two debtors owing the same amount at the same subaddress are refused at proposal.",
     "The request is final only when every part is confirmed, and every member's client folds the room's events to the same state whatever the order or duplication of events; a report alone never finalizes.",
     "Muster never spends: on the request's paths it calls only the wallet backend's read and mint methods (wallet status, receive info, create subaddress, history, caller identity) and never a method that builds, signs or broadcasts a transfer or changes the wallet's roles.",
@@ -53,7 +53,7 @@
     },
     {
       "id": "c3",
-      "text": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed."
+      "text": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least the confirmation depth the agreed request names — a whole number of blocks from 1 to 720, and 10 when the request names none. The depth is part of what everyone agreed to and signed: the same request with another depth is a different request no one agreed to, and a depth outside 1–720, or a depth named on a split that is not a Monero split, is refused. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations than the agreed depth, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed."
     },
     {
       "id": "c4",
@@ -148,7 +148,33 @@
         "value": true
       },
       "max_states": 900,
-      "description": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least 10 confirmations. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed.",
+      "description": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least the confirmation depth the agreed request names — a whole number of blocks from 1 to 720, and 10 when the request names none. The depth is part of what everyone agreed to and signed: the same request with another depth is a different request no one agreed to, and a depth outside 1–720, or a depth named on a split that is not a Monero split, is refused. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations than the agreed depth, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "Each named depth d in {none, 1, 2, 3, 10, 11, 720} runs the REAL hosted propose and agree, then one history row of exactly the share at payTo, c deep for c in {0, 1, 2, 3, 9, 10, 11, 719, 720}, through the REAL confirm pump: the part is confirmed iff c >= d (10 for none), and below it nothing is published. Bob's agreement signed over the request at d is refused by the real driver for the same request at every other depth and accepted at d. A Monero request naming 0, 721, 01, -1, 1.5, x or 10000 is refused and cannot be proposed, and a depth on an Ethereum, Bitcoin or LEZ split is refused. Catches a confirm path that ignores the named depth, a depth read from anywhere but the signed request, a depth left out of the signature, a depth of 0, and a depth on another family. Beside it, probe_xmr_confirm_stepper still holds the default.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_xmr_depth_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 20,
+      "description": "Only the creditor's own wallet read confirms a part: an incoming transfer in its history to payTo's subaddress, of exactly the share, with at least the confirmation depth the agreed request names — a whole number of blocks from 1 to 720, and 10 when the request names none. The depth is part of what everyone agreed to and signed: the same request with another depth is a different request no one agreed to, and a depth outside 1–720, or a depth named on a split that is not a Monero split, is refused. A debtor's report, a txid alone, an amount off by one atomic unit, another subaddress, fewer confirmations than the agreed depth, or a busy or unread wallet read never confirms it; an unread read is not yet known, never paid and never failed.",
       "clause_id": "c3"
     },
     {
