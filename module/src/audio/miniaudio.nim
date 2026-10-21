@@ -24,7 +24,9 @@
 ## carry macOS frameworks onto the Linux link line. The module is built --app:staticlib, so
 ## nim links nothing: the archive leaves dlopen, dlsym and dlclose undefined, for the plugin's
 ## own link to resolve (S3), from libSystem on macOS and, on Linux, from libc itself (glibc
-## 2.34 and later; earlier ones need -ldl). Neither plugin link has been run with it yet.
+## 2.34 and later; earlier ones need -ldl). The darwin-arm64 plugin has been linked (S3): it
+## defines ma_context_init and every other ma_ symbol, binds dlopen and dlclose to libSystem,
+## and links no audio framework. The Linux plugin link has not been run.
 ##
 ## Every stream is read back after ma_device_init (S1's read-back rule): the callback must be
 ## handed 48 kHz mono s16, the clip's own format, or the start is refused, "device-format".

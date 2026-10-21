@@ -35,8 +35,10 @@ Rules:
   reads them off the TOC byte (and a code-3 packet's frame count). That is a sample count, not
   one frame: several frames adding up to 20 ms pass. A refusal is a value naming why, never a
   raise.
-- The coordination layer (the room's fold, thread rows) imports `voice_clip` only, never
-  `opus` or `voice_codec`: the fold must not link a codec (§6).
+- The room's fold and thread rows (coordination, S5) import `voice_clip` only, never `opus`
+  or `voice_codec`: the fold must not link a codec (§6). The hosted half,
+  `coordination/voice_live.nim`, is the one coordination file that links the codec: it
+  imports `voice_codec` and the `AudioIo` seam.
 - A change to any clip constant or the record's fields strands notes already sent: it is a
   new `v`, never an edit (§3.4).
 - **The device thread.** miniaudio calls back on a thread Nim does not own
@@ -60,10 +62,13 @@ Rules:
 - `abSystem` never lists Null, and never an empty list (miniaudio's default order ends in Null):
   no backend means `no-device`, never a recording of zeros. `backendNames` reads the lists
   with no context (audio_io_null_test §5).
-- Nothing outside this directory imports `miniaudio`; the voice surface (S7) codes against
-  `AudioIo`. Every miniaudio header type stays in `miniaudio.nim`, never inside a generic (a
-  `seq` of one put miniaudio.h into system's C: use a fixed array), and the `-D` backend flags
-  stay one global `passC` (they change struct layouts).
+- Nothing outside this directory imports `miniaudio` but the hosted module
+  (`nim-lib/muster_module.nim`), which makes the one `MiniaudioIo(abSystem)` on the first
+  voice call and hands it to `voice_live` as an `AudioIo`. That opens nothing: the context is
+  made on the first start. `voice_live` codes against `AudioIo` only. Every miniaudio header
+  type stays in `miniaudio.nim`, never inside a generic (a `seq` of one put miniaudio.h into
+  system's C: use a fixed array), and the `-D` backend flags stay one global `passC` (they
+  change struct layouts).
 - No test opens a real device: `abNull` only. A real-device test sits behind
   `MUSTER_VOICE_REAL`, in run-suite's E2E list (S11).
 - Tests: `module/tests/voice_clip_test.nim` (pure), `module/tests/voice_codec_test.nim`
@@ -71,4 +76,7 @@ Rules:
   beside libsodium on Linux; `MUSTER_OPUS` picks another; §1 prints the version),
   `module/tests/audio_io_test.nim` (the seam with no device), and
   `module/tests/audio_io_null_test.nim` (miniaudio's null device thread; `run-suite.sh` puts
-  the pin's checkout on `--path`).
+  the pin's checkout on `--path`). `probes/probe_return_marshalling_host.nim` (exo-526) builds
+  the whole module into a host, so it links libopus (`opusTokens`, `MUSTER_OPUS_LIB`) and
+  compiles miniaudio from the closure's checkout; its `voice_status` call must name the
+  libopus linked, with both devices still "unknown".

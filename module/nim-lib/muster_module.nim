@@ -119,6 +119,8 @@ import ../src/storage/storage_lp       # FileShare: storage_module over lp_* (ex
 import ../src/storage/storage_readiness # FileShare: where storage_module stands, registry first
 import ../src/coordination/swarm       # FileShare: the room as tracker (exo-4d0.4)
 import ../src/coordination/swarm_live  # FileShare: share, fetch and seed from a pump (exo-4d0.5)
+import ../src/coordination/voice_live  # voice notes' hosted half (docs/design/voice-notes.md §8)
+import ../src/audio/miniaudio          # …and its devices: miniaudio, on the platform's backends (§9)
 import std/mimetypes
 import ../src/wallet/summary         # what the Wallet page shows: what this instance was given (exo-f37)
 import ../src/monero/address as xmraddr # the payTo rules and the CAIP-2 map (ADR-018)
@@ -2826,6 +2828,19 @@ proc musterFileshareRetract(fileId: string): string =
       gSession.publishAuthored(moduleKeystore(), retractEvent(fileId, me, int64(epochTime())))
       return "ok"
   $(%*{"error": "no such file in this room"})
+
+# ── Voice notes (docs/design/voice-notes.md) ───────────────────────────────────────────
+# Capture, playback and Opus live in this module, and audio never crosses IPC (§9). The voice
+# half is made on the first voice call, over miniaudio on this platform's own backends (never
+# its null device). That opens nothing: a device opens only on the person's own action.
+
+var gVoice: VoiceLive = nil
+
+proc voice(): VoiceLive =
+  if gVoice == nil: gVoice = newVoiceLive(newMiniaudioIo(abSystem))
+  gVoice
+
+proc musterVoiceStatus(): string = $voice().voiceStatus()
 
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card

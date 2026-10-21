@@ -46,14 +46,19 @@ ln -sfn "$("$REPO/module/tools/nim-closure.sh")" "$PROBE_ENV/nimpkgs"
 # host's glibc, which may be older than the one nixpkgs' libsodium needs ("GLIBC_ABI_GNU2_TLS
 # not found"), so that gcc is linked as .probe-env/cc, where config.nims compiles with it.
 # MUSTER_SODIUM (a host libsodium) keeps the host's compiler.
-NIXGCC=""
+# libopus (voice notes; exo-526's host probe builds the whole module, which links it) comes
+# from that same build, or MUSTER_OPUS beside a host MUSTER_SODIUM, as in run-suite.sh.
+NIXGCC=""; OPUS="${MUSTER_OPUS:-}"
 if [ -n "${MUSTER_SODIUM:-}" ]; then
   SODIUM="$MUSTER_SODIUM"
 else
-  { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null) || true
+  { read -r SODIUM; read -r NIXGCC; read -r NIXOPUS; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null) || true
+  [ -n "$OPUS" ] || OPUS="${NIXOPUS:-}"
 fi
 [ -f "$SODIUM/lib/libsodium.so" ] && ln -sfn "$SODIUM/lib" "$PROBE_ENV/sodium" \
   || echo "warning: libsodium not found (set MUSTER_SODIUM); probes that need it will not build" >&2
+[ -f "$OPUS/lib/libopus.so" ] && ln -sfn "$OPUS/lib" "$PROBE_ENV/opus" \
+  || echo "warning: libopus not found (set MUSTER_OPUS); exo-526's host probe will not build" >&2
 if [ -n "$NIXGCC" ] && [ -x "$NIXGCC/bin/gcc" ]; then ln -sfn "$NIXGCC/bin" "$PROBE_ENV/cc"; else rm -f "$PROBE_ENV/cc"; fi
 # exo-526's host harness was C++ and needed a g++ here; it is Nim since exo-607 T7, built
 # by the probe's own nim with the cc above.

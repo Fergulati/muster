@@ -38,6 +38,7 @@
 
 import std/[json, strutils]
 import "../../nim-lib/muster_module"   # the module, compiled in: its exports and its init
+import "../../src/audio/opus"          # the libopus this program links: what voice_status must name
 
 # ── the lp_* inter-module ABI (logos_sdk/ffi.nim) ───────────────────────────────
 # The shipped plugin statically links its own logos-protocol, which defines these; this
@@ -105,7 +106,29 @@ proc hostObserve(raw: cstring): ClientReturn =
   ClientReturn(kind: ctOther, value: t)
 
 proc logos_module_dispatch(meth, argsJson: cstring): cstring {.importc, cdecl.}
+proc logos_module_get_methods(): cstring {.importc, cdecl.}
 proc logos_module_string_free(s: cstring) {.importc, cdecl.}
+
+proc listedAsQString(name: string): bool =
+  ## Whether the module's method table (what a host builds its typed client from) lists
+  ## `name` returning QString. A method missing there is not callable from a typed client.
+  let raw = logos_module_get_methods()
+  if raw == nil: return false
+  try:
+    for m in parseJson($raw):
+      if m{"name"}.getStr() == name and m{"returnType"}.getStr() == "QString": result = true
+  except CatchableError: result = false
+  logos_module_string_free(raw)
+
+proc voiceStatusTyped(v: string): bool =
+  ## voice_status (docs/design/voice-notes.md §8) is a JSON object: ready.codec is the libopus
+  ## this program links (opus_get_version_string), and before any device opened, ready.capture
+  ## and ready.playback are "unknown". Reading it must open no device.
+  try:
+    let j = parseJson(v)
+    j.kind == JObject and j{"ready", "codec"}.getStr() == $opus_get_version_string() and
+      j{"ready", "capture"}.getStr() == "unknown" and j{"ready", "playback"}.getStr() == "unknown"
+  except CatchableError: false
 
 proc callClient(meth, argsJson: string): ClientReturn =
   ## Call one method through the module's C ABI and reduce it to a client return.
@@ -118,13 +141,16 @@ const stateTokens = ["draft", "proposed", "collecting", "executable", "final",
 
 proc emit(call, expect: string, cr: ClientReturn) =
   ## One observation line. `expect` is the declared-typed contract for this call:
-  ## "ok" for health, "nonempty_id" for propose, "state_token" for status. A
-  ## QString-returning method is typed iff the client observed a non-empty STRING
-  ## (never bool, never empty/default); status() must also be a known lifecycle token,
-  ## propose() a non-empty id.
+  ## "ok" for health, "nonempty_id" for propose, "state_token" for status, "voice_status"
+  ## for voice_status. A QString-returning method is typed iff the client observed a
+  ## non-empty STRING (never bool, never empty/default); status() must also be a known
+  ## lifecycle token, propose() a non-empty id, and voice_status() listed in the method
+  ## table as QString and the JSON voiceStatusTyped reads.
   var typed = cr.kind == ctString and cr.value.len > 0
   if typed and expect == "ok": typed = cr.value == "ok"
   if typed and expect == "state_token": typed = cr.value in stateTokens
+  if typed and expect == "voice_status":
+    typed = listedAsQString("voice_status") and voiceStatusTyped(cr.value)
   echo $(%*{"call": call, "expect": expect, "client_type": $cr.kind,
             "client_value": cr.value, "client_return_typed": typed})
 
@@ -151,6 +177,9 @@ proc harnessMain() =
     emit("propose", "nonempty_id", pr)
     # status(<the id>): reuse the client-observed id string as the argument.
     emit("status", "state_token", callClient("status", quoteArg(pr.value)))
+  # voice_status() (voice notes, docs/design/voice-notes.md §8): the module links libopus and
+  # miniaudio, and says which libopus, with no device opened.
+  emit("voice_status", "voice_status", callClient("voice_status", "[]"))
   # Not an observation (no client_return_typed key): the probe ignores it; a reader of
   # the log sees whether any of the above reached the lp_* stubs.
   echo $(%*{"lp_stub_calls": lpCalls})

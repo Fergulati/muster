@@ -207,11 +207,16 @@ and the module's own constructor (the one the generated surface installs, as in 
 initializes the one Nim runtime, so the harness is built `--noMain`. It was C++ linked
 against a staticlib until exo-607 T7; a Nim harness cannot link a second Nim runtime, and
 the port's trace is identical to the C++ one's. Its inner `nim c` reads the closure from
-`$MUSTER_NIMPKGS` (default `~/.cache/muster/nimpkgs`), and the harness links secp256k1 and
-libsodium: an explicit `MUSTER_SECP256K1_LIB` / `MUSTER_SODIUM_LIB` wins, then
-`pkg-config`, then a filesystem glob over `/nix/store`. The harness defines the `lp_*`
+`$MUSTER_NIMPKGS` (default `~/.cache/muster/nimpkgs`), and the harness links secp256k1,
+libsodium and libopus: an explicit `MUSTER_SECP256K1_LIB` / `MUSTER_SODIUM_LIB` /
+`MUSTER_OPUS_LIB` wins (run-suite exports the last two), then `pkg-config`, then a
+filesystem glob over `/nix/store`. miniaudio needs no flag: the closure's checkout is on the
+inner `--path`, and the module compiles it. The harness defines the `lp_*`
 inter-module ABI as a host with no protocol stack and reports `lp_stub_calls` (0: nothing
-the probe calls reaches another module).
+the probe calls reaches another module). Besides health, propose and status, it calls
+`voice_status` (voice notes, S3): it must be in the method table as QString, and its JSON
+must name the libopus the harness links (`opus_get_version_string`), with `ready.capture` and
+`ready.playback` still "unknown", since reading it opens no device.
 
 ```bash
 tests/run-suite.sh return_marshalling
