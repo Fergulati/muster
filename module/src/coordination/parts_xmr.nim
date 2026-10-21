@@ -9,7 +9,8 @@
 ##   * on payTo's subaddress (its index in the creditor's own receive_info, and that index
 ##     alone: a row spread over several subaddresses carries their sum);
 ##   * of exactly the share in atomic units;
-##   * at least 10 confirmations (Monero's default spendable age);
+##   * at least the depth the request names (the payee chooses it; 10, Monero's default
+##     spendable age, when it names none);
 ##   * from a wallet that is open, on the agreed chain's network, and not view-only;
 ##   * and not already used to confirm another part in the room (one reference settles one
 ##     part; the reference is the transfer's txid).
@@ -72,6 +73,7 @@ proc matchXmrPayment*(t: PartTransfer, status: WalletStatus, info: ReceiveInfo, 
   case hist.read
   of rsAnswered: discard
   else: return XmrMatch(verdict: xvPending, detail: hist.detail)
+  let need = (if t.confirmations > 0: int64(t.confirmations) else: int64(XmrConfirmDepth))
   var nearest = ""
   var seen = false
   var depth = 0'i64
@@ -86,13 +88,13 @@ proc matchXmrPayment*(t: PartTransfer, status: WalletStatus, info: ReceiveInfo, 
     if r.txid.toLowerAscii() in claimed:
       if nearest.len == 0: nearest = "the transfer " & r.txid[0 ..< 12] & "… already settled another part"
       continue
-    if r.pending or r.confirmations < XmrConfirmDepth:
+    if r.pending or r.confirmations < need:
       # what the row says, held below depth (a pending row is 0 deep); the deepest seen wins
-      let c = (if r.pending: 0'i64 else: min(max(0'i64, r.confirmations), XmrConfirmDepth - 1))
+      let c = (if r.pending: 0'i64 else: min(max(0'i64, r.confirmations), need - 1))
       if not seen or c > depth:
         depth = c
         nearest = "a transfer of exactly the share arrived (" & r.txid[0 ..< 12] & "…), " & $c &
-                  " of " & $XmrConfirmDepth & " confirmations"
+                  " of " & $need & " confirmations"
       seen = true
       continue
     return XmrMatch(verdict: xvConfirmed, reference: r.txid.toLowerAscii())

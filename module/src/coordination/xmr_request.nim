@@ -160,7 +160,7 @@ proc xmrBehalfPayTo*(events: seq[Event], who, chain: string): tuple[address, why
 
 proc xmrSend*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, b: MoneroBackend,
               chain, to, amount, memo: string, nowSec: int64, msgSeq: uint64,
-              ttlSec = DefaultIntentTtl): string =
+              ttlSec = DefaultIntentTtl, confirmations = ""): string =
   ## Send `amount` (atomic XMR) to the member `to`: a Monero request on their behalf, paid at
   ## the newest address they shared (xmrBehalfPayTo), with THIS member its only payer — so
   ## proposing it is their agreement (the split driver's agreesByProposing), and it is payable
@@ -176,7 +176,7 @@ proc xmrSend*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, b: Mon
   let (payTo, why) = xmrBehalfPayTo(s.roomEvents(), payee, chain)
   if why.len > 0: return why
   let effect = splitEffectJson(chain, XmrAsset, amount, payee, payTo,
-                               @[SplitShare(who: me, amount: amount)], memo)
+                               @[SplitShare(who: me, amount: amount)], memo, confirmations = confirmations)
   xmrPropose(s, ks, driverFor, b, chain, effect, nowSec, msgSeq, ttlSec)
 
 # ── the payer's half: a link, and "I paid" ─────────────────────────────────────────

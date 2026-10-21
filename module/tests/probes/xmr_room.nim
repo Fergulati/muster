@@ -49,7 +49,7 @@ proc wallet*(x: XmrRoom, who: string): FakeMoneroBackend = x.wallets[whoIndex(wh
 proc ctxNow*(): LinkContext = LinkContext(account: "probe", slot: "0", expiry: Now + 86_400)
 
 proc requestJson*(x: XmrRoom, payTo: string, shares: seq[(string, string)], memo = "rent",
-                  creditor = alice): string =
+                  creditor = alice, confirmations = ""): string =
   ## The effect a composer proposes: shares by identity, the total their sum (the creditor
   ## is not in it: a payment request).
   var ss: seq[SplitShare]
@@ -72,7 +72,7 @@ proc requestJson*(x: XmrRoom, payTo: string, shares: seq[(string, string)], memo
       dec j
     r
   for (_, amount) in shares: total = addDec(total, amount)
-  splitEffectJson(x.chain, "XMR", total, creditor, payTo, ss, memo)
+  splitEffectJson(x.chain, "XMR", total, creditor, payTo, ss, memo, confirmations = confirmations)
 
 proc propose*(x: var XmrRoom, who, effectJson: string): string =
   ## `who` proposes, through the hosted path (xmrPropose), checked by THEIR wallet.
@@ -116,11 +116,12 @@ proc partOf*(x: XmrRoom, id, debtor: string, viewer = "alice"): PartView =
       for p in v.parts:
         if p.part == partName(identityOf(debtor)): return p
 
-proc agreedRequest*(x: var XmrRoom, shares: seq[(string, string)], memo = "rent"): tuple[id, payTo: string] =
+proc agreedRequest*(x: var XmrRoom, shares: seq[(string, string)], memo = "rent",
+                    confirmations = ""): tuple[id, payTo: string] =
   ## Alice mints a subaddress, proposes, and Bob and Carol (whoever the shares name) agree.
   let m = xmrMintPayTo(x.wallet("alice"), x.chain, "muster:test")
   doAssert m.ok, m.why
-  let id = x.propose("alice", x.requestJson(m.address, shares, memo))
+  let id = x.propose("alice", x.requestJson(m.address, shares, memo, confirmations = confirmations))
   doAssert id.startsWith("0x"), id
   x.r.sync()
   for (who, _) in shares:

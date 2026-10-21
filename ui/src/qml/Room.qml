@@ -1494,6 +1494,11 @@ Item {
     property string splitFiatCurrency: "EUR"
     property string splitFiatRate: ""
     property string splitFiatSource: ""
+    // a Monero request's confirmation depth: the payee's wallet counts a payment once it is
+    // this deep (1-720, 10 by default). Agreed in the request (stasher.news feedback, 2026-10).
+    property string splitXmrDepth: "10"
+    readonly property bool splitXmrDepthOk: /^[1-9][0-9]{0,2}$/.test(String(room.splitXmrDepth).trim())
+                                            && Number(String(room.splitXmrDepth).trim()) <= 720
     function fiatDecimals(cur) {
         if (["JPY", "KRW", "VND", "CLP", "ISK", "UGX", "PYG", "RWF", "XAF", "XOF", "KMF", "GNF", "VUV", "XPF", "DJF"].indexOf(cur) >= 0) return 0;
         if (["BHD", "KWD", "OMR", "JOD", "TND", "LYD", "IQD"].indexOf(cur) >= 0) return 3;
@@ -1544,6 +1549,12 @@ Item {
         // a send: the whole amount is your one share, paid to them (exo-dcc.32)
         if (room.splitSend) spec = { shares: [{ who: who[0], amount: total }] };
         if (room.splitFor.length > 0) spec.creditor = room.splitFor;   // on their behalf (exo-770)
+        if (room.splitMonero) {
+            // the depth is part of what everyone agrees to; 10 is the default and is left unsaid
+            if (!room.splitXmrDepthOk) return;
+            var depth = String(room.splitXmrDepth).trim();
+            if (depth !== "10") spec.confirmations = depth;
+        }
         if (room.splitTokenInfo) spec.asset = String(room.splitTokenInfo.asset);   // exo-5ab
         if (room.splitFiat) {
             if (String(room.splitFiatSource).trim().length === 0) return;   // a quote names its source

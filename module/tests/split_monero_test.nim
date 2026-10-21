@@ -231,4 +231,51 @@ block onBehalf:
   doAssert x.agree("alice", id2).startsWith("payto-not-mine"), x.agree("alice", id2)
   echo "5. on someone's behalf: their shared subaddress, agreed only when their wallet lists it OK"
 
+# ── 6. the payee picks the depth (stasher.news feedback, 2026-10) ────────────────────
+block depth:
+  # the confirm rule waits for the depth the request names, and for 10 when it names none
+  let w = newFakeMonero("wallet-alice", "stagenet")
+  let sub = w.mint()
+  let st = w.walletStatus()
+  let info = w.receiveInfo()
+  proc verdictAt(need, conf: int): XmrMatch =
+    w.rows = @[row(txidOf(1), "in", "1000", conf, $sub.index)]
+    matchXmrPayment(PartTransfer(ok: true, chain: XmrStage, asset: "XMR", to: sub.address, amount: "1000",
+                                 confirmations: need), st, info, w.history(), initHashSet[string]())
+  doAssert verdictAt(1, 0).verdict == xvPending and verdictAt(1, 0).detail.contains("0 of 1")
+  doAssert verdictAt(1, 1).verdict == xvConfirmed
+  doAssert verdictAt(3, 2).verdict == xvPending and verdictAt(3, 2).detail.contains("2 of 3")
+  doAssert verdictAt(0, 9).verdict == xvPending and verdictAt(0, 10).verdict == xvConfirmed
+  doAssert verdictAt(20, 10).verdict == xvPending and verdictAt(20, 20).verdict == xvConfirmed
+  # the driver: only a Monero split names a depth, 1 to 720, and it is in the signed bytes
+  let d = newSplitDriver(MoneroSplitFamily, XmrStage, @[alice, bob])
+  let payTo = sub.address
+  proc eff(c: string): Effect =
+    effectFromJson(splitEffectJson(XmrStage, "XMR", "1000", alice, payTo, @[SplitShare(who: bob, amount: "1000")],
+                                   "cable", confirmations = c))
+  doAssert d.signRefusal(eff("1")) == "" and d.signRefusal(eff("720")) == ""
+  for bad in ["0", "721", "01", "-1", "x", "1.5"]:
+    doAssert d.signRefusal(eff(bad)).contains("confirmation depth"), bad
+  doAssert canonicalize(d, eff("1")).bytes != canonicalize(d, eff("")).bytes, "the depth is agreed: it is signed"
+  doAssert canonicalize(d, eff("1")).bytes != canonicalize(d, eff("2")).bytes
+  doAssert d.partTransfer(eff("3"), partName(bob)).confirmations == 3
+  doAssert d.partTransfer(eff(""), partName(bob)).confirmations == 0
+  let evm = newSplitDriver(EvmSplitFamily, "eip155:31337", @[alice, bob])
+  let ej = splitEffectJson("eip155:31337", "ETH", "1000", alice, "0x70997970c51812dc3a010c7d01b50e0d17dc79c8",
+                           @[SplitShare(who: bob, amount: "1000")], "x", confirmations = "1")
+  doAssert evm.signRefusal(effectFromJson(ej)).contains("only a Monero split")
+  echo "6a. the depth: the request names it (1-720), it is signed, the payee's wallet waits for it; 10 by default OK"
+  # live: a request at depth 1 is final at one confirmation
+  var x = newXmrRoom("/muster/1/xmr-depth/proto", XmrStage)
+  let (id, pt) = x.agreedRequest(@[(bob, "10000000000")], "a USB cable", confirmations = "1")
+  doAssert x.stateOf(id) == "executable"
+  doAssert x.reportPaid("bob", id, txidOf(9)) == "submitted"
+  let si = x.subIndexOf(pt)
+  x.wallet("alice").rows = @[row(txidOf(9), "in", "10000000000", 0, $si)]
+  doAssert x.pump().len == 0
+  x.wallet("alice").rows = @[row(txidOf(9), "in", "10000000000", 1, $si)]
+  doAssert x.pump() == @[id & "/" & partName(bob)]
+  doAssert x.stateOf(id, "bob") == "final"
+  echo "6b. a 10 mXMR request at depth 1: final at one confirmation, on the payee's own read OK"
+
 echo "split_monero_test: all OK"

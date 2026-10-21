@@ -805,15 +805,38 @@ ColumnLayout {
                             Layout.preferredWidth: 0
                             wrapMode: Text.WordWrap
                             text: room.splitSend && room.splitFor.length === 0
-                                  ? qsTr("On %1. Sent to the address the person you pick shared from their own wallet; their wallet confirms it at 10 confirmations. Muster never sends Monero.")
-                                        .arg(room.moneroChainLabel(room.splitMoneroChain))
+                                  ? qsTr("On %1. Sent to the address the person you pick shared from their own wallet; their wallet confirms it at %2 confirmations. Muster never sends Monero.")
+                                        .arg(room.moneroChainLabel(room.splitMoneroChain)).arg(room.splitXmrDepthOk ? String(room.splitXmrDepth).trim() : "10")
                                   : room.splitFor.length > 0
-                                  ? qsTr("On %1. Paid at the address %2 shared; %2's own wallet confirms each payment at 10 confirmations. Muster never sends Monero.")
+                                  ? qsTr("On %1. Paid at the address %2 shared; %2's own wallet confirms each payment at %3 confirmations. Muster never sends Monero.")
                                         .arg(room.moneroChainLabel(room.splitMoneroChain)).arg(room.memberLabel(room.splitFor))
-                                  : qsTr("On %1. Proposing asks your open Monero wallet for a new address for this request; your wallet confirms each payment at 10 confirmations. Muster never sends Monero.")
-                                        .arg(room.moneroChainLabel(room.splitMoneroChain))
+                                        .arg(room.splitXmrDepthOk ? String(room.splitXmrDepth).trim() : "10")
+                                  : qsTr("On %1. Proposing asks your open Monero wallet for a new address for this request; your wallet confirms each payment at %2 confirmations. Muster never sends Monero.")
+                                        .arg(room.moneroChainLabel(room.splitMoneroChain)).arg(room.splitXmrDepthOk ? String(room.splitXmrDepth).trim() : "10")
                             color: Theme.palette.textTertiary
                             font.pixelSize: MusterStyle.caption
+                        }
+                        // how deep a payment must be before the payee's wallet counts it: the
+                        // payee bears a reorg's risk, so the request says it and both agree
+                        RowLayout {
+                            objectName: "roomSplitXmrDepthRow"
+                            visible: room.splitMonero && !room.acrossOpen
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.small
+                            LogosText {
+                                Layout.fillWidth: true
+                                Layout.preferredWidth: 0
+                                wrapMode: Text.WordWrap
+                                text: qsTr("Counts as paid at this many confirmations (1–720). Fewer is faster for a small amount; 10 is Monero's spend lock.")
+                                color: room.splitXmrDepthOk ? Theme.palette.textTertiary : Theme.palette.error
+                                font.pixelSize: MusterStyle.caption
+                            }
+                            LogosTextField {
+                                objectName: "roomSplitXmrDepth"
+                                Layout.preferredWidth: 70
+                                text: "10"
+                                onTextChanged: room.splitXmrDepth = String(text)
+                            }
                         }
                     }
 
@@ -958,6 +981,7 @@ ColumnLayout {
                                                                     && (!room.splitFiat || String(room.splitFiatSource).trim().length > 0)
                                                                     && (room.splitFor.length === 0 || room.splitForAddress.length > 0)
                                                                     && !(room.splitSend && room.splitFor.length === 0)
+                                                                    && (!room.splitMonero || room.splitXmrDepthOk)
                                    : room.enoughToPropose && (
                                      room.composeType === "statement" ? proposeText.text.length > 0
                                    : room.composeType === "action" ? room.chosenAction !== null
