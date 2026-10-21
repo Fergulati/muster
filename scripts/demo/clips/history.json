@@ -1,0 +1,10 @@
+{"name": "history", "width": 1280, "crf": 34,
+ "segments": [
+  {"src": "h-alice", "in": 1.0, "out": 14.0, "label": "Alice · Room map", "lapse": 3, "hold": 1.5, "crop": "1180:990:420:0"},
+  {"src": "h-alice", "in": 18.0, "out": 37.0, "label": "Alice · Replay", "speed": 2, "hold": 1, "crop": "1180:990:420:0"},
+  {"src": "h-alice", "in": 66.8, "out": 71.8, "label": "Alice · a payment", "hold": 2, "crop": "1180:990:420:0"},
+  {"src": "h-alice", "in": 74.0, "out": 79.4, "label": "Alice · Trust", "hold": 1.5, "crop": "1180:990:420:0"},
+  {"src": "h-alice", "in": 81.2, "out": 92.6, "label": "Alice · Crossings", "lapse": 3, "hold": 1, "crop": "1180:990:420:0"},
+  {"src": "h-alice", "in": 94.6, "out": 100.8, "label": "Alice · Provenance", "hold": 1.5, "crop": "1180:990:420:0"},
+  {"src": "h-alice", "in": 102.6, "out": 108.0, "label": "Alice · Log", "hold": 1.5, "crop": "1180:990:420:0"}
+ ]}
