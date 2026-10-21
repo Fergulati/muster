@@ -1,0 +1,50 @@
+{
+ "name": "audit",
+ "width": 1280,
+ "crf": 30,
+ "segments": [
+  {
+   "src": "au-alice",
+   "in": 1.0,
+   "out": 13.0,
+   "label": "Alice \u00b7 Download audit trail",
+   "hold": 2.5
+  },
+  {
+   "src": "au-term",
+   "in": 1.0,
+   "out": 11.2,
+   "label": "muster-audit-verify",
+   "speed": 2.5
+  },
+  {
+   "src": "au-term",
+   "in": 11.2,
+   "out": 12.5,
+   "label": "verified from the file alone",
+   "hold": 4.5
+  },
+  {
+   "src": "au-term",
+   "in": 17.8,
+   "out": 30.8,
+   "label": "change one character",
+   "speed": 3
+  },
+  {
+   "src": "au-term",
+   "in": 30.8,
+   "out": 32.0,
+   "label": "refused, with the reason",
+   "hold": 4.5
+  },
+  {
+   "src": "au-term",
+   "in": 37.9,
+   "out": 43.0,
+   "label": "the readable report",
+   "speed": 1.5,
+   "hold": 5
+  }
+ ]
+}

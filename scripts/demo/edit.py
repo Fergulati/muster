@@ -16,7 +16,8 @@ A segment plays one window from `in` to `out` seconds of its raw take, at real s
 wait is time-lapsed, never cut (`lapse`: N thins runs of identical frames to at most 1 in N),
 so it still reads as a wait, briefly. `hold` freezes the segment's last frame for that many
 seconds, for a beat worth reading. `crop` (W:H:X:Y of the raw frame) frames one part of the
-window, larger; every segment of a clip must come out the same size. A `pair`
+window, larger; every segment of a clip must come out the same size. `speed` plays a
+segment faster than real time, for an animation (the room map's Replay) rather than a wait. A `pair`
 segment holds both windows side by side, frozen at `at`, for `hold` seconds: the payoff.
 Writes <out>/<name>.mp4 (H.264, faststart, muted) and <out>/<name>.jpg, its poster (the
 last frame).
@@ -50,6 +51,8 @@ def one(raw, seg, w, out):
     src = os.path.join(raw, seg["src"] + ".mkv")
     lapse = int(seg.get("lapse", 1))
     vf = (f"mpdecimate=hi=64*6:lo=64*2:frac=0.33:max={lapse},setpts=N/{FPS}/TB," if lapse > 1 else "")
+    if seg.get("speed"):  # play faster than real time (an animation the viewer need not sit through)
+        vf += f"setpts=PTS/{float(seg['speed'])},"
     if seg.get("crop"):   # W:H:X:Y of the raw frame: frame one part of the window, larger
         vf += f"crop={seg['crop']},"
     vf += f"scale={w}:-2:flags=lanczos{label_filter(seg.get('label', ''), w)},fps={FPS},format=yuv420p"
