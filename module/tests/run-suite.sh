@@ -14,14 +14,15 @@
 #
 # Env: MUSTER_NIMPKGS (closure dir, default ~/.cache/muster/nimpkgs; tools/nim-closure.sh
 # fills it on first run), MUSTER_SODIUM (libsodium prefix; unset: nixpkgs' libsodium, built
-# with nixpkgs' gcc), JOBS (default 8),
+# with nixpkgs' gcc), MUSTER_OPUS (libopus prefix, the voice codec's; unset: nixpkgs'
+# libopus, from the same nix build as libsodium), JOBS (default 8),
 # TEST_TIMEOUT (seconds per test, default 900), OUT (log dir, default a fresh mktemp).
 # TEST_ARGS (appended to each selected test's command line — an e2e test's own
 # arguments, e.g. TEST_ARGS="$SAFE" for coordinate_submit_anvil; see tests/README.md).
 #
-# macOS (Darwin): nixpkgs' libsodium.dylib, no nixpkgs gcc; with no nim on PATH, the nim and
-# the clang the .lgx compiles with (the builder's nixpkgs, as a lock pins it); with no
-# timeout(1), nixpkgs coreutils'. The stock /bin/bash 3.2 runs it.
+# macOS (Darwin): nixpkgs' libsodium.dylib and libopus.dylib, no nixpkgs gcc; with no nim on
+# PATH, the nim and the clang the .lgx compiles with (the builder's nixpkgs, as a lock pins
+# it); with no timeout(1), nixpkgs coreutils'. The stock /bin/bash 3.2 runs it.
 set -uo pipefail
 
 MODULE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -56,16 +57,24 @@ NIMPKGS="$(tools/nim-closure.sh)" || exit 1
 # HOST_OS, not OS: a caller's exported OS would carry our value into every test.
 HOST_OS="$(uname -s)"
 SOEXT=so; [ "$HOST_OS" = Darwin ] && SOEXT=dylib
+# libopus (the voice codec, docs/design/voice-notes.md §3.1) rides the same nix build as
+# libsodium on each OS, so on Linux it shares the gcc's glibc; MUSTER_OPUS picks a host one
+# (set it with MUSTER_SODIUM, whose host compiler cannot link nixpkgs' glibc).
 if [ -n "${MUSTER_SODIUM:-}" ]; then
   SODIUM="$MUSTER_SODIUM"
 elif [ "$HOST_OS" = Darwin ]; then
-  SODIUM="$(nix build nixpkgs#libsodium.out --no-link --print-out-paths 2>/dev/null | tail -1)"
+  { read -r SODIUM; read -r NIXOPUS; } < <(nix build nixpkgs#libsodium.out nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null)
 else
-  { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null)
+  { read -r SODIUM; read -r NIXGCC; read -r NIXOPUS; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null)
   [ -n "${NIXGCC:-}" ] && [ -x "$NIXGCC/bin/gcc" ] || { echo "nixpkgs#gcc not found (set MUSTER_SODIUM to use the host's compiler)"; exit 1; }
   export PATH="$NIXGCC/bin:$PATH"
 fi
 [ -f "$SODIUM/lib/libsodium.$SOEXT" ] || { echo "libsodium not found (set MUSTER_SODIUM)"; exit 1; }
+if [ -n "${MUSTER_OPUS:-}" ]; then OPUS="$MUSTER_OPUS"
+elif [ -n "${NIXOPUS:-}" ]; then OPUS="$NIXOPUS"
+else OPUS="$(nix build nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null | tail -1)"
+fi
+[ -f "$OPUS/lib/libopus.$SOEXT" ] || { echo "libopus not found (set MUSTER_OPUS)"; exit 1; }
 # macOS with no nim on PATH: the nim and the clang the .lgx compiles with. Its
 # libmuster_module is lib/mkLogosModule.nix's codegen.nim, `nim c` under the builder's own
 # pkgs.nim (2.2.4 at c10a94c, the store path the darwin .lgx used) in that nixpkgs' stdenv.
@@ -114,6 +123,7 @@ if [ -z "${MUSTER_SECP256K1_LIB:-}" ] && ! pkg-config --exists libsecp256k1 2>/d
   [ -d "$SECPLIB/lib" ] && export MUSTER_SECP256K1_LIB="-L$SECPLIB/lib -lsecp256k1 -Wl,-rpath,$SECPLIB/lib"
 fi
 export MUSTER_SODIUM_LIB="${MUSTER_SODIUM_LIB:--L$SODIUM/lib -lsodium -Wl,-rpath,$SODIUM/lib}"
+export MUSTER_OPUS_LIB="${MUSTER_OPUS_LIB:--L$OPUS/lib -lopus -Wl,-rpath,$OPUS/lib}"
 # The same probe's inner `nim c` reads the closure from here (metadata.json's pins).
 export MUSTER_NIMPKGS="$NIMPKGS"
 
@@ -124,7 +134,8 @@ FLAGS=(-d:release --threads:on --hints:off
   --path:"$P/nim-web3" --path:"$P/nim-chronos" --path:"$P/nim-chronicles" --path:"$P/nim-bearssl"
   --path:"$P/nim-faststreams" --path:"$P/nim-json-rpc" --path:"$P/nim-serialization"
   --path:"$P/nim-json-serialization" --path:"$P/nim-http-utils" --path:"$P/logos-nim-sdk/src"
-  --passL:"$SODIUM/lib/libsodium.$SOEXT" --passL:"-Wl,-rpath,$SODIUM/lib")
+  --passL:"$SODIUM/lib/libsodium.$SOEXT" --passL:"-Wl,-rpath,$SODIUM/lib"
+  --passL:"$OPUS/lib/libopus.$SOEXT" --passL:"-Wl,-rpath,$OPUS/lib")
 
 # 2. Select.
 E2E+=(lez_frost_v030_e2e lez_frost_room_v030_e2e)    # on a local LEZ v0.3 zone (exo-eb6.4 L3)

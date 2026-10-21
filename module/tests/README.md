@@ -15,18 +15,20 @@ tests/run-suite.sh e2e <name>       # one chain-bound test, by name (below)
 The runner materializes the Nim closure at the revs `../metadata.json` pins
 (`codegen.nim.packages`) with [`../tools/nim-closure.sh`](../tools/nim-closure.sh),
 into `~/.cache/muster/nimpkgs`, so a local run compiles against the same sources the
-`.lgx` does. It takes libsodium from nixpkgs (and, for the host-return probe,
-secp256k1 and `g++`), and builds every test with one flag set: the union of the
-`$SECP`, `$STINT`, web3, SDK and libsodium flags below. An extra `--path` is harmless
+`.lgx` does. It takes libsodium and libopus from nixpkgs (and, for the host-return
+probe, secp256k1 and `g++`), and builds every test with one flag set: the union of the
+`$SECP`, `$STINT`, web3, SDK, libsodium and libopus flags below. An extra `--path` is harmless
 to a pure-Nim test. Each test's log lands in `$OUT` (a fresh temp dir unless set),
 and the summary names every failure. Env: `JOBS` (8), `TEST_TIMEOUT` (900 s),
 `TEST_ARGS` (appended to each selected test's command line, for an e2e test's own
-arguments), `MUSTER_NIMPKGS` (the closure dir).
+arguments), `MUSTER_NIMPKGS` (the closure dir), `MUSTER_SODIUM` / `MUSTER_OPUS` (a
+libsodium / libopus prefix in place of nixpkgs'; on Linux set both, since a host
+libsodium means the host's compiler, which cannot link nixpkgs' glibc).
 
 **On macOS** (arm64) the same command runs under the stock `/bin/bash` 3.2, given Nix
 and a working `git` and `python3` (the closure fetch needs both; `/usr/bin`'s are the
-Xcode Command Line Tools'). It links nixpkgs' `libsodium.dylib` (no glibc to match, so
-no nixpkgs gcc). With no `nim` on `PATH` it takes the nim and the clang the `.lgx`
+Xcode Command Line Tools'). It links nixpkgs' `libsodium.dylib` and `libopus.dylib` (no
+glibc to match, so no nixpkgs gcc). With no `nim` on `PATH` it takes the nim and the clang the `.lgx`
 compiles with: `nixpkgs#nim` and `#stdenv.cc` at the nixpkgs `../flake.lock` pins under
 `logos-module-builder` (in a fresh clone, which has no `flake.lock` until a first build,
 the builder's own lock, read with `nix flake metadata`), the clang first on `PATH`, since
@@ -129,6 +131,11 @@ wants (below), which the runner supplies.
 - `frost_signing_test` (exo-d7e — BIP-445 FROST signing against all 266 draft vectors in `tests/vectors/bip-0445/`)
 - `frost_group_test` (exo-b9c — points with infinity, scalars mod n; BIP-340 in those operations agrees with libsecp)
 
+**Voice notes (`docs/design/voice-notes.md`).**
+
+- `voice_clip_test` (§3.2, §5 — the clip record: a round trip re-encodes byte for byte, one small record held to hand-computed CDE bytes; every refusal a value naming why (codec settings, packet lengths 1..1275, samples over 60 s, a packet count other than ceil((samples + preskip) / 960), the shape, a 3,000-mutation fuzz); `maxClipBytes` is 126,119 at 60 s and 1,166 at 500 ms; pure Nim, no libopus)
+- `voice_codec_test` (§3.1 — libopus at the fixed settings: every ctl read back (a fixed-arity `opus_encoder_ctl` turns §1 red on Apple arm64); every packet 40 B for a tone, silence and a mix, none padded; a 1 kHz tone back at exactly its length, in phase, its power kept; a packet that is not one 20 ms frame, or bytes that are not a record, refused before libopus decodes; the 60 s cap; `$OPUS`)
+
 **Monero (epic exo-dcc, ADR-018).**
 
 - `monero_address_test` (exo-dcc.5 — `src/monero/address.nim` held to monero-project/monero at `24272e4`: block-wise base58 against `tests/unit_tests/base58.cpp`; every network's standard, subaddress and integrated address from `tests/functional_tests/validate_address.py`, with the keys and payment ids the functional tests state; `check_address`'s key refusals, including a point outside the prime-order subgroup; the CAIP-2 references re-derived from `cryptonote_config.h`'s genesis constants; `acceptablePayTo`'s refusals; `make_uri` / `parse_uri` and their amount and percent-encoding rules; `$STINT`)
@@ -146,6 +153,7 @@ W3="--path:$D/nim-eth --path:$D/nim-web3 --path:$D/nim-chronos --path:$D/nim-chr
     --path:$D/nim-bearssl --path:$D/nim-faststreams --path:$D/nim-json-rpc \
     --path:$D/nim-serialization --path:$D/nim-json-serialization --path:$D/nim-http-utils"
 SODIUM="--passL:$(nix build nixpkgs#libsodium --no-link --print-out-paths)/lib/libsodium.so"
+OPUS="--passL:$(nix build nixpkgs#libopus.out --no-link --print-out-paths)/lib/libopus.so"
 nim r -d:release --threads:on $SECP $STINT $SODIUM tests/epoch_crypto_test.nim
 ```
 
@@ -153,6 +161,8 @@ Which group a test needs:
 
 - **None** — pure Nim: `dcbor_golden_test`, `manifest_test`, `log_proof_test`,
   `psbt_test`, `lez_multisig_chain_test`, `lez_multisig_model_test`, and most probes.
+- **`$OPUS`** — the voice codec, `src/audio/opus.nim` through `voice_codec`:
+  `voice_codec_test`. `voice_clip_test` needs none.
 - **`$SODIUM`** — anything whose import closure reaches `crypto/curve25519` (the
   Ed25519/X25519 encryption identity), which is most of the room: `decline_test`,
   `provenance_all_test`, `flow_test`, `materialshare_test`, `schema_unknown_test`,

@@ -53,7 +53,8 @@
       "main": "muster_module.nim",
       "staticlib": "muster_module",
       "link": [
-        "sodium"
+        "sodium",
+        "opus"
       ],
       "packages": [
         {
@@ -171,7 +172,8 @@
     "packages": {
       "build": [],
       "runtime": [
-        "libsodium"
+        "libsodium",
+        "libopus"
       ]
     },
     "cmake": {
