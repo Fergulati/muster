@@ -10,7 +10,9 @@ code path named below as new is **planned**. Every file:line reference is to `ma
 Where it comes from: the design note *Voice in Muster* (2026-10-21, desk research against
 `67701f8`) compared four designs for voice against the invariants. It recommended
 asynchronous voice notes over the existing room first, and live calls only through a separate
-ADR, labelled content-private, never metadata-private. This is that first part.
+ADR, labelled content-private, never metadata-private. This is that first part. The note is
+not in the repo; everything in it that bears on this design is carried here, in §10 (what
+still leaks) and §15 (what is not verified).
 
 The idea in one paragraph: a member records up to 60 s. `muster_module` captures it, encodes it
 as constant-bitrate Opus, and holds it as a draft in memory. Nothing is posted until the member
@@ -82,10 +84,15 @@ Why these settings:
   complexity 10. That matters because dispatch is synchronous.
 
 The binding is `importc` with no header, in the style of `module/src/crypto/sodium.nim`. The
-ctl functions are declared `{.varargs.}`. In the prototype, a fixed-arity `opus_encoder_ctl`
-returned `OPUS_OK` but set the wrong value on Apple arm64: `SET_BITRATE(16000)` read back as
-300000. CBR sizes follow from the bitrate, so that bug would silently break §4. The codec test
-reads every setting back (S1).
+ctl functions are declared `{.varargs.}`. Every value argument is passed as `cint` (libopus's
+`opus_int32`), never a Nim `int`, which is 64-bit: read back by `va_arg` as an `opus_int32`, it
+comes out right only by accident of little-endian layout. Every GET argument is a `ptr cint`.
+In the prototype, a fixed-arity `opus_encoder_ctl` returned `OPUS_OK` but set the wrong value
+on Apple arm64: `SET_BITRATE(16000)` read back as 300000. Apple arm64 passes variadic
+arguments on the stack and fixed ones in registers, so a fixed-arity binding goes wrong there.
+AAPCS64 Linux and SysV x86_64 pass both the same way, so there the two bindings behave alike.
+CBR sizes follow from the bitrate, so that bug would silently break §4. The codec test reads
+every setting back (S1).
 
 ### 3.2 The clip record
 
@@ -141,8 +148,12 @@ nid    16 bytes (32 hex) of digest(hashInput("muster.voice.note-id.v1", author, 
   A malformed shape is still author-bearing, so it can never verify. The `authorship.nim`
   header table gains the row, and `authorship_test` gains a section §11, appended (invariant
   tests are append-only).
-- **Publishing.** Each part is published through `publishAuthored(s, ks, e, padTo =
-  VoiceFrameBytes)`.
+- **No `parents`.** A part is built the way `newMessageEvent` builds a message, with
+  `parents` empty; its order rides `after` (`docs/design/causal-parents.md`). §5's worst case
+  assumes `"parents":[]`.
+- **Publishing.** Each part is published through `publishAuthored(s, ks, e)`, and
+  `session.publish` pads every `voice/` key to `VoiceFrameBytes` itself (§4). No call site
+  passes the pad, so none can forget it.
 
 ### 3.4 Constants
 
@@ -166,7 +177,16 @@ anything today.
 
 **Planned (S4).** `publish(ev, padTo = 0)`. With `padTo > 0`, the event's JSON is followed by
 ASCII spaces up to exactly `padTo` bytes before sealing. `padTo = 0` is today's path, byte for
-byte. So every voice frame is exactly 1 + 24 + 16 + 90,112 = **90,153 B**.
+byte, for every key but one:
+- **A `voice/` key is always padded to `VoiceFrameBytes`.** `publish` sets that pad itself
+  and raises on any other non-zero `padTo` for such a key.
+- **Why the key decides, not the caller.** `publish` already has a second send path for the
+  same event: one the log holds is re-sealed as the stored copy (`session.nim:168-184`). A
+  retried Send or a re-announce takes it. If the pad were an argument at each call site, a
+  path that forgot it would send an unpadded frame that shows the note's length, and nothing
+  would fail.
+
+So every voice frame is exactly 1 + 24 + 16 + 90,112 = **90,153 B**, on either path.
 
 Why on the frame, not inside the value:
 - `publishAuthored` signs the value first. Only then does it set `after = heads()` (0 to 8 ids,
@@ -182,7 +202,8 @@ tried) and refuses trailing garbage; this was checked while planning, outside th
 - no new frame kind;
 - no `room_journal` change: journal frames are opaque, with `MaxFrame` 16 MiB
   (`room_journal.nim:24`);
-- a 0.3.x peer reads a padded frame as an ordinary event, and ignores the `voice/` key (§7).
+- a 0.3.x peer reads a padded frame as an ordinary event, and its thread ignores the `voice/`
+  key (§7).
 
 **What does not fit, raises.** An event whose JSON exceeds `padTo` raises `FrameTooLarge`
 before anything is ingested, journalled or sent. Today nothing guards size: an oversized frame
@@ -191,24 +212,26 @@ lands in the sender's own log and reaches nobody, and a failed send is logged on
 
 ## 5. Size budget
 
-These figures are arithmetic, not measured. The S4 and S5 tests measure the worst case.
+These figures are arithmetic, not measured. The S4 and S5 tests measure the worst case. A
+60 s note is 2,880,000 samples. The encoder is flushed through its 312-sample lookahead, so by
+§3.2's count it is ceil((2,880,000 + 312) / 960) = 3,001 packets.
 
 | | Bytes |
 |---|---|
 | One Opus packet at 16 kbps, 20 ms, CBR | 40 |
 | The same packet inside the CDE array (`bstr` header) | 42 |
-| A 60 s record: 3,000 packets plus about 77 B of header | 126,077 |
-| Each half | 63,039 |
-| The same half as base64 | 84,052 characters |
-| The event JSON, worst case: 128-hex author, 8 heads in `after`, `afterSig` | about 85,229 |
+| A 60 s record: 3,001 packets plus 77 B of header | 126,119 |
+| The larger half | 63,060 |
+| The same half as base64 | 84,080 characters |
+| The event JSON, worst case: 128-hex author, `"parents":[]`, 8 heads in `after`, `afterSig` | about 85,257 |
 | The padded plaintext, `VoiceFrameBytes` | 90,112 |
-| Margin left in the worst case | about 4,883 |
+| Margin left in the worst case | about 4,855 |
 | One frame on the wire: kind 1 + nonce 24 + MAC 16 + 90,112 | 90,153 |
 | **One note, any length from 0.5 s to 60 s: 2 frames** | **180,306** |
 | Delivery's per-message cap, as the tree assumes it (`xmr_msig_spend.nim:40`) | 153,600 (150 KiB) |
 
-A 500 ms note is about 1.1 KB of clip and still costs two full frames. That is the price of
-hiding length.
+A 500 ms note is 26 packets, a 1,166 B clip, and still costs two full frames. That is the
+price of hiding length.
 
 The alternative was 12 kbps in one 128 KiB frame (§18). It would mean narrower speech, and a
 single frame bigger than anything the tree sends today.
@@ -250,9 +273,40 @@ The thread is `coordinate_messages`, which returns every message body on each 1 
 event, and there is no pointer message as `intent-ref` uses.
 
 Instead, a planned `threadRows(events)` merges `reduceMessages(events)` with one synthesized
-row per note, ordered by (ts, id). The row's body is metadata only, and under 300 B:
+row per note, ordered by (ts, id). The row carries the note in a field of its own, `voice`,
+never in `body`. That field is metadata only, under 300 B:
 
-`{"kind":"voice-note","v":1,"note":"<nid>","durationMs":N,"state":"complete|arriving|broken"}`
+```
+{ "id": "<nid>", "author": "<reduceVoice's author>", "ts": N, "body": "",
+  "voice": { "v": 1, "note": "<nid>", "durationMs": N, "state": "complete|arriving|broken" } }
+```
+
+`musterCoordinateMessages` adds `alias` and `self` to it, as to every row.
+
+**Only `threadRows` can make a voice row, and `voice-note` is a reserved kind.** Without
+that, a member could forge a note row:
+- Any member, or any co-resident module, can post a `message/` whose body is a typed card as
+  JSON `{kind, ...}` (`muster.lidl:119`).
+- `reduceMessages` passes bodies through unchanged (`intent_events.nim:614-629`).
+- RoomThread makes a card of any body that parses to an object with a `kind`
+  (`RoomThread.qml:71-79`).
+
+So a body `{"kind":"voice-note","note":"<Alice's nid>",…}` would draw as a voice-note card
+under the forger's name, and its Play would play Alice's audio. That attributes one member's
+voice to another, against invariant 9. Three rules close it:
+- **The fold alone sets `voice`.** `reduceMessages` builds a row from a message's `author`,
+  `ts` and `body` only. `musterCoordinateMessages` serializes just those fields
+  (`muster_module.nim:4574-4577`). So no `message/` event can put a `voice` field on a row.
+- **The card draws from `modelData.voice` alone.** RoomThread's `parsedCard` refuses
+  `voice-note` from a body, so a `message/` that claims it falls through to plain text: the
+  forger's raw JSON, under the forger's name.
+- **The card names the fold's author.** The row's `author` is `reduceVoice`'s: the key author
+  that `roomEvents` verified (§3.3, §6 rule 1), never anything a message says.
+
+`voice_play` takes the nid alone and checks no author. The only rows that carry a nid in
+`voice` are made from the fold, so the name on the card is the note's author by
+construction. A co-resident module can call `voice_play` with any nid, but that draws no card
+and names nobody (§13).
 
 `threadRows` is used in exactly two places:
 - `musterCoordinateMessages`, in place of `reduceMessages` (`:4574`);
@@ -265,13 +319,17 @@ row per note, ordered by (ts, id). The row's body is metadata only, and under 30
 - the shared-address readers in `intent_events.nim` (`:643`, `:664`).
 
 What this means for each kind of reader:
-- **The thread.** RoomThread renders the row as `MusterCard { card: msg.parsedCard }`
-  (`RoomThread.qml:692-695`). `MusterCard.known` (`MusterCard.qml:712`) gains `voice-note`,
-  and its body is a new `CardVoiceNote.qml`. That file is pure render: it emits `play` and
-  `stop`, and RoomThread owns the backend calls, as for every card.
-- **A 0.3.x peer** sees nothing for a note: it never synthesizes the row, and it skips the
-  `voice/` events. That is better than its unknown-card render: an unknown kind draws nothing,
-  or a stray heading, never a text fallback (`RoomThread.qml:693, :722`).
+- **The thread.** RoomThread gains a delegate branch that draws a new `CardVoiceNote.qml`
+  from `modelData.voice`, beside the `MusterCard { card: msg.parsedCard }` branch
+  (`RoomThread.qml:692-695`). `MusterCard.known` (`MusterCard.qml:712`) does not gain
+  `voice-note`, because no body may carry it. `CardVoiceNote.qml` is pure render: it emits
+  `play` and `stop`, and RoomThread owns the backend calls, as for every card.
+- **A 0.3.x peer** shows nothing for a note in its thread: it never synthesizes the row, and
+  `reduceMessages` skips the `voice/` events. That is better than its unknown-card render: an
+  unknown kind draws nothing, or a stray heading, never a text fallback
+  (`RoomThread.qml:693, :722`). Its information-flow view and room map do show each part, as
+  an unknown `voice` entry: envelope rows only (`flow.nim:121-124`), and an entry node of kind
+  `voice` with basis `sealed` (`room_graph.nim:299-331`).
 - **Older clients in general.** S8 fixes that fallback for the next unknown kind, but clients
   already released keep it.
 
@@ -330,7 +388,7 @@ declares a return type.
 thread cannot emit. So:
 - `voice_status` drives `voicePump`, as `fileshare_files` drives `fileSharePump`
   (`muster_module.nim:2776`);
-- `coordinate_intents` also calls it, from its pump list (`:2835-2845`);
+- `coordinate_intents` also calls it, from its pump list (`:2838-2845`);
 - the UI polls `voice_status` every 250 ms while not idle;
 - the room's 1 s timer reads it too, so a recording any caller started shows a banner (§13).
 
@@ -398,10 +456,10 @@ done, and before the module unloads. That is the `abandoned` lesson from the sto
 | Observer | Sees | Never sees |
 |---|---|---|
 | room member (epoch-key holder when the note was sealed) | the note itself, played: the audio, its author (signed), its length and time | — |
-| store node (delivery) | that the room's topic carried two frames of 90,153 B each, and when; a frame that size marks a voice note | its length, who sent it (FS-7), the audio |
+| store node (delivery) | that the room's topic carried two frames of 90,153 B each, and when; the publishing node, unless `mix` is on; a frame that size marks a voice note | its length, which member sent it (FS-7), the audio |
 | relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
 | mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
-| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send a draft, or play a note aloud (§13) | the audio: no method returns it |
+| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13) | the audio: no method returns it |
 
 **What the code adds** (planned, S6):
 - **A `voice/` branch in `flow.nim`.** Today an unknown prefix falls through to envelope-only
@@ -423,7 +481,9 @@ done, and before the module unloads. That is the `abandoned` lesson from the sto
 > graph (the gap above).
 
 Its test is `module/tests/probes/probe_voice_fixed_size_stepper.nim` (S5), which covers
-durations from 0.5 s to 60 s, 0, 1 or 8 heads, and two epochs. It sits beside the existing gap
+durations from 0.5 s to 60 s, 0, 1 or 8 heads, and two epochs. It also publishes the same note
+twice, so the second goes out on the held path (§4), and asserts that both frames are
+90,153 B. It sits beside the existing gap
 *The store node still sees the conversation graph* (`contracts/claims/registry.json:83`) and
 does not soften it.
 
@@ -453,7 +513,8 @@ does not soften it.
    - Nothing has sent a 90 KB frame under `mix = preferred | required`.
    - Whether delivery 0.3's mix path carries a frame this size is unknown.
    - Today a send that fails is visible only under `MUSTER_LP_DEBUG`.
-   - Voice notes make no mix claim, and claim [4] stays partial.
+   - Voice notes make no mix claim, and the gap *The store node still sees the conversation
+     graph* (`contracts/claims/registry.json:83`) stays partial.
 
 The S10 registry entries carry these as gaps unless the maintainer prefers them folded into
 existing entries:
@@ -465,19 +526,35 @@ existing entries:
 
 ## 11. macOS
 
-What I read on the installed `/Applications/LogosBasecamp.app` 0.3.2 (2026-10-21, with
-`codesign` and `PlistBuddy`):
-- `logos_host`, where `muster_module` runs, and `LogosBasecamp.bin` are both signed with the
+Read on the installed `/Applications/LogosBasecamp.app` 0.3.2 (2026-10-21, with `codesign`
+and `PlistBuddy`):
+- `Contents/MacOS` holds `LogosBasecamp`, `LogosBasecamp.bin`, `logos_host` and `ui-host`.
+  `logos_host`, where `muster_module` runs, and `LogosBasecamp.bin` are both signed with the
   hardened runtime (`flags=0x10000(runtime)`).
 - `logos_host`'s entitlements are `com.apple.security.cs.allow-jit` and
   `com.apple.security.cs.disable-library-validation` only. There is no
   `com.apple.security.device.audio-input`.
 - `Info.plist` has no `NSMicrophoneUsageDescription`.
 
-What follows from that is inferred, not tested: from Apple's hardened-runtime rules and OpenJDK
-bug JDK-8244951, CoreAudio capture inside `logos_host` succeeds and delivers zero-filled
-buffers, with no error and no prompt. Launching Basecamp from Terminal does not help, because
-`logos_host` itself is the hardened binary. Playback needs no permission.
+What follows from that is inferred, not tested. There are two possible outcomes, and nothing
+here says which one happens:
+- **Zero-filled buffers.** From Apple's hardened-runtime rules and OpenJDK bug JDK-8244951,
+  CoreAudio capture inside `logos_host` succeeds and delivers zeros, with no error and no
+  prompt. That precedent is weaker than it looks: JDK-8244951 is a command-line `java` run
+  from Terminal, so TCC charges the request to Terminal, an Apple app. `logos_host` is a
+  helper inside a third-party app whose `Info.plist` has no usage string, and that case does
+  not transfer.
+- **TCC terminates `logos_host`.** macOS can kill a process that asks for the microphone
+  without a usage description ("Termination Reason: Namespace TCC"). Then pressing Record
+  kills `logos_host` and every module in it, and the `silent` refusal below never runs.
+
+S11's first macOS check settles it. Under Basecamp 0.3.2, with a throwaway profile, it calls
+`voice_record_start` and observes whether `logos_host` survives. It runs before anything
+relies on the `silent` refusal. If `logos_host` does not survive, that goes back to the
+operator, because it bears on the decision to keep the record button.
+
+Launching Basecamp from Terminal does not help in either case, because `logos_host` itself is
+the hardened binary without the entitlement (also inferred). Playback needs no permission.
 
 The answer (decided):
 - **Keep the record button.**
@@ -518,6 +595,9 @@ caller. So any module loaded beside Muster can:
 - send the draft, with `voice_draft_send`, before the member decides. The note is signed with
   the member's key, as `coordinate_post_message` already lets such a module post text in the
   member's name;
+- destroy the draft, with `voice_draft_discard`, before the member decides;
+- play the member's unsent draft through the speaker, with `voice_play("draft")`. The draft is
+  the one piece of audio this design otherwise keeps inside the module until Send;
 - play any complete note aloud, with `voice_play`;
 - poll `voice_status`. Its `peak`, read and reset at the poller's own rate, is a coarse loudness
   envelope of a recording or playback in progress. Whether to coarsen it (one value per 100
@@ -546,8 +626,9 @@ design classes a voice note as a **message** in another medium:
 It is not an `artifact`. F-17 ties artifacts to Logos Storage content addressing
 (`01-furps.md:29`), and a note rides the log.
 
-`MusterCard.known` gaining `voice-note` extends the UI's concrete card set, not the class
-vocabulary. The mic is an `IconAction` in the message row (`RoomComposer.qml:1294-1306`), not a
+`CardVoiceNote.qml` extends the UI's concrete card set, not the class vocabulary. The mic is
+an `IconAction` in the message row (`RoomComposer.qml:1254-1314`, beside the existing send
+`IconAction` at `:1305-1313`), not a
 tile in `RoomActionPicker`, which is titled "Propose something" and whose every tile is an
 intent. If the maintainer reads a new medium as a vocabulary addition, this is a core release,
 and the PR says so (§18).
@@ -559,8 +640,9 @@ Nothing in this document is built. What is unverified even as a plan:
   the varargs hazard, the null backend, encode and decode cost, and miniaudio compiled through
   `{.compile.}`. None of them has run through the real `logos-module-builder` derivation, and
   none has run on Linux.
-- **Microphone capture under Basecamp's hardened runtime.** Zeros are inferred, not observed,
-  and so is real capture anywhere without the person's grant.
+- **Microphone capture under Basecamp's hardened runtime.** Neither outcome of §11 is
+  observed: zero-filled buffers, or TCC terminating `logos_host`. S11 checks this first. Real
+  capture anywhere without the person's grant is unobserved too.
 - **Linux dlopen** of `libpulse` and `libasound`, from a portable `.lgx`, the AppImage and a
   nix-built runner; and PipeWire.
 - **Delivery of two 90,153 B frames:**
@@ -589,7 +671,7 @@ Nothing in this document is built. What is unverified even as a plan:
 | 5 | The clip is a CDE record. The note id and the clip digest are hash-input records (`muster.voice.note-id.v1`, `muster.voice.clip.v1`). Values hold no float. |
 | 7 | Parts are sealed under the epoch they were sent in. A later joiner never opens them, and v1 has no re-share. |
 | 8 | Nothing new runs on a server: no relay, no storage, no service. |
-| 9 | A note is named for its author only by its author's signature, and a forged or squatted part drops out. |
+| 9 | A note is named for its author only by its author's signature, and a forged or squatted part drops out. A `message/` cannot pose as a note: only the fold sets a row's `voice` field (§7). |
 | 1, 2, 10 | Not bound: a note signs nothing for a chain and enters no effect. Attaching a note to an intent would make its digest an external read (F-20), and that is out of scope. |
 
 ## 17. Order of work
@@ -600,16 +682,21 @@ Each slice's test is written and run red before its code (worker.md), and every 
 - **S0 — this document** (TDD-Exempt: docs).
 - **S1 — The Opus binding, the clip record, the codec.** `audio/opus.nim`, `voice_clip.nim`
   (pure CDE), `voice_codec.nim`, plus libopus in `metadata.json` and `run-suite.sh`. Tests:
-  `voice_clip_test` and `voice_codec_test`. The ctl read-back is the arm64 guard.
+  `voice_clip_test` and `voice_codec_test`. The ctl read-back is the arm64 guard. It tells a
+  fixed-arity binding from a varargs one only on darwin-arm64, so it must run on this Mac. On
+  Linux it cannot tell the two apart (§3.1).
 - **S2 — The `AudioIo` seam and miniaudio on the null backend.** Tests: `audio_io_test` and
   `audio_io_null_test`, which cover the cap, `capped`, `busy` and idempotent uninit.
 - **S3 — A native build gate.** `voice_status` in `muster.lidl`, with the marshalling probe
   linking libopus and miniaudio.
-- **S4 — Fixed-size sealed frames.** `session.publish(padTo)` and `FrameTooLarge`. Test:
-  `session_pad_test`.
+- **S4 — Fixed-size sealed frames.** `session.publish(padTo)`, the `voice/` key rule (§4) and
+  `FrameTooLarge`. Test: `session_pad_test`.
 - **S5 — Events, authorship, the fold, thread rows.** `coordination/voice.nim`, the `authorOf`
-  branch, `voice_test`, `authorship_test` §11, and three stepper probes: fixed size, author,
-  and order.
+  branch, `voice_test`, `authorship_test` §11, and three stepper probes: fixed size (with the
+  held-path case of §10), author, and order. The author probe includes a forged row: a
+  member's `message/` that claims `voice-note` with another member's nid. `threadRows` gives
+  it no `voice` field, so it neither renders as a voice card nor plays under the forger's name
+  (§7); S8 pins the render side.
 - **S6 — Disclosure.** The `flow.nim` branch, the room map and provenance, with the rows pinned
   in `voice_test`.
 - **S7 — The hosted surface and its state machine.** `voice_live.nim`, the six remaining
@@ -617,15 +704,18 @@ Each slice's test is written and run red before its code (worker.md), and every 
   `SyntheticAudioIo` and `LocalTransport`.
 - **S8 — The UI.** The `.rep` (both backends, ADR-019), `CardVoiceNote.qml`, the mic in the
   composer, observer and kind labels, the regenerated gallery `FakeBackend.qml`, and the
-  unknown-kind fallback.
+  unknown-kind fallback. A gallery fixture holds a forged `voice-note` body, and RoomThread
+  must draw it as plain text (§7).
 - **S9 — End to end.** `scripts/voice-self-test.sh`: two offscreen runners, A sending from a
   generated WAV and B playing into a PCM sink, with a 1 kHz Goertzel check. Plus the autopilots
   in both backends and a `ui-parity.sh` entry.
 - **S10 — The claim, docs, labbook and layout.** The protects claim and the gaps of §10, and the
   CLAUDE.md layout.
-- **S11 — Checks on a Mac display, the opt-in device test, and the draft PR.** Test:
-  `voice_device_e2e`, behind `MUSTER_VOICE_REAL`. Its microphone leg runs only with the
-  person's consent.
+- **S11 — Checks on a Mac display, the opt-in device test, and the draft PR.** First, before
+  anything relies on the `silent` refusal: under Basecamp 0.3.2, with a throwaway profile,
+  does `logos_host` survive `voice_record_start`? If it does not, that goes back to the
+  operator (§11). Test: `voice_device_e2e`, behind `MUSTER_VOICE_REAL`. Its microphone leg
+  runs only with the person's consent.
 
 ## 18. Decisions
 
