@@ -107,7 +107,10 @@ echo "2. peak: 1000, reset to 0 on read, 32768 for int16.low, 300, 0 for silence
 
 # 3. Playback consumes the whole buffer at the clock's pace, then reports `done`. The
 #    collecting sink holds exactly what was loaded. `playFrom`, the callback's half, writes
-#    zeros past the end of what was loaded and sets `done` once it is consumed.
+#    zeros past the end of what was loaded and sets `done` once it has written the buffer's
+#    `tail` of them: what an implementation counts as still queued between the callback and
+#    the speaker, so a stop on `done` drops only silence. The in-process sinks queue nothing
+#    (tail 0: done with the last sample); MiniaudioIo sets the device's (audio_io_null_test §3).
 block:
   let pcm = ramp(2_000)
   let vc = VirtualClock()
@@ -127,6 +130,7 @@ block:
   vc.advance(100)
   doAssert io.pump() == ""
   doAssert buf.done and buf.readIndex == 2_000
+  doAssert buf.tail == 0, "the collecting sink queues nothing"
   doAssert io.played == pcm
   vc.advance(100)
   doAssert io.pump() == "" and io.played == pcm
@@ -143,6 +147,25 @@ block:
   doAssert buf.done and buf.readIndex == 2_000
   doAssert output[1_500 ..< 2_000] == pcm[1_500 ..< 2_000]
   for i in 2_000 ..< 3_000: doAssert output[i] == 0, "past the end: silence, at " & $i
+  # with a tail of 1,200: the callback that hands over the last 500 samples writes 1,000
+  # zeros after them and is not done; the next, all silence, reaches the tail and is
+  doAssert buf.loadPlayback(pcm) == 2_000
+  buf.beginPlayback(tail = 1_200)
+  doAssert buf.tail == 1_200 and buf.silenceAfter == 0 and not buf.done
+  for x in output.mitems: x = 7
+  doAssert buf.playFrom(cast[ptr UncheckedArray[int16]](addr output[0]), 1_500) == 1_500
+  doAssert not buf.done and buf.silenceAfter == 0
+  doAssert buf.playFrom(cast[ptr UncheckedArray[int16]](addr output[1_500]), 1_500) == 500
+  doAssert buf.readIndex == 2_000 and buf.silenceAfter == 1_000
+  doAssert not buf.done, "done with the last samples still queued"
+  var more = newSeq[int16](480)
+  for x in more.mitems: x = 7
+  doAssert buf.playFrom(cast[ptr UncheckedArray[int16]](addr more[0]), 480) == 0
+  doAssert buf.done and buf.silenceAfter == 1_480 and buf.readIndex == 2_000
+  for x in more: doAssert x == 0
+  doAssert output[0 ..< 2_000] == pcm
+  buf.beginPlayback()
+  doAssert buf.tail == 0 and buf.silenceAfter == 0 and not buf.done
   freeAudioBuffer(buf)
 echo "3. playback: paced, the whole buffer then done; the sink holds it exactly; zeros past the end OK"
 
@@ -216,5 +239,25 @@ block:
   doAssert newFileAudioIo("", dir / "no" / "such" / "dir.pcm", vc.clock).startPlayback(buf) == "no-sink"
   freeAudioBuffer(buf)
 echo "5. PCM sink: exactly the samples played, little-endian; no-sink OK"
+
+# 6. A nil buffer is refused as `no-buffer` by every start, before anything opens: on a device
+#    thread the nil would be dereferenced with checks off (a SIGSEGV in logos_host), so the
+#    module thread refuses it, as MiniaudioIo does (audio_io_null_test §4).
+block:
+  let vc = VirtualClock()
+  writeFile(dir / "six.wav", wav(ramp(480)))
+  let sink = dir / "six.pcm"
+  let syn = newSyntheticAudioIo(ramp(480), vc.clock)
+  let file = newFileAudioIo(dir / "six.wav", sink, vc.clock)
+  for io in [AudioIo(syn), AudioIo(file)]:
+    doAssert io.startCapture(nil) == "no-buffer"
+    doAssert io.stream == asIdle and io.buffer == nil
+    doAssert io.startPlayback(nil) == "no-buffer"
+    doAssert io.stream == asIdle and io.buffer == nil
+    vc.advance(10)
+    doAssert io.pump() == ""
+    doAssert io.close() == ""
+  doAssert not fileExists(sink), "a refused playback opened its sink"
+echo "6. a nil buffer: no-buffer from every start, nothing opened OK"
 
 removeDir(dir)

@@ -41,12 +41,24 @@ Rules:
   GC allocation, no raise, an explicit `min()` on every index, and only the buffer's atomics
   shared. Only that side holds the 60 s cap: the module has no clock.
 - Devices start and stop on the module thread only, never from a callback; one stream per
-  `AudioIo` at a time (a second start is `busy`). A buffer is freed only after the stream using
-  it stopped (`ma_device_uninit` waits for the device thread). `close` runs before unload.
+  `AudioIo` at a time (a second start is `busy`). Every start refuses a nil buffer
+  (`no-buffer`) on the module thread, before anything opens. A buffer is freed only after the
+  stream using it stopped (`ma_device_uninit` waits for the device thread). `close` runs before
+  unload.
+- `done` means heard, not handed over: `playFrom` sets it once the buffer's `tail` of silence
+  has followed the last sample. The tail is what the implementation counts as still queued
+  past the callback: 0 for the in-process sinks; for `MiniaudioIo`, the intermediary buffer
+  plus the device's own periods, read back at start (1,920 frames on the null device). So the
+  voice pump (S7), which has no clock, stops the stream as soon as it sees `done`.
+- Every device stream is read back after `ma_device_init` (S1's rule): anything but 48 kHz mono
+  s16 on the callback's side is refused, `device-format` (`streamFormat`, audio_io_null_test
+  §1, §3).
 - `abSystem` never lists Null, and never an empty list (miniaudio's default order ends in Null):
-  no backend means `no-device`, never a recording of zeros.
+  no backend means `no-device`, never a recording of zeros. `backendNames` reads the lists
+  with no context (audio_io_null_test §5).
 - Nothing outside this directory imports `miniaudio`; the voice surface (S7) codes against
-  `AudioIo`. Every miniaudio header type stays in `miniaudio.nim`, and the `-D` backend flags
+  `AudioIo`. Every miniaudio header type stays in `miniaudio.nim`, never inside a generic (a
+  `seq` of one put miniaudio.h into system's C: use a fixed array), and the `-D` backend flags
   stay one global `passC` (they change struct layouts).
 - No test opens a real device: `abNull` only. A real-device test sits behind
   `MUSTER_VOICE_REAL`, in run-suite's E2E list (S11).

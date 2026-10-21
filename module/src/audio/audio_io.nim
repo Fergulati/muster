@@ -21,12 +21,19 @@
 ## then drops them and sets `capped`. Only that side can hold the 60 s cap: the module has no
 ## clock (side-modules.md:66), and a Stop can queue behind a 20 s sync call. The module thread
 ## drains with `takeCaptured`. Playback: the module thread loads the whole decoded clip with
-## `loadPlayback`, then starts; the device side copies out at the read index, writes zeros
-## past the end and sets `done`, and the module thread then stops the stream.
+## `loadPlayback`, then starts; the device side copies out at the read index and writes zeros
+## past the end. `done` means heard, not handed over: it is set once the device side has
+## written the buffer's `tail` of zeros after the last sample, the frames the implementation
+## counts as still queued between the callback and the speaker (0 for the in-process sinks,
+## which queue nothing; the device's own buffers for MiniaudioIo, read back at its start).
+## Stopping a device drops what it still holds (ma_device_uninit), so the module thread, which
+## has no clock to wait on, can stop the stream as soon as it sees `done` and drop only silence.
 ##
 ## Streams open and close on the module thread only, one at a time per AudioIo (§8 never
-## records and plays at once), so a second start is "busy". A buffer is freed only after the
-## stream using it stopped. Every method returns "" or a word naming the refusal.
+## records and plays at once), so a second start is "busy". A start refuses a nil buffer
+## ("no-buffer") there, since the device side would dereference it with checks off. A buffer
+## is freed only after the stream using it stopped. Every method returns "" or a word naming
+## the refusal.
 
 import std/[atomics, monotimes]
 import ./voice_clip
@@ -41,6 +48,8 @@ type
     cap: int
     writeAt, readAt: Atomic[int]        ## capture: device writes, module reads; playback: the reverse
     peakAbs: Atomic[int]                ## the largest |sample| captured since `takePeak`
+    tailAt: Atomic[int]                 ## playback: the zeros past the end before `done`; module sets
+    silenceAt: Atomic[int]              ## playback: the zeros written past the end so far; device sets
     cappedFlag, doneFlag: Atomic[bool]
   AudioBuffer* = ptr AudioBufferObj
     ## Shared with a device thread: plain memory and atomics, never GC-traced.
@@ -67,7 +76,12 @@ proc readIndex*(b: AudioBuffer): int = b.readAt.load(moAcquire)
 proc capped*(b: AudioBuffer): bool = b.cappedFlag.load(moAcquire)
   ## The capture filled the buffer; frames since were dropped.
 proc done*(b: AudioBuffer): bool = b.doneFlag.load(moAcquire)
-  ## The playback consumed everything loaded.
+  ## The playback consumed everything loaded, then wrote `tail` frames of silence after it.
+proc tail*(b: AudioBuffer): int = b.tailAt.load(moAcquire)
+  ## The silence the device side writes past the end before `done`: what the implementation
+  ## counts as still queued between the callback and the speaker.
+proc silenceAfter*(b: AudioBuffer): int = b.silenceAt.load(moAcquire)
+  ## The frames of silence the device side has written past the end of what was loaded.
 proc takePeak*(b: AudioBuffer): int = b.peakAbs.exchange(0, moAcquireRelease)
   ## The largest |sample| captured since the last call (0..32768), and reset it.
 
@@ -79,9 +93,12 @@ proc beginCapture*(b: AudioBuffer) =
   b.cappedFlag.store(false, moRelaxed)
   b.doneFlag.store(false, moRelease)
 
-proc beginPlayback*(b: AudioBuffer) =
-  ## Rewind `b` to play what was loaded from its start. Module thread, before the stream starts.
+proc beginPlayback*(b: AudioBuffer, tail = 0) =
+  ## Rewind `b` to play what was loaded from its start, `done` after `tail` frames of silence
+  ## past its end. Module thread, before the stream starts.
   b.readAt.store(0, moRelaxed)
+  b.tailAt.store(max(tail, 0), moRelaxed)
+  b.silenceAt.store(0, moRelaxed)
   b.peakAbs.store(0, moRelaxed)
   b.cappedFlag.store(false, moRelaxed)
   b.doneFlag.store(false, moRelease)
@@ -128,15 +145,19 @@ proc captureInto*(b: AudioBuffer, input: ptr UncheckedArray[int16], frames: int)
 
 proc playFrom*(b: AudioBuffer, output: ptr UncheckedArray[int16], frames: int): int {.gcsafe, raises: [].} =
   ## Copy up to `frames` samples out from the read index, zeros past the end of what was
-  ## loaded; set `done` once all of it is consumed. The samples copied. This side alone moves
-  ## the read index.
+  ## loaded; set `done` once all of it is consumed and `tail` zeros followed it (they push the
+  ## last samples out of the device's queue). The samples copied. This side alone moves the
+  ## read index and the silence count.
   let w = b.writeAt.load(moAcquire)
   let r = b.readAt.load(moRelaxed)
   let n = max(0, min(frames, w - r))
   for i in 0 ..< n: output[i] = b.samples[r + i]
   for i in n ..< frames: output[i] = 0
   if n > 0: b.readAt.store(r + n, moRelease)
-  if r + n >= w: b.doneFlag.store(true, moRelease)
+  if r + n >= w:                        # all of it handed over: count the silence after it
+    let z = b.silenceAt.load(moRelaxed) + max(0, frames - n)
+    b.silenceAt.store(z, moRelease)
+    if z >= b.tailAt.load(moRelaxed): b.doneFlag.store(true, moRelease)
   n
 
 {.pop.}
@@ -168,8 +189,9 @@ type
     buffer*: AudioBuffer                ## the buffer it moves samples through; nil when idle
 
 method startCapture*(io: AudioIo, buf: AudioBuffer): string {.base.} =
-  ## Empty `buf` and fill it from the source, up to its cap. "" or a refusal: "busy" (a stream
-  ## is open), "no-device", or the implementation's own word.
+  ## Empty `buf` and fill it from the source, up to its cap. "" or a refusal: "no-buffer" (`buf`
+  ## is nil; nothing opens), "busy" (a stream is open), "no-device", or the implementation's
+  ## own word.
   raise newException(CatchableError, "AudioIo.startCapture is abstract")
 method stopCapture*(io: AudioIo): string {.base.} =
   ## Stop the capture, if one is open: the buffer keeps what it holds. Always "".
@@ -254,6 +276,7 @@ proc newSyntheticAudioIo*(source: seq[int16], clock: AudioClock): SyntheticAudio
 proc played*(io: SyntheticAudioIo): seq[int16] = io.sunk
 
 method startCapture*(io: SyntheticAudioIo, buf: AudioBuffer): string =
+  if buf == nil: return "no-buffer"
   if io.stream != asIdle: return "busy"
   buf.beginCapture()
   io.open(asCapture, buf)
@@ -262,6 +285,7 @@ method stopCapture*(io: SyntheticAudioIo): string =
   if io.stream == asCapture: io.shut()
   ""
 method startPlayback*(io: SyntheticAudioIo, buf: AudioBuffer): string =
+  if buf == nil: return "no-buffer"
   if io.stream != asIdle: return "busy"
   buf.beginPlayback()
   io.sunk.setLen(0)
@@ -338,6 +362,7 @@ proc closeSink(io: FileAudioIo) =
 
 method startCapture*(io: FileAudioIo, buf: AudioBuffer): string =
   ## Also "no-source" (no path, or no file there), "wav-format", "wav-truncated".
+  if buf == nil: return "no-buffer"
   if io.stream != asIdle: return "busy"
   if io.sourcePath.len == 0: return "no-source"
   var bytes: string
@@ -354,6 +379,7 @@ method stopCapture*(io: FileAudioIo): string =
   ""
 method startPlayback*(io: FileAudioIo, buf: AudioBuffer): string =
   ## Also "no-sink": no path, or one that cannot be opened for writing.
+  if buf == nil: return "no-buffer"
   if io.stream != asIdle: return "busy"
   if io.sinkPath.len == 0 or not open(io.sink, io.sinkPath, fmWrite): return "no-sink"
   io.sinkOpen = true
