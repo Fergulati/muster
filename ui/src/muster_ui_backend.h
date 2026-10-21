@@ -36,6 +36,13 @@ public:
     void loadBalances() override;
     void loadWalletAccounts() override;
     void loadWalletSummary() override;
+
+    // FileShare (exo-4d0): the room's shared files, through muster_module's fileshare_*.
+    void loadFileShare() override;
+    void shareFile(const QString &path) override;
+    void fetchFile(const QString &fileId, const QString &folder, const QString &privately) override;
+    void seedFile(const QString &fileId, const QString &on) override;
+    void retractFile(const QString &fileId) override;
     void previewLezSend(const QString &fromId, const QString &to, const QString &raw) override;
     void sendLez(const QString &fromId, const QString &to, const QString &raw) override;
 

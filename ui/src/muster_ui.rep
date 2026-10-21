@@ -498,4 +498,17 @@ class MusterUi
     // connect:[{id, name, how, action, package?}], checking:[name]}. Polled while open.
     SLOT(void loadWalletSummary())
     PROP(QString walletSummaryJson="{}" READONLY)
+
+    // FileShare (the room swarm, exo-4d0, docs/design/room-swarm.md): files shared in the
+    // joined room, sealed before they leave this machine and moved by Logos Storage.
+    // loadFileShare reads fileshare_files into fileShareJson ({ready, note, files, ops});
+    // the rest start an operation (fileshare_share / _fetch / _seed / _retract) and put
+    // its answer in fileShareResultJson ({op} | {error} | "ok"). Flags are "true"/"false".
+    SLOT(void loadFileShare())
+    SLOT(void shareFile(const QString &path))
+    SLOT(void fetchFile(const QString &fileId, const QString &folder, const QString &privately))
+    SLOT(void seedFile(const QString &fileId, const QString &on))
+    SLOT(void retractFile(const QString &fileId))
+    PROP(QString fileShareJson="{}" READONLY)
+    PROP(QString fileShareResultJson="" READONLY)
 }

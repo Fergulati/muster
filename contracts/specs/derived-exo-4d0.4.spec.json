@@ -1,0 +1,197 @@
+{
+  "id": "derived-exo-4d0.4",
+  "original_statement": "exo-4d0.4: the room as tracker (room swarm S3). Shared files and their seeders are author-signed log events (file/<fid>, file/<fid>/seed/<who>, file/<fid>/retract) folded by reduceSwarm; a seeder is listed only by their own signed announce (invariant 9); the fold is order-free and idempotent (invariant 4); a member admitted later holds no key to an earlier file unless a member shares it again (invariant 7). Scope (operator, 2026-10-15): plus safe file names.",
+  "restatement": "Whatever the input, the room's file index keeps five guarantees: (s1) Every member's client folds the room's file events to the same index \u2014 the same files, each with the same sharer, name, size, digest, CID, key, retraction and seeders \u2014 whatever the order or duplication of the events; a seeder's state is their newest announce by (at, event id), stop or start, resolved the same way everywhere. (s2) A member is listed as seeding a file only by their own announce: a seed event counts only when signed, for this room, by the member its key names; a seed forged in another's name, unsigned, signed for another room, or edited after signing lists no one and changes nothing; the client never lists a holder from anything other than a seed event. (s3) A file is shared only in its sharer's name: a share counts only when signed, for this room, by the sharer it names, and only under the file id derived from that sharer and its CID; a share forged in another's name or posted under another file's id changes nothing; only the file's sharer can retract it. (s4) A member admitted at a later epoch holds no share \u2014 no CID, no key \u2014 of a file shared before their epoch, and lists no seeder announced before it; once a member shares the same file again in the later epoch, the newcomer holds it, credited to the re-sharer, with the same CID, key and digest. (s5) A file's name is the sharer's word and carries no path: whatever name a share gives \u2014 separators, '..', control characters, empty \u2014 the name shown and the file a fetch writes stay inside the folder the member chose, and a fetch never overwrites a file already there.",
+  "restatement_clauses": [
+    {
+      "id": "s1",
+      "text": "Every member's client folds the room's file events to the same index \u2014 the same files, each with the same sharer, name, size, digest, CID, key, retraction and seeders \u2014 whatever the order or duplication of the events; a seeder's state is their newest announce by (at, event id), stop or start, resolved the same way everywhere."
+    },
+    {
+      "id": "s2",
+      "text": "A member is listed as seeding a file only by their own announce: a seed event counts only when signed, for this room, by the member its key names; a seed forged in another's name, unsigned, signed for another room, or edited after signing lists no one and changes nothing; the client never lists a holder from anything other than a seed event."
+    },
+    {
+      "id": "s3",
+      "text": "A file is shared only in its sharer's name: a share counts only when signed, for this room, by the sharer it names, and only under the file id derived from that sharer and its CID; a share forged in another's name or posted under another file's id changes nothing; only the file's sharer can retract it."
+    },
+    {
+      "id": "s4",
+      "text": "A member admitted at a later epoch holds no share \u2014 no CID, no key \u2014 of a file shared before their epoch, and lists no seeder announced before it; once a member shares the same file again in the later epoch, the newcomer holds it, credited to the re-sharer, with the same CID, key and digest."
+    },
+    {
+      "id": "s5",
+      "text": "A file's name is the sharer's word and carries no path: whatever name a share gives \u2014 separators, '..', control characters, empty \u2014 the name shown and the file a fetch writes stay inside the folder the member chose, and a fetch never overwrites a file already there."
+    }
+  ],
+  "goal": "A typed spec, derived-exo-4d0.4, with one top-strength acceptance oracle per guarantee of the room swarm's index and its file names, graded against the live code by scripts/grade-specs.sh: none of the five can regress without a spec going red.",
+  "acceptance_criteria": [
+    "Every member's client folds the room's file events to the same index \u2014 the same files, each with the same sharer, name, size, digest, CID, key, retraction and seeders \u2014 whatever the order or duplication of the events; a seeder's state is their newest announce by (at, event id), stop or start, resolved the same way everywhere.",
+    "A member is listed as seeding a file only by their own announce: a seed event counts only when signed, for this room, by the member its key names; a seed forged in another's name, unsigned, signed for another room, or edited after signing lists no one and changes nothing; the client never lists a holder from anything other than a seed event.",
+    "A file is shared only in its sharer's name: a share counts only when signed, for this room, by the sharer it names, and only under the file id derived from that sharer and its CID; a share forged in another's name or posted under another file's id changes nothing; only the file's sharer can retract it.",
+    "A member admitted at a later epoch holds no share \u2014 no CID, no key \u2014 of a file shared before their epoch, and lists no seeder announced before it; once a member shares the same file again in the later epoch, the newcomer holds it, credited to the re-sharer, with the same CID, key and digest.",
+    "A file's name is the sharer's word and carries no path: whatever name a share gives \u2014 separators, '..', control characters, empty \u2014 the name shown and the file a fetch writes stay inside the folder the member chose, and a fetch never overwrites a file already there."
+  ],
+  "request_clauses": [
+    {
+      "id": "c1",
+      "text": "Every member's client folds the room's file events to the same index \u2014 the same files, each with the same sharer, name, size, digest, CID, key, retraction and seeders \u2014 whatever the order or duplication of the events; a seeder's state is their newest announce by (at, event id), stop or start, resolved the same way everywhere."
+    },
+    {
+      "id": "c2",
+      "text": "A member is listed as seeding a file only by their own announce: a seed event counts only when signed, for this room, by the member its key names; a seed forged in another's name, unsigned, signed for another room, or edited after signing lists no one and changes nothing; the client never lists a holder from anything other than a seed event."
+    },
+    {
+      "id": "c3",
+      "text": "A file is shared only in its sharer's name: a share counts only when signed, for this room, by the sharer it names, and only under the file id derived from that sharer and its CID; a share forged in another's name or posted under another file's id changes nothing; only the file's sharer can retract it."
+    },
+    {
+      "id": "c4",
+      "text": "A member admitted at a later epoch holds no share \u2014 no CID, no key \u2014 of a file shared before their epoch, and lists no seeder announced before it; once a member shares the same file again in the later epoch, the newcomer holds it, credited to the re-sharer, with the same CID, key and digest."
+    },
+    {
+      "id": "c5",
+      "text": "A file's name is the sharer's word and carries no path: whatever name a share gives \u2014 separators, '..', control characters, empty \u2014 the name shown and the file a fetch writes stay inside the folder the member chose, and a fetch never overwrites a file already there."
+    }
+  ],
+  "acceptance_tests": [
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s1",
+      "proves": "Over eight genuine events (two shares, a start, a start then a stop, a start and a stop at the SAME time broken only by event id, a retract), each state folds every order of the remaining seven through the REAL fold, as-is and with every event delivered twice \u2014 all 40320 orders \u2014 and requires the identity order's index; each state also folds all 256 subsets through the hosted read path (authenticEvents, reduceSwarm) and requires the rule stated alone (a file iff its share; per (file, member) the largest (at, event id) seed decides; retracted iff the sharer's retract). Catches an order- or duplicate-dependent fold, a tie resolved by arrival, and a fold that agrees with itself but gets the rule wrong (last-seen-wins, a stopped seeder still listed).",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_swarm_convergence_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 8,
+      "description": "Every member's client folds the room's file events to the same index \u2014 the same files, each with the same sharer, name, size, digest, CID, key, retraction and seeders \u2014 whatever the order or duplication of the events; a seeder's state is their newest announce by (at, event id), stop or start, resolved the same way everywhere.",
+      "clause_id": "c1"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s2",
+      "proves": "Each case adds one seed for file A \u2014 naming Bob or Carol, start or stop, A's share present or not \u2014 in one of seven forms: genuine, forged by Mallory, unsigned, signed for another room, addresses edited after signing, Mallory's own seed moved under the member's key, a signature lifted from the member's seed of another file; plus Carol re-sharing A's blob with no seed event and Carol's chat message claiming she seeds A. Through the hosted read path, the member is listed iff the seed is genuine, a start, and A is shared \u2014 otherwise the index is exactly the base index; the re-share and the message list no seeder. Catches a skipped or room-agnostic signature check, a signature that does not cover key or body, and a holder inferred from a share or a message.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_swarm_seeder_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 58,
+      "description": "A member is listed as seeding a file only by their own announce: a seed event counts only when signed, for this room, by the member its key names; a seed forged in another's name, unsigned, signed for another room, or edited after signing lists no one and changes nothing; the client never lists a holder from anything other than a seed event.",
+      "clause_id": "c2"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s3",
+      "proves": "Twenty-two share cases \u2014 naming Alice or Bob, in eleven forms: genuine, forged by Mallory, unsigned, signed for another room, name / key / CID edited after signing, signed by its sharer but posted under Carol's file id (as-is, re-timed so its event id sorts BEFORE Carol's share, and under the id of a file Carol has not shared), a signature lifted from another share \u2014 and four retracts of Alice's genuine share: by Alice, by Bob as himself, forged in Alice's name, unsigned. Through the hosted read path: a genuine share adds exactly that file under the id derived from (sharer, CID), credited to the sharer with exactly the signed name, size, CID, key and digest; every other form leaves the index exactly as it was, Carol's file untouched; a file is retracted iff its sharer's genuine retract is present. Catches misattribution, file-id squatting whichever share sorts first, post-signing edits, and a non-sharer hiding a file.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_swarm_share_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 26,
+      "description": "A file is shared only in its sharer's name: a share counts only when signed, for this room, by the sharer it names, and only under the file id derived from that sharer and its CID; a share forged in another's name or posted under another file's id changes nothing; only the file's sharer can retract it.",
+      "clause_id": "c3"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s4",
+      "proves": "Each case builds a REAL room \u2014 sessions over LocalTransport, keys from EpochCrypto \u2014 admits Carol at epoch J in {1, 2}, and varies whether Alice's share and her seed come before or after Carol's epoch and whether Bob re-shares (and seeds) after it; Carol catches up from the store. Correct iff Carol's raw log holds no event published before her epoch, her index holds A iff Alice shared it after she joined (seeded by Alice iff that seed came after too), holds Bob's re-share iff he made one \u2014 credited to Bob with A's CID, key and digest \u2014 and nothing else. Catches a fold that hides an earlier share while its key sits in the log, a joiner handed an old epoch key, and a re-share that alters the blob or credits the original sharer.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_swarm_epoch_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 16,
+      "description": "A member admitted at a later epoch holds no share \u2014 no CID, no key \u2014 of a file shared before their epoch, and lists no seeder announced before it; once a member shares the same file again in the later epoch, the newcomer holds it, credited to the re-sharer, with the same CID, key and digest.",
+      "clause_id": "c4"
+    },
+    {
+      "type": "model_check",
+      "restatement_clause_id": "s5",
+      "proves": "Each case runs the REAL path \u2014 Alice seals and uploads a file and posts a genuine share under a hostile name (../../escape.txt, an absolute path outside the folder, a/../../b.txt, C:\\Windows\\x.txt, .., ., empty, an embedded NUL, a newline, dir/, ~/.bashrc, and a plain control name) and Bob's SwarmNode fetches it \u2014 into a folder that is empty, holds a file under the shown name, holds that and its (1) sibling, or holds a dangling symlink under the shown name pointing outside. The whole test root is snapshotted (lstat) before and after. Correct iff the shown name has no separator or control character and is not empty, . or ..; the only differences are ONE new regular file directly inside the folder holding exactly the plaintext, and the blob in Bob's own storage repo; every prior entry is unchanged and nothing appears outside the folder. Catches path traversal, absolute and Windows paths, overwriting a member's file, writing through a planted symlink (it caught exactly that: freeName now counts a dangling symlink as taken), and a fix applied to the shown name but not the written one.",
+      "run": [
+        "nim",
+        "r",
+        "-d:release",
+        "tests/probes/probe_swarm_name_stepper.nim"
+      ],
+      "cwd": "module",
+      "initial": [
+        {
+          "case": 0,
+          "decision_correct": true
+        }
+      ],
+      "invariant": {
+        "field": "decision_correct",
+        "op": "eq",
+        "value": true
+      },
+      "max_states": 48,
+      "description": "A file's name is the sharer's word and carries no path: whatever name a share gives \u2014 separators, '..', control characters, empty \u2014 the name shown and the file a fetch writes stay inside the folder the member chose, and a fetch never overwrites a file already there.",
+      "clause_id": "c5"
+    }
+  ],
+  "criticality": "catastrophic",
+  "declared_new_entrypoints": [
+    "tests/probes/probe_swarm_convergence_stepper.nim",
+    "tests/probes/probe_swarm_seeder_stepper.nim",
+    "tests/probes/probe_swarm_share_stepper.nim",
+    "tests/probes/probe_swarm_epoch_stepper.nim",
+    "tests/probes/probe_swarm_name_stepper.nim"
+  ]
+}

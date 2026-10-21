@@ -123,6 +123,10 @@ Rectangle {
             qsTr("Anyone reading the public ledger. It learns what the driver's manifest declares when the room settles, never before: nothing leaves at propose or approve.")],
         "o:target-module": [qsTr("Target module"), qsTr("the module a call reaches"),
             qsTr("The Logos module an action calls. It sees the call's arguments when the room executes it.")],
+        "o:storage-peer": [qsTr("Storage peers"), qsTr("nodes that serve or fetch a file"),
+            qsTr("A shared file travels as a sealed blob between members' storage nodes. A node that serves or fetches it sees the other node's address and the sealed bytes, never the file, its name or its key.")],
+        "o:storage-dht": [qsTr("Storage network"), qsTr("the DHT that lists providers"),
+            qsTr("A node that serves a blob announces it to the storage network, so anyone can see the blob's address and which nodes provide it. Not what it is, nor which room it belongs to.")],
         "o:outside": [qsTr("Outside sources"), qsTr("what the room took in"),
             qsTr("Reads the room took in: a chain's answer, a nonce, a rate, a creditor's own check of a payment. Each is recorded as an external read, so its origin is accountable. It is not proof the world agrees.")]
     })
@@ -427,13 +431,18 @@ Rectangle {
         }
         pos["sealed"] = polar(165, 150 * scale, cx, cy);
         if (lens === "leaks") {
-            var obs = ["o:store-node", "o:rpc-provider", "o:chain-observer", "o:target-module", "o:outside"], row = 0;
-            for (i = 0; i < obs.length; i++) if (nodeById[obs[i]]) pos[obs[i]] = { x: 790, y: 90 + (row++) * 135 };
+            var obs = ["o:store-node", "o:rpc-provider", "o:chain-observer", "o:target-module",
+                       "o:storage-peer", "o:storage-dht", "o:outside"], present = [], row = 0;
+            for (i = 0; i < obs.length; i++) if (nodeById[obs[i]]) present.push(obs[i]);
+            var step = present.length > 1 ? Math.min(135, 560 / (present.length - 1)) : 0;
+            for (i = 0; i < present.length; i++) pos[present[i]] = { x: 790, y: 90 + (row++) * step };
         } else {
             pos["o:store-node"] = { x: 470, y: 42 };
             pos["o:rpc-provider"] = { x: 875, y: 230 };
             pos["o:chain-observer"] = { x: 875, y: 450 };
             pos["o:target-module"] = { x: 80, y: 230 };
+            pos["o:storage-peer"] = { x: 80, y: 450 };
+            pos["o:storage-dht"] = { x: 80, y: 625 };
             pos["o:outside"] = { x: 860, y: 625 };
         }
         // entries out of view sit on their intent, so they open out of it in the Log lens

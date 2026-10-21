@@ -137,6 +137,15 @@ proc loadMembersDo(o: MusterUi, d: Done = nil) =
 proc loadContactsDo(o: MusterUi, d: Done = nil) =
   ask mm.contactsAsync(proc (r: string) = o.setContactsJson(r); fin(d, r))
 
+proc loadFileShareDo(o: MusterUi, d: Done = nil) =
+  # FileShare (exo-4d0): the room's files and this instance's operations.
+  ask mm.fileshare_filesAsync(proc (r: string) = o.setFileShareJson(r); fin(d, r))
+
+proc fileShareDone(o: MusterUi, r: string) =
+  # A FileShare operation's answer: fileShareResultJson, then the list re-reads.
+  o.setFileShareResultJson(r)
+  o.loadFileShareDo()
+
 proc loadPendingDo(o: MusterUi, d: Done = nil) =
   # Identities that asked to join and are not admitted yet.
   ask mm.coordinate_pendingAsync(proc (r: string) = o.setPendingJson(r); fin(d, r))
@@ -1123,6 +1132,15 @@ proc requestJoinImpl(o: MusterUi) = o.requestJoinDo()
 proc loadPendingImpl(o: MusterUi) = o.loadPendingDo()
 proc admitImpl(o: MusterUi, identityHex: string) = o.admitDo(identityHex)
 proc loadContactsImpl(o: MusterUi) = o.loadContactsDo()
+proc loadFileShareImpl(o: MusterUi) = o.loadFileShareDo()
+proc shareFileImpl(o: MusterUi, path: string) =
+  ask mm.fileshare_shareAsync(path, proc (r: string) = o.fileShareDone(r))
+proc fetchFileImpl(o: MusterUi, fileId, folder, privately: string) =
+  ask mm.fileshare_fetchAsync(fileId, folder, privately, proc (r: string) = o.fileShareDone(r))
+proc seedFileImpl(o: MusterUi, fileId, on: string) =
+  ask mm.fileshare_seedAsync(fileId, on, proc (r: string) = o.fileShareDone(r))
+proc retractFileImpl(o: MusterUi, fileId: string) =
+  ask mm.fileshare_retractAsync(fileId, proc (r: string) = o.fileShareDone(r))
 proc addContactImpl(o: MusterUi, identityHex, alias: string) = o.addContactDo(identityHex, alias)
 proc setContactAliasImpl(o: MusterUi, identityHex, alias: string) = o.setContactAliasDo(identityHex, alias)
 proc removeContactImpl(o: MusterUi, identityHex: string) = o.removeContactDo(identityHex)

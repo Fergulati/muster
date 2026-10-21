@@ -4,7 +4,7 @@
 ## A log event is sealed to the room under the membership epoch key, which proves a
 ## member sent it but not which one. Most kinds need no more: an approval is verified
 ## by its driver, an attestation and a key binding carry their own signatures, and the
-## rest (propose, policy, context, submit, final, membership) name no author. Six kinds
+## rest (propose, policy, context, submit, final, membership) name no author. These kinds
 ## name their author with a plain string, and a view reads that string back as "who did
 ## it":
 ##
@@ -19,6 +19,8 @@
 ##   xmsig/<cid>/kex/<r>/<who>            that member's wallet's round r of the key exchange
 ##   intent/<id>/xsync|xtx/<who>/<i>/<n> a Monero multisig spend's sync data or transaction
 ##                                        set, from that member's wallet (exo-dcc.34.3)
+##   file/<fid>[/…]                      the room swarm (exo-4d0.4): a seed names the member
+##                                        in its key, a share or retract the value's "author"
 ##
 ## Each of those carries `authorSig`: the named author's Ed25519 signature (the
 ## encryption identity's signing half, F-14) over a domain-separated hash-input record
@@ -106,6 +108,16 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
   if p.len >= 3 and p[0] == "intent" and p[2] == "part":
     # a part report (exo-a90.2): the author is the value's "author" — the debtor for a
     # "settled", the creditor for a "confirmed" — never the part named in the key
+    var author = ""
+    try:
+      let j = parseJson(e.value)
+      if j.kind == JObject: author = j{"author"}.getStr()
+    except CatchableError: discard
+    return (true, author)
+  if p[0] == "file":
+    # the room swarm (exo-4d0.4): every `file/` event names its author — a seed the
+    # member in its key, a share or a retract the value's "author"
+    if p.len >= 3 and p[2] == "seed": return (true, (if p.len >= 4: p[3] else: ""))
     var author = ""
     try:
       let j = parseJson(e.value)
