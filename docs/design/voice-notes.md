@@ -269,7 +269,7 @@ reassembled and checked on every read.
 ## 7. Thread rows
 
 The thread is `coordinate_messages`, which returns every message body on each 1 s poll
-(`muster_module.nim:4566-4578`). Audio must never ride that. So a note is never a `message/`
+(`muster_module.nim:4582-4594`). Audio must never ride that. So a note is never a `message/`
 event, and there is no pointer message as `intent-ref` uses.
 
 Instead, a planned `threadRows(events)` merges `reduceMessages(events)` with one synthesized
@@ -296,7 +296,7 @@ under the forger's name, and its Play would play Alice's audio. That attributes 
 voice to another, against invariant 9. Three rules close it:
 - **The fold alone sets `voice`.** `reduceMessages` builds a row from a message's `author`,
   `ts` and `body` only. `musterCoordinateMessages` serializes just those fields
-  (`muster_module.nim:4574-4577`). So no `message/` event can put a `voice` field on a row.
+  (`muster_module.nim:4590-4593`). So no `message/` event can put a `voice` field on a row.
 - **The card draws from `modelData.voice` alone.** RoomThread's `parsedCard` refuses
   `voice-note` from a body, so a `message/` that claims it falls through to plain text: the
   forger's raw JSON, under the forger's name.
@@ -309,8 +309,8 @@ construction. A co-resident module can call `voice_play` with any nid, but that 
 and names nobody (§13).
 
 `threadRows` is used in exactly two places:
-- `musterCoordinateMessages`, in place of `reduceMessages` (`:4574`);
-- the `lastTs` of `coordinate_conversations` (`:4624-4625`), so a note moves its room up the
+- `musterCoordinateMessages`, in place of `reduceMessages` (`:4590`);
+- the `lastTs` of `coordinate_conversations` (`:4640-4641`), so a note moves its room up the
   list.
 
 `reduceMessages` itself is unchanged. Three things read address shares from it:
@@ -369,7 +369,7 @@ declares a return type.
 | `voice_play(note_id)` | `"draft"` or a note id; `{ok}`, or `{error}`: `unknown-note` · `incomplete` · `broken` · `busy` · `no-draft` |
 | `voice_play_stop()` | `"ok"` |
 
-`voice_status` returns integers and strings, never a float, and never audio:
+`voice_status` returns integers, strings, booleans and null, never a float, and never audio:
 
 ```
 { ready:     { capture: "unknown|ok|no-device|…", playback: "…", codec: "<opus_get_version_string()>",
@@ -387,8 +387,8 @@ declares a return type.
 (`docs/design/side-modules.md:66`), and the SDK's `emit` callback is a threadvar, so the audio
 thread cannot emit. So:
 - `voice_status` drives `voicePump`, as `fileshare_files` drives `fileSharePump`
-  (`muster_module.nim:2776`);
-- `coordinate_intents` also calls it, from its pump list (`:2838-2845`);
+  (`muster_module.nim:2778`);
+- `coordinate_intents` also calls it, from its pump list (`:2854-2861`);
 - the UI polls `voice_status` every 250 ms while not idle;
 - the room's 1 s timer reads it too, so a recording any caller started shows a banner (§13).
 
@@ -428,10 +428,15 @@ same rule as `transport/inbound_queue.nim:1-11`:
 buffer; the prototype decoded 60 s in about 27 ms. The callback copies out at an atomic read
 index, writes zeros past the end and sets `done`. The pump then releases the device.
 
-**Device lifetime.** A device is opened lazily, on the person's own action, and bounded. It is
-stopped and uninitialised on the module thread only, never from the callback: on stop, on
-done, and before the module unloads. That is the `abandoned` lesson from the storage FFI
-(CLAUDE.md, pattern sources).
+**Device lifetime.** A device is opened lazily, by `voice_record_start` or `voice_play`, and
+bounded. With the access policy off, any caller can make those calls (§13). It is stopped and
+uninitialised on the module thread only, never from the callback: on stop, on done, and before
+the module unloads. That is the `abandoned` lesson from the storage FFI (CLAUDE.md, pattern
+sources). The module has no unload hook yet: the generated surface exports none
+(`muster_gen.nim:392-438`: seven `logos_module_*` entry points and a constructor), so nothing
+calls `MiniaudioIo.close`. S3 opens no context, so nothing is left open today. S7 must wire
+`close` before it opens a device: a miniaudio context, and its backend's threads, left alive
+when the host unloads the plugin is a crash risk.
 
 **The build** (planned, S1–S3):
 - **libopus** comes from nixpkgs as libsodium does: `codegen.nim.link += "opus"` and
@@ -660,7 +665,14 @@ Nothing in this document is built. What is unverified even as a plan:
 - **Checks that are Linux-only or the maintainer's:**
   - the runner self-tests and `ui-parity.sh` for both UIs;
   - the Nim UI's `contract_test`;
-  - `scripts/grade-specs.sh`.
+  - `scripts/grade-specs.sh`, `exo-526` above all: its host probe now links libopus, through
+    `.probe-env/opus`, a path no Mac run takes;
+  - the Linux plugin links, by `lgx-variants.yml` on the fork (S3 linked darwin-arm64 only).
+    Each Linux variant's bundled lib directory must hold `libopus.so.0`, and the plugin's
+    `NEEDED` and `RUNPATH` must resolve it. The plugin links libopus at load (on darwin a
+    plain, non-weak `@loader_path/./libopus.0.dylib`), so a variant without it fails all of
+    `muster_module` to load, not only voice. `dlopen`, `dlsym` and `dlclose` must resolve from
+    glibc there.
 
 ## 16. Invariants, checked
 
@@ -700,8 +712,9 @@ Each slice's test is written and run red before its code (worker.md), and every 
 - **S6 — Disclosure.** The `flow.nim` branch, the room map and provenance, with the rows pinned
   in `voice_test`.
 - **S7 — The hosted surface and its state machine.** `voice_live.nim`, the six remaining
-  methods, `voicePump`, and `threadRows` in `coordinate_messages`. Test: `voice_live_test` on
-  `SyntheticAudioIo` and `LocalTransport`.
+  methods, `voicePump`, and `threadRows` in `coordinate_messages`, and `close` before the
+  module unloads (§9). Test: `voice_live_test` on `SyntheticAudioIo` and `LocalTransport`,
+  which holds §8's type rule (no float) in every state.
 - **S8 — The UI.** The `.rep` (both backends, ADR-019), `CardVoiceNote.qml`, the mic in the
   composer, observer and kind labels, the regenerated gallery `FakeBackend.qml`, and the
   unknown-kind fallback. A gallery fixture holds a forged `voice-note` body, and RoomThread
@@ -739,6 +752,11 @@ Asked of the maintainer (corpetty):
 - **The wire format, §3–§5, before S4 lands.** The alternative was 12 kbps in one 128 KiB
   frame. Changing the format later strands notes already sent.
 - **F-13** (§14): is a voice note a message in another medium, or a core vocabulary addition?
+- **`derived-exo-526`'s oracle.** S3 added `voice_status` to its host probe: the method listed
+  as `QString`, `ready.codec` the libopus linked, both devices `"unknown"`. The spec's
+  acceptance criterion still names only `health()`, `propose()` and `status()`, so a voice
+  regression now turns exo-526 red. Sign off on the wider oracle, or a voice spec's own probe
+  takes these checks over once the epic has an exo id.
 - **The Linux-only checks** (§15): who runs them? This PR is built on a Mac.
 - **Scope.** This PR regenerates the stale gallery `FakeBackend.qml`, which also pulls in
   FileShare's missing slots, and fixes the unknown-card fallback. The Nim backend's missing

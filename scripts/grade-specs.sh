@@ -47,13 +47,15 @@ ln -sfn "$("$REPO/module/tools/nim-closure.sh")" "$PROBE_ENV/nimpkgs"
 # not found"), so that gcc is linked as .probe-env/cc, where config.nims compiles with it.
 # MUSTER_SODIUM (a host libsodium) keeps the host's compiler.
 # libopus (voice notes; exo-526's host probe builds the whole module, which links it) comes
-# from that same build, or MUSTER_OPUS beside a host MUSTER_SODIUM, as in run-suite.sh.
+# from the same nixpkgs, in a build of its own, so a libopus that fails to fetch or build
+# costs exo-526 alone, never the libsodium and gcc every other probe needs. A host
+# MUSTER_SODIUM needs MUSTER_OPUS beside it, as in run-suite.sh.
 NIXGCC=""; OPUS="${MUSTER_OPUS:-}"
 if [ -n "${MUSTER_SODIUM:-}" ]; then
   SODIUM="$MUSTER_SODIUM"
 else
-  { read -r SODIUM; read -r NIXGCC; read -r NIXOPUS; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null) || true
-  [ -n "$OPUS" ] || OPUS="${NIXOPUS:-}"
+  { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null) || true
+  [ -n "$OPUS" ] || OPUS="$(nix build nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null | tail -1)" || true
 fi
 [ -f "$SODIUM/lib/libsodium.so" ] && ln -sfn "$SODIUM/lib" "$PROBE_ENV/sodium" \
   || echo "warning: libsodium not found (set MUSTER_SODIUM); probes that need it will not build" >&2

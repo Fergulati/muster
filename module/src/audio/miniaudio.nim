@@ -25,8 +25,8 @@
 ## nim links nothing: the archive leaves dlopen, dlsym and dlclose undefined, for the plugin's
 ## own link to resolve (S3), from libSystem on macOS and, on Linux, from libc itself (glibc
 ## 2.34 and later; earlier ones need -ldl). The darwin-arm64 plugin has been linked (S3): it
-## defines ma_context_init and every other ma_ symbol, binds dlopen and dlclose to libSystem,
-## and links no audio framework. The Linux plugin link has not been run.
+## defines ma_context_init and every other ma_ symbol, binds dlopen, dlsym and dlclose to
+## libSystem, and links no audio framework. The Linux plugin links have not been run.
 ##
 ## Every stream is read back after ma_device_init (S1's read-back rule): the callback must be
 ## handed 48 kHz mono s16, the clip's own format, or the start is refused, "device-format".
@@ -39,7 +39,11 @@
 ## buffer to audio_io's captureInto / playFrom. A device is initialised, started and
 ## uninitialised on the module thread only, never from a callback; ma_device_uninit stops it
 ## and waits for its thread, so the buffer can be freed once a stop returns. The context is
-## made on the first start and kept until `close`, which the module calls before it unloads.
+## made on the first start and kept until `close`. muster_module calls no `close` yet: it has
+## no unload hook (the generated surface exports none), and it starts no device before S7, so
+## it holds no context to leave open. Wiring `close` before the plugin unloads is S7's: a
+## context, and its backend's threads, left alive when the host unloads the plugin is a crash
+## risk.
 
 import std/[compilesettings, os]
 import ./audio_io
@@ -148,7 +152,8 @@ type
 const ClipFormat: StreamFormat = (rate: ClipRate, channels: ClipChannels, s16: true)
 
 proc newMiniaudioIo*(backend = abSystem): MiniaudioIo =
-  ## Opens nothing: the context is made by the first start, on the person's own action (§9).
+  ## Opens nothing: the context is made by the first start, which only voice_record_start or
+  ## voice_play makes (S7; with the access policy off, any caller's, §13).
   MiniaudioIo(backend: backend)
 
 proc miniaudioVersion*(): string = $ma_version_string()

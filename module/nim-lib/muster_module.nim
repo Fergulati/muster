@@ -2832,7 +2832,8 @@ proc musterFileshareRetract(fileId: string): string =
 # ── Voice notes (docs/design/voice-notes.md) ───────────────────────────────────────────
 # Capture, playback and Opus live in this module, and audio never crosses IPC (§9). The voice
 # half is made on the first voice call, over miniaudio on this platform's own backends (never
-# its null device). That opens nothing: a device opens only on the person's own action.
+# its null device). That opens nothing: only voice_record_start or voice_play opens a device
+# (S7), and with the access policy off any caller can make those calls (§13).
 
 var gVoice: VoiceLive = nil
 

@@ -7,8 +7,9 @@
 ##   * libopus (through voice_codec), read only for its version: `ready.codec`;
 ##   * the device seam (AudioIo), handed in by the module, which picks the implementation
 ##     (MiniaudioIo on the platform's own backends). MiniaudioIo makes miniaudio's context
-##     on its first start, and only the person's own action starts one (S7). Until a device
-##     has been opened, `ready.capture` and `ready.playback` say "unknown". Reading the status
+##     on its first start, and only voice_record_start or voice_play starts one (S7). Any
+##     caller can make those calls while the access policy is off (§13). Until a device has
+##     been opened, `ready.capture` and `ready.playback` say "unknown". Reading the status
 ##     opens no device and prompts for nothing.
 ##
 ## Planned for S7: recording, the draft, sending it and playing (§8's six other methods), the
@@ -31,8 +32,8 @@ proc newVoiceLive*(io: AudioIo): VoiceLive =
   VoiceLive(io: io, capture: DeviceUnknown, playback: DeviceUnknown)
 
 proc voiceStatus*(v: VoiceLive): JsonNode =
-  ## §8's voice_status: integers, strings and booleans, never a float, never audio. With no
-  ## recording or playback built yet, it is always idle.
+  ## §8's voice_status: integers, strings, booleans and null, never a float, never audio.
+  ## With no recording or playback built yet, it is always idle.
   %*{"ready": {"capture": v.capture, "playback": v.playback, "codec": opusVersion(),
                "note": ""},
      "recording": {"state": "idle", "elapsedMs": 0, "capMs": VoiceMaxMs, "peak": 0,
