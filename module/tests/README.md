@@ -17,9 +17,9 @@ The runner materializes the Nim closure at the revs `../metadata.json` pins
 into `~/.cache/muster/nimpkgs`, so a local run compiles against the same sources the
 `.lgx` does. It takes libsodium and libopus from nixpkgs (and, for the host-return
 probe, secp256k1 and `g++`), and builds every test with one flag set: the union of the
-`$SECP`, `$STINT`, web3, SDK, libsodium and libopus flags below. An extra `--path` is harmless
-to a pure-Nim test. Each test's log lands in `$OUT` (a fresh temp dir unless set),
-and the summary names every failure. Env: `JOBS` (8), `TEST_TIMEOUT` (900 s),
+`$SECP`, `$STINT`, web3, SDK, libsodium, libopus and miniaudio flags below. An extra
+`--path` is harmless to a pure-Nim test. Each test's log lands in `$OUT` (a fresh temp
+dir unless set), and the summary names every failure. Env: `JOBS` (8), `TEST_TIMEOUT` (900 s),
 `TEST_ARGS` (appended to each selected test's command line, for an e2e test's own
 arguments), `MUSTER_NIMPKGS` (the closure dir), `MUSTER_SODIUM` / `MUSTER_OPUS` (a
 libsodium / libopus prefix in place of nixpkgs'; on Linux set both, since a host
@@ -135,6 +135,8 @@ wants (below), which the runner supplies.
 
 - `voice_clip_test` (§3.2, §5 — the clip record: a round trip re-encodes byte for byte, one small record held to hand-computed CDE bytes; every refusal a value naming why (codec settings, packet lengths 1..1275, samples over 60 s, a packet count other than ceil((samples + preskip) / 960), the shape, a 3,000-mutation fuzz); `maxClipBytes` is 126,119 at 60 s and 1,166 at 500 ms; pure Nim, no libopus)
 - `voice_codec_test` (§3.1 — libopus at the fixed settings: every ctl read back (a fixed-arity `opus_encoder_ctl` turns §1 red on Apple arm64); every packet 40 B for a tone, silence and a mix, none padded; a 1 kHz tone back at exactly its length, in phase, its power kept; a packet that is not one 20 ms frame, or bytes that are not a record, refused before libopus decodes; the 60 s cap; `$OPUS`)
+- `audio_io_test` (§9 — the device seam with no device, on `SyntheticAudioIo` and `FileAudioIo`, through the `captureInto` / `playFrom` the device callback runs: a capture paced 48 frames a millisecond, its write index monotone, exactly the cap then `capped`, frames past it dropped; the peak, reset on read (32768 for int16.low); playback consumed whole, then `done`, zeros past the end; a WAV source paced by the clock, refused unless 48 kHz mono s16 (`wav-format`) or when cut short (`wav-truncated`); the PCM sink exactly the samples played; `busy`; pure Nim)
+- `audio_io_null_test` (§9 — `MiniaudioIo` on miniaudio's null backend: a real device thread, no device, no permission prompt, at most about 1 s a block: capture frames within 1 s, all zero, stop and close idempotent; a 0.2 s cap stops at 9,600 frames and sets `capped`; playback about 48,000 frames a second, a short buffer played to `done`; a second start while one runs is `busy`; `$MA`)
 
 **Monero (epic exo-dcc, ADR-018).**
 
@@ -154,6 +156,7 @@ W3="--path:$D/nim-eth --path:$D/nim-web3 --path:$D/nim-chronos --path:$D/nim-chr
     --path:$D/nim-serialization --path:$D/nim-json-serialization --path:$D/nim-http-utils"
 SODIUM="--passL:$(nix build nixpkgs#libsodium --no-link --print-out-paths)/lib/libsodium.so"
 OPUS="--passL:$(nix build nixpkgs#libopus.out --no-link --print-out-paths)/lib/libopus.so"
+MA="--path:$D/miniaudio"      # C source only: src/audio/miniaudio.nim finds it and compiles it
 nim r -d:release --threads:on $SECP $STINT $SODIUM tests/epoch_crypto_test.nim
 ```
 
@@ -163,6 +166,8 @@ Which group a test needs:
   `psbt_test`, `lez_multisig_chain_test`, `lez_multisig_model_test`, and most probes.
 - **`$OPUS`** — the voice codec, `src/audio/opus.nim` through `voice_codec`:
   `voice_codec_test`. `voice_clip_test` needs none.
+- **`$MA`** — the audio devices, `src/audio/miniaudio.nim`: `audio_io_null_test`. Without it
+  the compile stops at `miniaudio.h is on no --path`. `audio_io_test` needs none.
 - **`$SODIUM`** — anything whose import closure reaches `crypto/curve25519` (the
   Ed25519/X25519 encryption identity), which is most of the room: `decline_test`,
   `provenance_all_test`, `flow_test`, `materialshare_test`, `schema_unknown_test`,

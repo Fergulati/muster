@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Run module/tests in one command: every unit test and invariant probe, in parallel,
 # with one flag set that satisfies all of them (the union of $SECP, $STINT, the web3
-# closure, the SDK and libsodium from tests/README.md — extra --path entries are
-# harmless to a pure-Nim test). The Nim closure is cloned at the exact revs
-# module/metadata.json pins (codegen.nim.packages), so a local run builds against the
-# same sources the .lgx does.
+# closure, the SDK, libsodium, libopus and miniaudio from tests/README.md — extra --path
+# entries are harmless to a pure-Nim test; miniaudio's holds C source only, which
+# src/audio/miniaudio.nim finds on the path and compiles). The Nim closure is cloned at
+# the exact revs module/metadata.json pins (codegen.nim.packages), so a local run builds
+# against the same sources the .lgx does.
 #
 #   module/tests/run-suite.sh                 # unit tests + probes (no chains needed)
 #   module/tests/run-suite.sh unit            # unit tests only
@@ -134,6 +135,7 @@ FLAGS=(-d:release --threads:on --hints:off
   --path:"$P/nim-web3" --path:"$P/nim-chronos" --path:"$P/nim-chronicles" --path:"$P/nim-bearssl"
   --path:"$P/nim-faststreams" --path:"$P/nim-json-rpc" --path:"$P/nim-serialization"
   --path:"$P/nim-json-serialization" --path:"$P/nim-http-utils" --path:"$P/logos-nim-sdk/src"
+  --path:"$P/miniaudio"
   --passL:"$SODIUM/lib/libsodium.$SOEXT" --passL:"-Wl,-rpath,$SODIUM/lib"
   --passL:"$OPUS/lib/libopus.$SOEXT" --passL:"-Wl,-rpath,$OPUS/lib")
 

@@ -2,7 +2,8 @@
 
 Voice notes' audio (`docs/design/voice-notes.md`): a short clip recorded, encoded, decoded and
 played inside `muster_module`. Audio plaintext never leaves the module: no method returns PCM
-or a clip, and nothing here writes a file (§7, §9).
+or a clip, and nothing here writes a file except `FileAudioIo`'s sink, to the one path it is
+given (`MUSTER_VOICE_SINK`, the offscreen self-test) (§7, §9).
 
 - `voice_clip.nim`: the clip record (§3.2), a CDE record of Opus packets built with
   `src/dcbor` (invariant 5), and its strict reader. Pure: it links no codec. The clip
@@ -12,6 +13,17 @@ or a clip, and nothing here writes a file (§7, §9).
   through `metadata.json` (`codegen.nim.link` "opus", `nix.packages.runtime` "libopus").
 - `voice_codec.nim`: PCM to a clip record and back at one fixed set of settings (§3.1):
   an incremental encoder (`feed` / `finish` / `clip`) and `decodeClip`.
+- `audio_io.nim`: the device seam (§9), shaped like `Transport` and `BlobStore`. `AudioBuffer`
+  is the only thing a device thread touches: `allocShared0`, sized to its cap, linear, two
+  `Atomic` indices, `capped`, `done` and the peak. `captureInto` / `playFrom` are the device
+  side. `AudioIo`'s methods (`startCapture`, `stopCapture`, `startPlayback`, `stopPlayback`,
+  `pump`, `close`) return `""` or a refusal word. `SyntheticAudioIo` (a virtual clock, a
+  collecting sink) and `FileAudioIo` (a 48 kHz mono s16 WAV source, a raw PCM sink) are the
+  in-process stand-ins; their `pump` drives the same device side 10 ms at a time.
+- `miniaudio.nim`: `MiniaudioIo`, miniaudio 0.11.23 behind the seam, on the platform's
+  backends (`abSystem`: CoreAudio; PulseAudio, then ALSA) or the null device (`abNull`). The C
+  comes from the `codegen.nim.packages` pin and is `{.compile.}`d from the `--path`, so no C is
+  tracked (`scripts/check-no-cpp.py`).
 
 Rules:
 - The ctl functions stay `{.varargs.}`, every SET value a `cint`, every GET argument a
@@ -23,5 +35,23 @@ Rules:
   `opus` or `voice_codec`: the fold must not link a codec (§6).
 - A change to any clip constant or the record's fields strands notes already sent: it is a
   new `v`, never an edit (§3.4).
+- **The device thread.** miniaudio calls back on a thread Nim does not own
+  (`transport/inbound_queue.nim:1-11`'s rule): the callbacks and `captureInto` / `playFrom`
+  stay `cdecl` / `gcsafe` / `raises: []` under `{.push stackTrace: off, checks: off.}`, with no
+  GC allocation, no raise, an explicit `min()` on every index, and only the buffer's atomics
+  shared. Only that side holds the 60 s cap: the module has no clock.
+- Devices start and stop on the module thread only, never from a callback; one stream per
+  `AudioIo` at a time (a second start is `busy`). A buffer is freed only after the stream using
+  it stopped (`ma_device_uninit` waits for the device thread). `close` runs before unload.
+- `abSystem` never lists Null, and never an empty list (miniaudio's default order ends in Null):
+  no backend means `no-device`, never a recording of zeros.
+- Nothing outside this directory imports `miniaudio`; the voice surface (S7) codes against
+  `AudioIo`. Every miniaudio header type stays in `miniaudio.nim`, and the `-D` backend flags
+  stay one global `passC` (they change struct layouts).
+- No test opens a real device: `abNull` only. A real-device test sits behind
+  `MUSTER_VOICE_REAL`, in run-suite's E2E list (S11).
 - Tests: `module/tests/voice_clip_test.nim` (pure), `module/tests/voice_codec_test.nim`
-  (libopus; `run-suite.sh` links nixpkgs' libopus, `MUSTER_OPUS` picks another).
+  (libopus; `run-suite.sh` links nixpkgs' libopus, `MUSTER_OPUS` picks another),
+  `module/tests/audio_io_test.nim` (the seam with no device), and
+  `module/tests/audio_io_null_test.nim` (miniaudio's null device thread; `run-suite.sh` puts
+  the pin's checkout on `--path`).
