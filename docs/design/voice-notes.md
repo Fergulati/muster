@@ -1,0 +1,660 @@
+# Voice notes: a short recorded clip in the room, sealed like text, one fixed size on the wire
+
+Status: **proposed 2026-10-21 by an outside contributor; nothing below is built yet.** This
+document is the first commit of a draft PR, so the maintainer can object to the wire format
+(§3–§5) before any code depends on it. There is no exo id yet (§18): the slices are S0–S11
+in the order of §17, and the commit scope is `voice-notes` until an id is assigned. Every
+code path named below as new is **planned**. Every file:line reference is to `main` at
+`67701f8`.
+
+Where it comes from: the design note *Voice in Muster* (2026-10-21, desk research against
+`67701f8`) compared four designs for voice against the invariants. It recommended
+asynchronous voice notes over the existing room first, and live calls only through a separate
+ADR, labelled content-private, never metadata-private. This is that first part.
+
+The idea in one paragraph: a member records up to 60 s. `muster_module` captures it, encodes it
+as constant-bitrate Opus, and holds it as a draft in memory. Nothing is posted until the member
+presses Send on a surface that has already said who will see what. Send splits the clip into
+exactly two author-signed `voice/…` events, sealed under the epoch key as text is, each padded
+to one fixed size. So every note costs the same two frames on the wire, whatever its length.
+Members fold the parts into notes, and the thread shows a card. Play decodes in the module and
+hands PCM to the speaker. The audio never crosses IPC in either direction.
+
+## 1. Goal and non-goals
+
+Goal: a member can record a voice note in a room, hear it back, and send it, and every member
+can play it. The design promises the following, and §10 names what it does not:
+- content confidentiality as text has it: sealed per epoch, readable by members only (F-16);
+- authorship: each note is signed by its author, so a forged one drops out of the room's view
+  (exo-f76, invariant 9);
+- a store node can tell that a note was sent, to which topic and when, but not how long it is
+  (FS-9).
+
+Non-goals for v1:
+- **Live calls.** Live audio cannot ride the room transport: every send is stored, messages are
+  capped at 150 KiB, and receive is not real-time. Calls are a separate ADR (the design note's
+  option B: relay-only, content-private).
+- **Re-sharing to late joiners.** A member admitted after a note cannot play it (invariant 7),
+  and v1 has no way to share it again into the new epoch. FileShare has one (room-swarm.md §5.3).
+- **Transcription, speech-to-text, effects.** Audio is never interpreted.
+- **Windows.** The pinned builders have no Windows path (`docs/design/platforms.md`, R8).
+- **Attaching a note to an intent.** A note signs nothing for a chain (§16).
+
+## 2. Why room events, not FileShare
+
+FileShare (exo-4d0, `room-swarm.md`) carries sealed blobs of any size, and on first sight it
+looks like the natural carrier. It is the worse fit here:
+
+| | Room events (chosen) | FileShare blob |
+|---|---|---|
+| Needs | nothing new: the room's own transport | `storage_module` installed and running, and a seeder online (`storage_readiness`) |
+| Offline members | the store keeps the frames, so a member who was away catches up | a member needs a seeder reachable when they fetch |
+| New observers | none: room member and store node | the storage DHT (CID and providers) and storage peers (each seeder's IP), room-swarm.md §5.5 |
+| Size of a 60 s note | about 126 KB of clip in two 90 KB frames (§5) | built for multi-MB files; Padmé padding unbuilt (room-swarm.md §7 S2) |
+| Private fetch | the room path is already the only path | over Mix, about 15 KB/s: about 8 s for a 120 KB note |
+
+A 60 s note at 16 kbps is the same scale as the largest event the tree already sends: a Monero
+multisig blob part of `XBlobPart = 90_000` hex characters per event
+(`module/src/coordination/xmr_msig_spend.nim:40`). If notes ever outgrow two frames, FileShare
+is the path; v1 does not need it.
+
+## 3. Wire format
+
+### 3.1 Codec
+
+libopus 1.5.2 (nixpkgs at the builder's pin `e9f00bd`, BSD-3), with these settings:
+- 48 kHz mono, 20 ms frames (960 samples);
+- `OPUS_APPLICATION_VOIP`, `OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE)`;
+- **hard CBR** (`OPUS_SET_VBR(0)`) at 16,000 b/s;
+- DTX 0, in-band FEC 0, complexity 5, maximum bandwidth wideband.
+
+Why these settings:
+- **CBR.** With CBR the clip's size is a pure function of its duration, so the fixed padded
+  size of §4 can be tight. RFC 6562 §5 and RFC 7587 §3.1.2 both prefer CBR under encryption.
+  In a throwaway prototype on this builder's toolchain (Apple M5, 2026-10-21, not in the
+  repo), every packet came out at exactly 40 B, for a 1 kHz tone, for silence, and for a mix
+  of the two. The encoder pads a short packet up to 40 B with `opus_packet_pad` and refuses a
+  longer one.
+- **DTX and FEC off.** DTX would shrink silent frames. FEC is useless inside a sealed blob,
+  which loses no packets.
+- **16 kbps** is Opus's recommended floor for wideband speech.
+- **Complexity 5** encoded 60 s in about 0.26 s in the prototype, against about 1.0 s at
+  complexity 10. That matters because dispatch is synchronous.
+
+The binding is `importc` with no header, in the style of `module/src/crypto/sodium.nim`. The
+ctl functions are declared `{.varargs.}`. In the prototype, a fixed-arity `opus_encoder_ctl`
+returned `OPUS_OK` but set the wrong value on Apple arm64: `SET_BITRATE(16000)` read back as
+300000. CBR sizes follow from the bitrate, so that bug would silently break §4. The codec test
+reads every setting back (S1).
+
+### 3.2 The clip record
+
+A CDE record built with `module/src/dcbor` (invariant 5), with no Ogg: no CRCs, no random
+serial numbers, no libopusenc. A CDE array of `bstr` is length-prefixed framing for free.
+
+```
+{ v: 1, codec: "opus", rate: 48000, ch: 1, frame: 960, br: 16000,
+  preskip: <encoder lookahead, 312 in the prototype>, samples: <exact count>,
+  packets: [ * bstr ] }
+```
+
+- **Why `preskip` and `samples` are stored.** They let the decoder trim the lookahead and the
+  zero-filled last frame.
+- **Decode is defensive.** libopus decodes room-supplied bytes inside the core, so decode
+  checks the structure first, without libopus. It refuses:
+  - any other `codec`, `rate`, `ch`, `frame` or `br`;
+  - a packet of 0 bytes or over 1,275;
+  - `samples` over 2,880,000 (60 s);
+  - a packet count other than `ceil((samples + preskip) / 960)`;
+  - trailing bytes.
+
+  It then requires `opus_packet_get_nb_samples == 960` for every packet before decoding. A
+  refusal is an error value, never a raise and never a Defect.
+- **Digest.** The clip's digest is a domain-separated hash-input record over its bytes,
+  `muster.voice.clip.v1`. There is no ad-hoc concatenation of the kind `newMessageEvent`
+  still uses for message ids (`intent_events.nim:598-612`).
+
+### 3.3 The events
+
+A note is exactly two author-signed events, one per half of the record's bytes:
+
+```
+key    voice/<nid>/<author>/<i>/2          i ∈ {0, 1}; author = 128 hex (ed25519 ‖ x25519)
+value  {"v":1, "ts":<int s>, "durMs":<int>, "digest":"<64 hex>", "part":"<base64>",
+        "authorSig":"<128 hex>"}
+nid    16 bytes (32 hex) of digest(hashInput("muster.voice.note-id.v1", author, clip digest, ts))
+```
+
+- **Integers only.** Every number is an integer: an author-signed value refuses a float
+  (`authorship.nim:95`). `durMs` is the record's own duration, `samples / 48`.
+- **Base64, not hex.** The value must be JSON text (`log/log.nim:48-58`). At 4/3, base64 fits
+  a 60 s half in one frame; hex at 2× would need three parts.
+- **The note id is content-addressed** over (author, clip, ts), so every member derives it,
+  and nobody can post under another member's note id (§6).
+- **The author is in the key.** `authorOf` classifies events on every hosted read. `message/`
+  and `file/` parse their value's JSON to find their author (`authorship.nim:100-125`), but
+  that would mean parsing an 84 KB value per voice part on every tick. So the branch reads the
+  key:
+
+  `if p[0] == "voice": return (true, (if p.len >= 3: p[2] else: ""))`
+
+  A malformed shape is still author-bearing, so it can never verify. The `authorship.nim`
+  header table gains the row, and `authorship_test` gains a section §11, appended (invariant
+  tests are append-only).
+- **Publishing.** Each part is published through `publishAuthored(s, ks, e, padTo =
+  VoiceFrameBytes)`.
+
+### 3.4 Constants
+
+| Name | Value | Why |
+|---|---|---|
+| `VoiceMaxMs` | 60,000 | the cap the device callback enforces (§9) |
+| `VoiceMinMs` | 500 | shorter is refused at Send (`too-short`) |
+| `VoiceBitrate` | 16,000 | §3.1 |
+| `VoiceParts` | 2 | a fixed part count, so the count says nothing about length |
+| `VoiceFrameBytes` | 90,112 (88 KiB) | the padded plaintext of every voice frame (§4, §5) |
+
+Changing any of these after release strands notes already sent: a new value is a `v: 2`.
+
+## 4. Padding: `session.publish(padTo)`, and why the pad goes on the frame
+
+**Today.** `session.publish` ingests the event, encodes it as JSON (`encodeEvent`, not
+exported), seals it and sends `@[FrameData] & s.crypto.seal(encodeEvent(e))`
+(`coordination/session.nim:168-184`). The seal is libsodium secretbox, which adds a 24-byte
+nonce and a 16-byte MAC (`crypto/epoch_crypto.nim:144-147`). Nothing in `module/` pads
+anything today.
+
+**Planned (S4).** `publish(ev, padTo = 0)`. With `padTo > 0`, the event's JSON is followed by
+ASCII spaces up to exactly `padTo` bytes before sealing. `padTo = 0` is today's path, byte for
+byte. So every voice frame is exactly 1 + 24 + 16 + 90,112 = **90,153 B**.
+
+Why on the frame, not inside the value:
+- `publishAuthored` signs the value first. Only then does it set `after = heads()` (0 to 8 ids,
+  `log.nim:226`) and sign `afterSig` (`authorship.nim:279-287`).
+- A pad inside the value would be fixed before those bytes exist, so it could not account for
+  them.
+- The pad sits outside `value`, so the event id does not change: the id hashes parents, key
+  and the value's text, never the frame.
+
+Older clients read it unchanged. `decodeEvent` is `parseJson(toStr(b))` (`session.nim:82-83`).
+At the builder's Nim pin (2.2.4), the parser accepts trailing whitespace (5,000 spaces were
+tried) and refuses trailing garbage; this was checked while planning, outside the repo. So:
+- no new frame kind;
+- no `room_journal` change: journal frames are opaque, with `MaxFrame` 16 MiB
+  (`room_journal.nim:24`);
+- a 0.3.x peer reads a padded frame as an ordinary event, and ignores the `voice/` key (§7).
+
+**What does not fit, raises.** An event whose JSON exceeds `padTo` raises `FrameTooLarge`
+before anything is ingested, journalled or sent. Today nothing guards size: an oversized frame
+lands in the sender's own log and reaches nobody, and a failed send is logged only under
+`MUSTER_LP_DEBUG` (`transport/delivery.nim:118-123`).
+
+## 5. Size budget
+
+These figures are arithmetic, not measured. The S4 and S5 tests measure the worst case.
+
+| | Bytes |
+|---|---|
+| One Opus packet at 16 kbps, 20 ms, CBR | 40 |
+| The same packet inside the CDE array (`bstr` header) | 42 |
+| A 60 s record: 3,000 packets plus about 77 B of header | 126,077 |
+| Each half | 63,039 |
+| The same half as base64 | 84,052 characters |
+| The event JSON, worst case: 128-hex author, 8 heads in `after`, `afterSig` | about 85,229 |
+| The padded plaintext, `VoiceFrameBytes` | 90,112 |
+| Margin left in the worst case | about 4,883 |
+| One frame on the wire: kind 1 + nonce 24 + MAC 16 + 90,112 | 90,153 |
+| **One note, any length from 0.5 s to 60 s: 2 frames** | **180,306** |
+| Delivery's per-message cap, as the tree assumes it (`xmr_msig_spend.nim:40`) | 153,600 (150 KiB) |
+
+A 500 ms note is about 1.1 KB of clip and still costs two full frames. That is the price of
+hiding length.
+
+The alternative was 12 kbps in one 128 KiB frame (§18). It would mean narrower speech, and a
+single frame bigger than anything the tree sends today.
+
+## 6. The fold
+
+`reduceVoice(roomEvents(s))` (planned, `coordination/voice.nim`) is pure and order-free, and
+it never links libopus. It imports only the clip record's structural checks. Its rules:
+
+1. **Authentic only.** `roomEvents` has already dropped a part that is forged, unsigned,
+   replayed from another room, or edited (`authorship.nim:262-277`).
+2. **Key shape.** Exactly `voice/<nid>/<author>/<i>/<n>`, with `n == 2`, `i` in {0, 1} and a
+   128-hex author. Anything else is dropped without raising.
+3. **The first copy stands.** In `canonicalOrder`, the first copy of each (nid, author, i)
+   stands, and an equivocating later copy is ignored, as in `readBlob`
+   (`xmr_msig_spend.nim:60-78`).
+4. **No squatting.** `nid` must equal `noteIdOf(author, digest, ts)`, the same refusal
+   `fileIdOf` makes for a squatted file id (`swarm.nim:135`).
+5. **The parts must agree.** Both carry the same `ts`, `durMs` and `digest`. The reassembled
+   record must match that digest and pass the structural checks of §3.2, and `durMs` must be
+   its own duration.
+6. **States.** A note is one of:
+   - `complete`: both parts, every check passed;
+   - `arriving`: one part so far;
+   - `broken`: the parts disagree, the digest misses, or the structure fails.
+
+   Only a complete note plays.
+7. **Epochs.** A part sealed in an epoch this member never held never opens, so the fold never
+   sees it (F-16).
+
+The result is `{nid, author, ts, durMs, state}` per note, ordered by (ts, nid). The hosted
+layer keeps a memo of complete-note verdicts, keyed by the parts' event ids, so a clip is not
+reassembled and checked on every read.
+
+## 7. Thread rows
+
+The thread is `coordinate_messages`, which returns every message body on each 1 s poll
+(`muster_module.nim:4566-4578`). Audio must never ride that. So a note is never a `message/`
+event, and there is no pointer message as `intent-ref` uses.
+
+Instead, a planned `threadRows(events)` merges `reduceMessages(events)` with one synthesized
+row per note, ordered by (ts, id). The row's body is metadata only, and under 300 B:
+
+`{"kind":"voice-note","v":1,"note":"<nid>","durationMs":N,"state":"complete|arriving|broken"}`
+
+`threadRows` is used in exactly two places:
+- `musterCoordinateMessages`, in place of `reduceMessages` (`:4574`);
+- the `lastTs` of `coordinate_conversations` (`:4624-4625`), so a note moves its room up the
+  list.
+
+`reduceMessages` itself is unchanged. Three things read address shares from it:
+- `settle_up.nim:81`;
+- `send.nim:28`;
+- the shared-address readers in `intent_events.nim` (`:643`, `:664`).
+
+What this means for each kind of reader:
+- **The thread.** RoomThread renders the row as `MusterCard { card: msg.parsedCard }`
+  (`RoomThread.qml:692-695`). `MusterCard.known` (`MusterCard.qml:712`) gains `voice-note`,
+  and its body is a new `CardVoiceNote.qml`. That file is pure render: it emits `play` and
+  `stop`, and RoomThread owns the backend calls, as for every card.
+- **A 0.3.x peer** sees nothing for a note: it never synthesizes the row, and it skips the
+  `voice/` events. That is better than its unknown-card render: an unknown kind draws nothing,
+  or a stray heading, never a text fallback (`RoomThread.qml:693, :722`).
+- **Older clients in general.** S8 fixes that fallback for the next unknown kind, but clients
+  already released keep it.
+
+## 8. Record → draft → send
+
+```
+             voice_record_start               voice_record_stop, or the 60 s cap
+   idle ─────────────────────────▶ recording ─────────────────────────────────▶ draft
+    ▲                                                                          │   │
+    │                voice_draft_send: two frames published                    │   │
+    ├──────────────────────────────────────────────────────────────────────────┘   │
+    └──────────────────────────────── voice_draft_discard ─────────────────────────┘
+
+   voice_play(note | "draft"), from idle or draft → playing → (end, or voice_play_stop)
+                                                              → back where it was
+```
+
+**The draft.** It lives in module memory only: never on disk, never over IPC. A crash loses
+it. There is one draft at a time. Nothing is posted without Send. The draft surface shows Play,
+Send, Discard and the disclosure lines first (material-and-disclosure.md §4, rule 2: "Nothing
+is disclosed without an act"). Proposed wording, for S8:
+
+> Everyone in this room can play it. Your voice can identify you, here and outside this room.
+> The store node sees two sealed frames of one fixed size, and when.
+
+**The methods** (planned for `muster.lidl` in S3 and S7). Each one returns at once. Parameter
+names avoid C++ keywords (`7480de8` renamed `private` for that reason), and every method
+declares a return type.
+
+| Method | Returns |
+|---|---|
+| `voice_status()` | the JSON below; it also drives the voice pump |
+| `voice_record_start()` | `{ok}`, or `{error}`: `not-joined` · `busy` (recording, playing, or a draft held) · `no-device` |
+| `voice_record_stop()` | `{draft: {durationMs, silent, peak}}`, or `{error}` |
+| `voice_draft_send()` | `{note}`, or `{error}`: `no-draft` · `silent` · `too-short` · `not-joined` · `too-large` |
+| `voice_draft_discard()` | `"ok"` |
+| `voice_play(note_id)` | `"draft"` or a note id; `{ok}`, or `{error}`: `unknown-note` · `incomplete` · `broken` · `busy` · `no-draft` |
+| `voice_play_stop()` | `"ok"` |
+
+`voice_status` returns integers and strings, never a float, and never audio:
+
+```
+{ ready:     { capture: "unknown|ok|no-device|…", playback: "…", codec: "<opus_get_version_string()>",
+               note: "<a platform note, e.g. §11's, or empty>" },
+  recording: { state: "idle|recording|draft", elapsedMs, capMs: 60000, peak, capped, silent, error },
+  playing:   { note, positionMs, durationMs } | null }
+```
+
+**Refusals at Send:**
+- **Silent.** A recording whose samples are all exactly zero is refused as `silent`, and the
+  platform note says why (§11). A low but non-zero peak is only a warning.
+- **Too short.** Under 500 ms is refused as `too-short`.
+
+**Polling only.** The `.rep` declares no SIGNAL, the module has no clock
+(`docs/design/side-modules.md:66`), and the SDK's `emit` callback is a threadvar, so the audio
+thread cannot emit. So:
+- `voice_status` drives `voicePump`, as `fileshare_files` drives `fileSharePump`
+  (`muster_module.nim:2776`);
+- `coordinate_intents` also calls it, from its pump list (`:2835-2845`);
+- the UI polls `voice_status` every 250 ms while not idle;
+- the room's 1 s timer reads it too, so a recording any caller started shows a banner (§13).
+
+Elapsed time on screen comes from a QML clock. The module's cap is the one that counts.
+
+## 9. Devices, threads and the build
+
+**The `AudioIo` seam** (planned, `module/src/audio/audio_io.nim`). It is built in the shape of
+`Transport` and `BlobStore`, and no test mocks it (CLAUDE.md working agreements). Its
+implementations:
+- `SyntheticAudioIo`: deterministic PCM on a virtual clock, with a collecting sink. It is the
+  in-process stand-in, as `LocalBlobStore` is.
+- `FileAudioIo`: a 48 kHz mono s16 WAV source (`MUSTER_VOICE_SOURCE`) and a raw PCM sink
+  (`MUSTER_VOICE_SINK`), for the offscreen self-test (S9).
+- `MiniaudioIo(system | null)`: miniaudio's null backend runs the real device-thread path with
+  no device and no permission prompt. Real-device tests sit behind `MUSTER_VOICE_REAL`, in
+  run-suite's E2E list (S11).
+
+**The device callback.** miniaudio calls it on a thread Nim does not own, so it follows the
+same rule as `transport/inbound_queue.nim:1-11`:
+- no GC allocation, no raise, no Defect (a Defect there takes down `logos_host`);
+- `ptr UncheckedArray` and an explicit `min()` everywhere;
+- only atomics shared with the module thread.
+
+**Capture.** One buffer, `allocShared0` at record start, sized to the cap: 60 × 48,000 samples
+× 2 B = 5,760,000 B.
+- It is **linear and never wraps.** The callback advances an `Atomic[int]` write index, stops
+  writing at the cap and sets `capped`. However long the module thread is busy, the buffer
+  cannot overflow.
+- **Only this thread can enforce the cap.** The module has no clock, and a Stop can queue
+  behind a 20 s sync call.
+- **The module thread drains it.** The voice pump reads from its own index and Opus-encodes 20
+  ms at a time. Stop therefore finds at most about 1 s of audio left to encode. The same pass
+  keeps the peak and the all-zero check.
+
+**Playback.** The module thread checks the note (§3.2) and decodes it whole into a shared
+buffer; the prototype decoded 60 s in about 27 ms. The callback copies out at an atomic read
+index, writes zeros past the end and sets `done`. The pump then releases the device.
+
+**Device lifetime.** A device is opened lazily, on the person's own action, and bounded. It is
+stopped and uninitialised on the module thread only, never from the callback: on stop, on
+done, and before the module unloads. That is the `abandoned` lesson from the storage FFI
+(CLAUDE.md, pattern sources).
+
+**The build** (planned, S1–S3):
+- **libopus** comes from nixpkgs as libsodium does: `codegen.nim.link += "opus"` and
+  `nix.packages.runtime += "libopus"` (`module/metadata.json:55`, `:173`).
+- **miniaudio 0.11.23** comes in as a `codegen.nim.packages` fetch, pinned at
+  `f40cf03f80cdb7e741d43e53b7e706e8c1394bcf` (the hash nixpkgs uses for its source). It is
+  compiled into the staticlib with `{.compile.}`, with a global
+  `{.passC: "-I<dir> -DMA_…".}` computed from `querySettingSeq(searchPaths)`.
+  - **No C is tracked**, so `scripts/check-no-cpp.py:35-45` still passes.
+  - **The flags are global** because the backend defines change struct layouts.
+  - **Backends.** `MA_ENABLE_ONLY_SPECIFIC_BACKENDS` keeps CoreAudio, PulseAudio, ALSA and
+    Null. The system IO never lists Null, so a machine with no backend says `no-device`, and
+    never records zeros.
+  - **Runtime linking is kept.** miniaudio dlopens the platform's audio libraries itself. On
+    macOS the staticlib's only new undefined symbol was `_dlopen` (prototype). Framework entries
+    on the flat link list would also land on the Linux link line.
+- **The test harness** learns libopus and miniaudio as well: `module/tests/run-suite.sh` and
+  the host-harness probe (`probe_return_marshalling_host.nim`), or the suite goes red (S1, S3).
+
+## 10. Who sees what
+
+| Observer | Sees | Never sees |
+|---|---|---|
+| room member (epoch-key holder when the note was sealed) | the note itself, played: the audio, its author (signed), its length and time | — |
+| store node (delivery) | that the room's topic carried two frames of 90,153 B each, and when; a frame that size marks a voice note | its length, who sent it (FS-7), the audio |
+| relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
+| mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
+| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send a draft, or play a note aloud (§13) | the audio: no method returns it |
+
+**What the code adds** (planned, S6):
+- **A `voice/` branch in `flow.nim`.** Today an unknown prefix falls through to envelope-only
+  rows (`flow.nim:121-124`), which would show the room nothing about its own content. With the
+  branch, each part shows:
+  - room-member: `voice-note`, `voice-note-length`;
+  - store-node: `timing`, `topic`, `fixed-size`.
+- **The room map.** A `room_graph` entry, with basis author-signed and kind `voice`
+  (`room_graph.nim:69`, `:327`).
+- **Provenance.** A `logProvenance` entry as a peer message (`intents.nim:829`).
+
+`voice_test` pins those rows field for field, the way `swarm_test` §8 pins FileShare's.
+
+**The claim** (planned for S10, under FS-9 and worded narrowly; credibility imperative):
+
+> **A voice note's length does not show in its size.** Every voice note leaves as two sealed
+> frames of one fixed size, whatever its length, so a store node can tell that a voice note was
+> sent, to which room's topic and when, but not how long it is. It still sees the conversation
+> graph (the gap above).
+
+Its test is `module/tests/probes/probe_voice_fixed_size_stepper.nim` (S5), which covers
+durations from 0.5 s to 60 s, 0, 1 or 8 heads, and two epochs. It sits beside the existing gap
+*The store node still sees the conversation graph* (`contracts/claims/registry.json:83`) and
+does not soften it.
+
+**What still leaks.** The design note listed these, and each stays true after this PR:
+1. **A voice is a biometric, against FS-7.** FS-7 scopes a member's identity to the room. A
+   voice undoes that for everyone who hears it:
+   - a listener in two rooms can tell that the same person speaks in both;
+   - a voice can tie a member to a real person;
+   - nothing stops a listener re-recording playback.
+
+   The draft surface says so before Send (§8).
+2. **Size and timing are visible.** The store node sees the two frames at the moment of Send.
+   Their size marks them as a voice note: chat frames are far smaller, and the largest
+   events the tree sends today, Monero multisig blob parts, are of the same scale. Only the
+   length is hidden. Like text, the store keeps the
+   ciphertext for as long as the fleet's capacity policy allows, and `room_journal` keeps it
+   sealed on every member's disk. A note is exactly as forward-secret as the room's text: a
+   later holder of that epoch's key opens it.
+3. **Co-resident modules, with the access policy off** (§13).
+4. **Leaving re-keys nothing.**
+   - `coordinate_leave` announces nothing and re-keys nothing (`muster.lidl:133`).
+   - No method removes another member: F-16's "Removing a member rotates the epoch
+     immediately" is not built.
+   - So a member who left can still open every later note, as they can open later text, by
+     reading the topic again.
+5. **No mix test.**
+   - Nothing has sent a 90 KB frame under `mix = preferred | required`.
+   - Whether delivery 0.3's mix path carries a frame this size is unknown.
+   - Today a send that fails is visible only under `MUSTER_LP_DEBUG`.
+   - Voice notes make no mix claim, and claim [4] stays partial.
+
+The S10 registry entries carry these as gaps unless the maintainer prefers them folded into
+existing entries:
+- "a voice can identify the speaker" (exposed; the party is everyone who plays the note);
+- "modules loaded beside Muster can record and send as you" (exposed; the party is the
+  co-resident modules);
+- "leaving re-keys nothing" (exposed; the party is a former member). It is a room-wide gap
+  that no entry names today.
+
+## 11. macOS
+
+What I read on the installed `/Applications/LogosBasecamp.app` 0.3.2 (2026-10-21, with
+`codesign` and `PlistBuddy`):
+- `logos_host`, where `muster_module` runs, and `LogosBasecamp.bin` are both signed with the
+  hardened runtime (`flags=0x10000(runtime)`).
+- `logos_host`'s entitlements are `com.apple.security.cs.allow-jit` and
+  `com.apple.security.cs.disable-library-validation` only. There is no
+  `com.apple.security.device.audio-input`.
+- `Info.plist` has no `NSMicrophoneUsageDescription`.
+
+What follows from that is inferred, not tested: from Apple's hardened-runtime rules and OpenJDK
+bug JDK-8244951, CoreAudio capture inside `logos_host` succeeds and delivers zero-filled
+buffers, with no error and no prompt. Launching Basecamp from Terminal does not help, because
+`logos_host` itself is the hardened binary. Playback needs no permission.
+
+The answer (decided):
+- **Keep the record button.**
+- **Refuse an all-zero recording at Send** with error `silent`. The module supplies the note
+  (`hostOS == "macosx"`), so both UIs show the same words. Proposed wording: "Basecamp 0.3.2
+  can't use the microphone on macOS yet: it lacks the microphone permission."
+- **Never post silence.** A note of zeros would be a lie the card cannot show.
+
+**The upstream ask** (not filed: filing is a public post, and that is the operator's call):
+Basecamp adds `com.apple.security.device.audio-input` to `logos_host`'s entitlements (and the
+app's), adds `NSMicrophoneUsageDescription` to `Info.plist`, and re-signs.
+
+**Outside Basecamp.** An unbundled, nix-built binary is charged to the terminal app that runs
+it, and macOS asks the person to grant that app the microphone. S11's opt-in microphone test
+runs only with that consent.
+
+## 12. Linux
+
+All of this is unverified, because there is no Linux host here.
+- **What miniaudio loads.** It dlopens `libpulse.so` or `libpulse.so.0`, and
+  `libasound.so.2`. PipeWire answers through `pipewire-pulse`.
+- **Portable `.lgx` and the AppImage.** `logos_host` uses the system loader, so the distro's
+  libraries should resolve (inferred).
+- **A nix-built dev runner.** Nix glibc's loader does not read `/etc/ld.so.cache`, so a dlopen
+  by soname may find nothing. The system backend then reports `no-device`; it never records
+  silence, because Null is not on its list.
+  - The fix to try: `libpulseaudio` in `nix.packages.runtime`, so its lib dir joins RUNPATH.
+  - The list is flat, so it would enter the darwin closure too.
+  - A runner that drops nim.link libraries from RUNPATH has bitten before
+    (`docs/labbook/nim-cdylib-modules-cannot-load-in-basecamp-sdk-skew.md`).
+
+## 13. Co-resident callers, with the access policy off
+
+Basecamp runs with the access policy off by default, so any loaded module can call any other
+(`docs/basecamp-access-policy.md:3`, `side-modules.md:102`). A Nim provider cannot see its
+caller. So any module loaded beside Muster can:
+- call `voice_record_start` and turn on the microphone;
+- send the draft, with `voice_draft_send`, before the member decides. The note is signed with
+  the member's key, as `coordinate_post_message` already lets such a module post text in the
+  member's name;
+- play any complete note aloud, with `voice_play`;
+- poll `voice_status`. Its `peak`, read and reset at the poller's own rate, is a coarse loudness
+  envelope of a recording or playback in progress. Whether to coarsen it (one value per 100
+  ms, a few levels) is open for S7.
+
+What it cannot do is read audio: no method returns it, and `voice_status` carries state,
+position and peak only. That is unlike `coordinate_messages`, which serves room plaintext to
+any caller (`side-modules.md:104`).
+
+**The mitigations:**
+- **A banner.** The room's 1 s timer shows a recording banner from `voice_status`, whoever
+  started the recording. In headless `logoscore` nothing shows.
+- **The real fix** is `--access-policy enforce` with `muster_module`'s allowed callers set to
+  `muster_ui` (`docs/basecamp-access-policy.md`, `infra/access-policy.json`), or Basecamp's
+  capability broker.
+
+## 14. F-13: a message in another medium
+
+F-13 closes the render vocabulary: `message`, `intent`, `fact`, `choice`, `artifact`,
+`receipt`, plus system notices. Additions to it are core releases (`docs/01-furps.md:25`). This
+design classes a voice note as a **message** in another medium:
+- one member's words to the room;
+- no agreement and no chain;
+- authored and signed like text.
+
+It is not an `artifact`. F-17 ties artifacts to Logos Storage content addressing
+(`01-furps.md:29`), and a note rides the log.
+
+`MusterCard.known` gaining `voice-note` extends the UI's concrete card set, not the class
+vocabulary. The mic is an `IconAction` in the message row (`RoomComposer.qml:1294-1306`), not a
+tile in `RoomActionPicker`, which is titled "Propose something" and whose every tile is an
+intent. If the maintainer reads a new medium as a vocabulary addition, this is a core release,
+and the PR says so (§18).
+
+## 15. What is not verified
+
+Nothing in this document is built. What is unverified even as a plan:
+- **The audio facts came from a throwaway prototype on an Apple M5.** These are packet sizes,
+  the varargs hazard, the null backend, encode and decode cost, and miniaudio compiled through
+  `{.compile.}`. None of them has run through the real `logos-module-builder` derivation, and
+  none has run on Linux.
+- **Microphone capture under Basecamp's hardened runtime.** Zeros are inferred, not observed,
+  and so is real capture anywhere without the person's grant.
+- **Linux dlopen** of `libpulse` and `libasound`, from a portable `.lgx`, the AppImage and a
+  nix-built runner; and PipeWire.
+- **Delivery of two 90,153 B frames:**
+  - over the live fleet;
+  - with RLN on `logos.test`, where each note spends two sends;
+  - under `mix = preferred | required`.
+- **The cost of store catch-up.** It returns each payload as a JSON byte array
+  (`delivery.nim:309-315`), so a voice frame inside the 60 s lookback is re-fetched as several
+  hundred KB of JSON per query. That should be measured before anything is added; a seen-frame
+  short-circuit only if it matters.
+- **The cost of the fold.** `eventId`'s memo key concatenates the whole value (`log.nim:71-75`),
+  and every hosted read re-runs `roomEvents` with no fold cache (the cache is
+  `side-modules.md` S4, `exo-ff5.4`, not built).
+- **The size budget** (§5) is arithmetic until S4 and S5 measure the worst case.
+- **Checks that are Linux-only or the maintainer's:**
+  - the runner self-tests and `ui-parity.sh` for both UIs;
+  - the Nim UI's `contract_test`;
+  - `scripts/grade-specs.sh`.
+
+## 16. Invariants, checked
+
+| # | How voice notes keep it |
+|---|---|
+| 3 | No plugin is involved. The core captures, encodes, seals and plays. |
+| 4 | Notes are `reduceVoice(roomEvents(log))`, order-free and idempotent, and a property test permutes and duplicates the parts (S5 §9). The draft is not state: it is never posted until Send, and it is lost with the process. |
+| 5 | The clip is a CDE record. The note id and the clip digest are hash-input records (`muster.voice.note-id.v1`, `muster.voice.clip.v1`). Values hold no float. |
+| 7 | Parts are sealed under the epoch they were sent in. A later joiner never opens them, and v1 has no re-share. |
+| 8 | Nothing new runs on a server: no relay, no storage, no service. |
+| 9 | A note is named for its author only by its author's signature, and a forged or squatted part drops out. |
+| 1, 2, 10 | Not bound: a note signs nothing for a chain and enters no effect. Attaching a note to an intent would make its digest an external read (F-20), and that is out of scope. |
+
+## 17. Order of work
+
+Each slice's test is written and run red before its code (worker.md), and every commit carries
+`Tested-Behavior` or `TDD-Exempt`.
+
+- **S0 — this document** (TDD-Exempt: docs).
+- **S1 — The Opus binding, the clip record, the codec.** `audio/opus.nim`, `voice_clip.nim`
+  (pure CDE), `voice_codec.nim`, plus libopus in `metadata.json` and `run-suite.sh`. Tests:
+  `voice_clip_test` and `voice_codec_test`. The ctl read-back is the arm64 guard.
+- **S2 — The `AudioIo` seam and miniaudio on the null backend.** Tests: `audio_io_test` and
+  `audio_io_null_test`, which cover the cap, `capped`, `busy` and idempotent uninit.
+- **S3 — A native build gate.** `voice_status` in `muster.lidl`, with the marshalling probe
+  linking libopus and miniaudio.
+- **S4 — Fixed-size sealed frames.** `session.publish(padTo)` and `FrameTooLarge`. Test:
+  `session_pad_test`.
+- **S5 — Events, authorship, the fold, thread rows.** `coordination/voice.nim`, the `authorOf`
+  branch, `voice_test`, `authorship_test` §11, and three stepper probes: fixed size, author,
+  and order.
+- **S6 — Disclosure.** The `flow.nim` branch, the room map and provenance, with the rows pinned
+  in `voice_test`.
+- **S7 — The hosted surface and its state machine.** `voice_live.nim`, the six remaining
+  methods, `voicePump`, and `threadRows` in `coordinate_messages`. Test: `voice_live_test` on
+  `SyntheticAudioIo` and `LocalTransport`.
+- **S8 — The UI.** The `.rep` (both backends, ADR-019), `CardVoiceNote.qml`, the mic in the
+  composer, observer and kind labels, the regenerated gallery `FakeBackend.qml`, and the
+  unknown-kind fallback.
+- **S9 — End to end.** `scripts/voice-self-test.sh`: two offscreen runners, A sending from a
+  generated WAV and B playing into a PCM sink, with a 1 kHz Goertzel check. Plus the autopilots
+  in both backends and a `ui-parity.sh` entry.
+- **S10 — The claim, docs, labbook and layout.** The protects claim and the gaps of §10, and the
+  CLAUDE.md layout.
+- **S11 — Checks on a Mac display, the opt-in device test, and the draft PR.** Test:
+  `voice_device_e2e`, behind `MUSTER_VOICE_REAL`. Its microphone leg runs only with the
+  person's consent.
+
+## 18. Decisions
+
+Decided by the operator (2026-10-21):
+- **Length.** At most 60 s.
+- **Codec.** libopus, hard CBR at 16 kbps, 48 kHz mono, 20 ms frames, DTX off, FEC off.
+- **Shape on the wire.** Every note is exactly two author-signed parts, and each sealed frame
+  is padded to 90,112 B of plaintext (`VoiceFrameBytes`), through `session.publish(padTo)`.
+- **Carrier.** Room events, not FileShare (§2).
+- **Where audio lives.** Capture, playback and Opus live in `muster_module`, and audio
+  plaintext never crosses IPC.
+- **macOS.** Keep the record button, and refuse an all-zero recording as `silent` with the
+  Basecamp 0.3.2 note (§11).
+- **Process.** Open as a draft PR that asks the maintainer for an exo id and for spec sign-off.
+
+Asked of the maintainer (corpetty):
+- **An exo id for the epic.** Until it exists, commits use the `voice-notes` scope, and nothing
+  touches `.pebbles/`.
+- **The typed spec.** It would be `derived-exo-<id>`, through `discuss-issue`, with your
+  sign-off. The probes are written in stepper form now, as its oracles.
+- **The wire format, §3–§5, before S4 lands.** The alternative was 12 kbps in one 128 KiB
+  frame. Changing the format later strands notes already sent.
+- **F-13** (§14): is a voice note a message in another medium, or a core vocabulary addition?
+- **The Linux-only checks** (§15): who runs them? This PR is built on a Mac.
+- **Scope.** This PR regenerates the stale gallery `FakeBackend.qml`, which also pulls in
+  FileShare's missing slots, and fixes the unknown-card fallback. The Nim backend's missing
+  FileShare autopilot and FileShare's absence from `ui-parity.sh` are left for a separate PR.
+
+Still open:
+- whether to coarsen `voice_status`'s peak for co-resident callers (§13);
+- the exact disclosure wording on the draft surface (§8);
+- whether the gaps of §10 become new registry entries.
