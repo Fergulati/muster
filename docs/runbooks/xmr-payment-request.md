@@ -60,11 +60,11 @@ A shared address backs only one payment. A second send to it is refused until th
 **The payee:** keep Monero Wallet open on that wallet, and keep **this room open** in Muster. A room's payments are confirmed only while it is the open room (`exo-ff5.9`).
 
 ✓ Expect, in order:
-1. *says they paid — your wallet confirms it at 10 confirmations*;
+1. *says they paid — your wallet confirms it at 10 confirmations* (or the depth the request names);
 2. *seen, n of 10 confirmations*, once your wallet sees the transfer;
 3. confirmed, and final on both sides, at 10 confirmations. That takes about 20 minutes, since Monero makes a block about every two minutes.
 
-Only an incoming transfer to that subaddress, of exactly the amount, at 10 confirmations or more, confirms it. The payer's word, a txid, or an explorer never does. **Mark received** is the other way to finish: your word, recorded with no reference.
+Only an incoming transfer to that subaddress, of exactly the amount, at the request's depth or more, confirms it. The depth is 10 unless whoever made the request picked another (1 to 720) under **Counts as paid at this many confirmations**: fewer is faster for a small amount, and the payee carries the risk of a reorg. The payer's word, a txid, or an explorer never does. **Mark received** is the other way to finish: your word, recorded with no reference.
 
 ## 4. The receipt
 

@@ -1661,9 +1661,13 @@ proc proposeXmrRequest(chain, total, sharesJson, memo: string): string =
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii().replace("0x", "")
   var creditor = me
   var shares: seq[SplitShare]
+  var confirmations = ""   ## the depth the payee's wallet confirms at, chosen in the request ("" = 10)
   try:
     if not isCanonDec(total) or total == "0": return $(%*{"error": "bad-total", "total": total})
     let j = parseJson(sharesJson)
+    if j.kind == JObject and j.hasKey("confirmations"):
+      let c = j["confirmations"]
+      confirmations = (if c.kind == JInt: $c.getBiggestInt() else: c.getStr().strip())
     if j.kind == JObject and (j{"fiat"} != nil or (j{"asset"}.getStr().len > 0 and j{"asset"}.getStr().toUpperAscii() != "XMR")):
       return $(%*{"error": "bad-asset", "detail": "a Monero request is in XMR, in atomic units"})
     if j.kind == JObject and j{"creditor"}.getStr().len > 0:
@@ -1700,12 +1704,13 @@ proc proposeXmrRequest(chain, total, sharesJson, memo: string): string =
     let k = encFromSeed(default(array[32, byte])).identity().ed
     let stand = xmraddr.encodeAddress(net, makSubaddress, k, k)
     let pre = newSplitDriver(MoneroSplitFamily, chain, roomIdentities()).signRefusal(
-      effectFromJson(splitEffectJson(chain, "XMR", total, creditor, stand, shares, memo)))
+      effectFromJson(splitEffectJson(chain, "XMR", total, creditor, stand, shares, memo,
+                                     confirmations = confirmations)))
     if pre.len > 0: return $(%*{"error": "refused", "detail": pre})
     let m = xmrMintPayTo(moneroBackend(), chain, xmrRequestLabel(chain, total, memo, gMsgSeq))
     if not m.ok: return $xmrRefusalJson(m.why, chain)
     payTo = m.address
-  let effect = splitEffectJson(chain, "XMR", total, creditor, payTo, shares, memo)
+  let effect = splitEffectJson(chain, "XMR", total, creditor, payTo, shares, memo, confirmations = confirmations)
   var ttl = DefaultIntentTtl
   try: ttl = parseBiggestInt(getEnv("MUSTER_INTENT_TTL_S", $DefaultIntentTtl))
   except ValueError: discard
@@ -2958,7 +2963,7 @@ proc musterCoordinateIntents(): string =
             if opens:
               for k, val in unlockJson(xmrUnlockTarget(moneroBackend(), sp.chain, cmPump)): wallet[k] = val
           o["split"]["xmr"] = %*{"network": $xmraddr.networkOfChain(sp.chain).get(xmrStagenet),
-                                 "chainLabel": chainLabel(sp.chain), "confirmDepth": XmrConfirmDepth,
+                                 "chainLabel": chainLabel(sp.chain), "confirmDepth": (if sp.confirmations.len > 0: parseInt(sp.confirmations) else: XmrConfirmDepth),
                                  "payment": mine, "wallet": wallet}
         # a bill in fiat (exo-3a4): the quote the room is trusting — its currency, amount,
         # rate, source and time — for the card to name before anyone agrees

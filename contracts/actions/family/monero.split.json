@@ -7,7 +7,7 @@
       "family": "monero.split",
       "kind": "monero-split",
       "status": "built",
-      "summary": "The same agreement as every split, settled in XMR (ADR-018). The creditor's own wallet mints a subaddress for the request; each debtor agrees to their own share with their room key, and the creditor that the subaddress is theirs. Each debtor pays from any wallet they like (Basecamp's, Cake, Feather) through a monero: URI, and the creditor's own wallet confirms a part when its history shows an incoming transfer to that subaddress of exactly the share, at the 10-block unlock depth. With one debtor and the creditor not in it, it is a payment request.",
+      "summary": "The same agreement as every split, settled in XMR (ADR-018). The creditor's own wallet mints a subaddress for the request; each debtor agrees to their own share with their room key, and the creditor that the subaddress is theirs. Each debtor pays from any wallet they like (Basecamp's, Cake, Feather) through a monero: URI, and the creditor's own wallet confirms a part when its history shows an incoming transfer to that subaddress of exactly the share, at the request's depth (10, Monero's unlock depth, unless the request names 1–720). With one debtor and the creditor not in it, it is a payment request.",
       "effect": {
         "schema": "muster.effect.split.v1",
         "fields": [
@@ -375,7 +375,7 @@
         {
           "step": "final",
           "who": "the payee's own wallet",
-          "does": "Confirms once its history shows exactly the amount at that subaddress at 10 confirmations."
+          "does": "Confirms once its history shows exactly the amount at that subaddress at the request's depth (10 unless the request names 1–720)."
         }
       ],
       "refusals": [

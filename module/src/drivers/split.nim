@@ -46,6 +46,7 @@ const
   BtcSplitFamily* = "btc.split"   ## paid in BTC on a Bitcoin chain, each share its payer's own spend (exo-d17)
   BtcDust* = 546'u64              ## a Bitcoin output below this is non-standard: no share may be smaller
   MoneroSplitFamily* = "monero.split"   ## paid in XMR to the creditor's own subaddress, from any wallet (exo-dcc.5)
+  XmrMaxConfirmations* = 720              ## a Monero request's confirmation depth: 1 block up to about a day
   XmrMaxAtomic* = "18446744073709551615" ## Monero amounts are uint64 atomic units: no share above this
   SplitDomain* = "muster.split.v1"
   SplitSchema* = "muster.effect.split.v1"
@@ -72,6 +73,8 @@ type
     chain*, asset*, total*, creditor*, payTo*, memo*: string
     shares*: seq[SplitShare]
     quote*: SplitQuote      ## empty (currency "") = a bill in the asset itself
+    confirmations*: string  ## a Monero split: the depth the payee's wallet confirms a part at,
+                            ## canonical decimal, chosen in the request ("" = the default, 10)
 
   SplitDriver* = ref object of Driver
     family*: string         ## evm.split | lez.split | btc.split
@@ -242,6 +245,7 @@ proc splitOf*(e: Effect): Split =
       of "at": result.quote.at = v.t
       else: raise newException(ValueError, "a quote has no field " & k.t)
     if not result.quote.quoted: raise newException(ValueError, "a quote names its currency")
+  result.confirmations = e.textOf("confirmations")
   let sh = e.fieldOf("shares")
   if sh.kind == ckArray:
     for x in sh.arr:
@@ -271,6 +275,15 @@ proc refusal(d: SplitDriver, sp: Split): string =
       return "payTo is not a Monero address this split can be paid at: " & xmraddr.acceptablePayTo(sp.payTo, d.chain).reason
     return "payTo is not a " & d.family & " address in its one spelling: " & sp.payTo
   if sp.memo.len > MaxMemo: return "the memo is longer than " & $MaxMemo & " bytes"
+  if sp.confirmations.len > 0:
+    # the depth the payee's wallet waits for (stasher.news feedback, 2026-10): the payee
+    # bears a reorg's risk, so the request says it, and everyone agrees to it with the rest
+    if d.family != MoneroSplitFamily:
+      return "only a Monero split names its confirmation depth; the others confirm at their network's own"
+    if not isCanonDec(sp.confirmations) or sp.confirmations == "0" or sp.confirmations.len > 3 or
+       parseInt(sp.confirmations) > XmrMaxConfirmations:
+      return "the confirmation depth is a whole number of blocks from 1 to " & $XmrMaxConfirmations &
+             " (asked: " & sp.confirmations & ")"
   if sp.quote.quoted:
     # a bill in fiat (exo-3a4): the total must BE the quote's conversion — derived, never trusted
     let q = sp.quote
@@ -699,6 +712,9 @@ method canonicalize*(d: SplitDriver, e: Effect): Materialization =
                                      cbText(sp.quote.fiatDecimals), cbText(sp.quote.rateFiat),
                                      cbText(sp.quote.rateAsset), cbText(sp.quote.source),
                                      cbText(sp.quote.at)])]
+     else: @[]) &
+    # a Monero request's chosen depth, tagged — a split without one is unchanged
+    (if sp.confirmations.len > 0: @[cbArray(@[cbText("confirmations"), cbText(sp.confirmations)])]
      else: @[]))))
 
 method expectMaterialization*(d: SplitDriver, m: Materialization) = d.pending = m.bytes
@@ -788,7 +804,8 @@ method partTransfer*(d: SplitDriver, e: Effect, part: string): PartTransfer =
   if not ok: return PartTransfer(ok: false, error: why)
   for s in sp.shares:
     if partName(s.who) == part:
-      return PartTransfer(ok: true, chain: d.chain, asset: sp.asset, to: sp.payTo, amount: s.amount)
+      return PartTransfer(ok: true, chain: d.chain, asset: sp.asset, to: sp.payTo, amount: s.amount,
+                          confirmations: (if sp.confirmations.len > 0: parseInt(sp.confirmations) else: 0))
   PartTransfer(ok: false, error: "not a part of this split")
 
 method covers*(d: SplitDriver, e: Effect): seq[CoverClaim] =
@@ -907,7 +924,7 @@ proc evenShares*(total, creditor: string, parties: seq[string],
     result.add SplitShare(who: w, amount: $(each - off))
 
 proc splitEffectJson*(chain, asset, total, creditor, payTo: string, shares: seq[SplitShare],
-                      memo: string, quote = SplitQuote()): string =
+                      memo: string, quote = SplitQuote(), confirmations = ""): string =
   ## The effect JSON a composer proposes: shares sorted by who, so the same split has one
   ## intent id on every host.
   var sh = shares
@@ -923,6 +940,7 @@ proc splitEffectJson*(chain, asset, total, creditor, payTo: string, shares: seq[
                     "fiatDecimals": quote.fiatDecimals, "rateFiat": quote.rateFiat,
                     "rateAsset": quote.rateAsset, "source": quote.source, "at": quote.at}
     j["sources"] = %*{"quote": "read"}
+  if confirmations.len > 0: j["confirmations"] = %confirmations   # a Monero request's chosen depth
   $j
 
 # ── composing a settle-up (exo-3c6) ────────────────────────────────────────────

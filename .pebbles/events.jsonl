@@ -2652,3 +2652,6 @@
 {"type":"close","timestamp":"2026-10-17T19:12:32.868403251Z","issue_id":"exo-c6a","payload":{}}
 {"type":"close","timestamp":"2026-10-17T19:14:25.203980705Z","issue_id":"exo-dcc.34.6","payload":{}}
 {"type":"comment","timestamp":"2026-10-17T19:14:25.465046448Z","issue_id":"exo-dcc.34.6","payload":{"body":"Member picker in the setup form (you always in; tap to leave someone out; the button names the M-of-N). Seen live on a dev runner."}}
+{"type":"create","timestamp":"2026-10-21T13:15:50.34831118Z","issue_id":"exo-e16","payload":{"description":"The payee now picks a Monero request's confirmation depth (1-720, default 10), agreed in the effect and signed (feat/xmr-confirm-depth). The typed spec derived-exo-dcc.5 still words s3 as 'at least 10 confirmations'; its probes use the default and stay 7/7. Re-word s3 and add a probe for a named depth, through discuss-issue (a spec change needs the operator's approval).","priority":"2","title":"derived-exo-dcc.5 s3: 'at least the depth the request names (10 by default)'","type":"task"}}
+{"type":"rename","timestamp":"2026-10-21T13:15:50.588941262Z","issue_id":"exo-e16","payload":{"new_id":"exo-dcc.35"}}
+{"type":"dep_add","timestamp":"2026-10-21T13:15:50.588941262Z","issue_id":"exo-dcc.35","payload":{"dep_type":"parent-child","depends_on":"exo-dcc"}}

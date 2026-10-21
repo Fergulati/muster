@@ -205,6 +205,10 @@ proc effectFromJson*(effectJson: string): Effect =
           var q: seq[(CborValue, CborValue)]
           for k, v in j["quote"]: q.add (cbText(k), cbText(v.getStr()))
           fields.add ("quote", cbMap(q))
+        if j.hasKey("confirmations"):
+          # a Monero request's chosen depth: carried as text, checked by the driver
+          let c = j["confirmations"]
+          fields.add ("confirmations", cbText(if c.kind == JInt: $c.getBiggestInt() else: c.getStr()))
         return Effect(schemaId: "muster.effect.split.v1", fields: fields)
       of "monero-multisig-spend":
         # A Monero room treasury's spend (ADR-020, exo-dcc.34): the chain, the account, the

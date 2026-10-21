@@ -165,6 +165,8 @@ type PartTransfer* = object
   asset*: string        ## the asset symbol the effect names
   to*: string           ## the address to pay, as the effect carries it
   amount*: string       ## canonical decimal, in the asset's smallest unit
+  confirmations*: int   ## the depth the counterparty confirms at, when the effect names one
+                        ## (a Monero request); 0 = the family's own default
 
 method partTransfer*(d: Driver, e: Effect, part: string): PartTransfer {.base, gcsafe.} =
   ## The transfer that settles `part` of `e`. Default: none — nothing settles in parts.
