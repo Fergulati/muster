@@ -247,14 +247,40 @@ returned 20 s later, while the prompt stood unanswered. That the start returns o
 person answers is inferred: nobody answered, so it was not seen. The all-zero check never
 ran.
 
-**What it means for the module (inferred).** `MiniaudioIo` starts a device on the module
+**What it meant for the module, and the fix.** `MiniaudioIo` started a device on the module
 thread, with no timeout. Under an app that has a usage string and an undecided permission, a
-first `voice_record_start` would hold that thread, and every other module call behind it,
-until the person answers. Basecamp's `logos_host` has no usage string, so whether it is asked
-at all is design §11's check, not this one.
+first `voice_record_start` would have held that thread, and every other module call behind
+it, until the person answered (inferred: not run in a host). PR 340's review asked for it to
+be fixed before merge, and it is: a device starts on a thread of its own (design §8, §9).
+`startCapture` and `startPlayback` hand the start's blocking half (`ma_context_init`,
+`ma_device_init`, the read-back, `ma_device_start`) to a detached pthread and return at once;
+the recorder is `starting` until the voice pump sees the device run, and past 15 s it gives
+up with `device-start-slow`. Stop, Discard and close let a pending start go, and its own
+thread closes the device and frees the buffer if the start ever returns. Three traps on the
+way, each now in `src/audio/CLAUDE.md`:
+- **Nim's heap is the wrong heap for that thread.** Under ORC, `allocShared` is the calling
+  thread's own allocator, which a thread Nim does not own must not touch, and the start thread
+  may have to free the capture buffer. So the buffer, the start's job, the context and the
+  device's memory are `calloc`'d and freed with `free`, and the buffer is counted by
+  reference: the recorder holds it, and so does a start until its thread is done with it.
+- **`pthread_attr_t` does not compile as Nim declares it on macOS.** `posix.nim` gives it an
+  integer type, and Nim zeroes a `var` of it with a cast clang refuses ("used type
+  'pthread_attr_t' where arithmetic or pointer type is required"). `{.noinit.}` on the
+  variable, then `pthread_attr_init`, compiles on both.
+- **A stop right after a start is the normal case, not an edge.** On the null device all 80
+  starts that `audio_io_null_test` §6 stops or closes at once were let go before their start
+  returned. Fired faster than they return, they also reach the cap of four starts in flight,
+  past which a start is refused `device-start-slow`, which is that cap working, so the test
+  waits for earlier starts between rounds.
+
+Whether the fix holds on a real device (the start on its own thread, a prompt answered while
+it waits) has not run: `voice_device_e2e` now pumps until the start lands, and its
+microphone leg is the first real check. Basecamp's `logos_host` has no usage string, so
+whether it is asked at all is design §11's check, not this one.
 
 **The test's answer.** A watchdog thread in `voice_device_e2e` arms before each device call
-and, past its limit, prints what it waited on (for the microphone: the prompt, which app it
+(since the fix: around the wait for a start to land, while the test pumps) and, past its
+limit, prints what it waited on (for the microphone: the prompt, which app it
 was for, and how to see that in tccd's log) and exits 1, which ends the whole test, the legs
 after it unrun. A test that hangs until run-suite's 900 s timeout says nothing. The log it
 points to covers the last hour, not minutes: on a second run while the first prompt still

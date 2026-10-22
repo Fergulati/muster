@@ -2861,8 +2861,15 @@ proc newVoiceIo(): AudioIo =
 proc hostVoice(): VoiceRecorder =
   if gVoice == nil:
     gVoice = newVoiceRecorder(newVoiceIo())
+    # A device starts on a thread of its own, so close never waits on a start in flight: it
+    # lets it go, and the start thread closes what it opens. The exit proc then waits up to
+    # 2 s for start threads to return, so a start that lands just after close is closed
+    # while this image is still mapped; one that never returns (a microphone prompt nobody
+    # answers) costs those 2 s, never a hang, and ends with the process (voice-notes.md §9).
     addExitProc(proc() {.noconv.} =
-      if gVoice != nil: discard gVoice.close())
+      if gVoice != nil:
+        discard gVoice.close()
+        discard waitStarts(2_000))
   gVoice
 
 proc voicePump() =

@@ -36,11 +36,17 @@
 ##
 ## The data callbacks run on miniaudio's thread, which Nim does not own. They are cdecl, gcsafe
 ## and raises: [], compiled with checks and stack traces off, and only hand the device's
-## buffer to audio_io's captureInto / playFrom. A device is initialised, started and
-## uninitialised on the module thread only, never from a callback; ma_device_uninit stops it
-## and waits for its thread, so the buffer can be freed once a stop returns. The context is
-## made on the first start and kept until `close`, which uninitialises it; a later start makes
-## a new one. The voice recorder (coordination/voice_live.nim, S7) closes its AudioIo whenever
+## buffer to audio_io's captureInto / playFrom. A device is initialised and started on a start
+## thread of its own (audio_io's start job: maRun), never on the module thread, since Core
+## Audio can hold a start while a microphone prompt stands (S11), and never from a callback;
+## the start thread keeps the callbacks' rule, and the memory it may free (the context, the
+## device, the buffer) is C's heap. The module thread's pump takes the context and the device
+## once the start runs. A device is uninitialised on the module thread (ma_device_uninit stops
+## it and waits for its thread, so the buffer can be let go of once a stop returns), or, for
+## a start let go before it returned, on its own start thread. The context is made by a
+## start, moves with each later start (the start holds it while in flight) and back to the io
+## when it runs, and is kept until `close`, which uninitialises it; a start that fails
+## releases it. The voice recorder (coordination/voice_live.nim, S7) closes its AudioIo whenever
 ## a stream ends, so between streams no context is open, and since muster_module has no
 ## unload hook (the generated surface exports none) it registers an exit proc that closes
 ## whatever still runs: a context, and its backend's threads, left alive when the host unloads
@@ -144,8 +150,9 @@ type
 
   MiniaudioIo* = ref object of AudioIo
     backend: AudioBackend
-    ctx: pointer                ## an ma_context, made on the first start, kept until close
-    dev: pointer                ## the open stream's ma_device; nil when idle
+    ctx: pointer                ## an ma_context, made by a start, kept until close; calloc'd
+    dev: pointer                ## the open stream's ma_device; nil when idle or starting; calloc'd
+    job: StartJob               ## the start in flight while `starting` (it holds the context)
 
   StreamFormat* = tuple[rate, channels: int, s16: bool]
     ## A stream's client-side settings: what the callback is handed.
@@ -188,21 +195,24 @@ proc backendNames*(b: AudioBackend): seq[string] =
   let list = backendsOf(b)
   for i in 0 ..< list.n: result.add $ma_get_backend_name(list.at[i])
 
-proc context(io: MiniaudioIo): ptr MaContext =
-  ## The context, made once; nil when no listed backend initialises, and the next start tries
-  ## again. The list is never empty: miniaudio reads an empty one as its default order, which
-  ## ends in Null.
-  if io.ctx == nil:
-    var list = backendsOf(io.backend)
-    if list.n == 0: return nil
-    let c = cast[ptr MaContext](allocShared0(sizeof(MaContext)))
-    if ma_context_init(addr list.at[0], uint32(list.n), nil, c) != MA_SUCCESS:
-      deallocShared(c)
-      return nil
-    io.ctx = c
-  cast[ptr MaContext](io.ctx)
+proc cCalloc(n, size: csize_t): pointer {.importc: "calloc", header: "<stdlib.h>", gcsafe, raises: [].}
+proc cFree(p: pointer) {.importc: "free", header: "<stdlib.h>", gcsafe, raises: [].}
+  # C's heap: a start thread frees what the module thread made when its start was let go
 
-proc formatOf(dev: ptr MaDevice, s: AudioStream): StreamFormat =
+type
+  MaStart = object
+    ## One start's own memory, calloc'd on the module thread, freed by whoever finishes the
+    ## start (maDispose): the context (the io's, handed over, or a new one) and the device.
+    ctx: ptr MaContext
+    dev: ptr MaDevice
+    backends: array[2, MaBackend]
+    n: int
+    ctxUp, devUp: bool          ## initialised (ctxUp: by this start, or handed over so)
+
+# ── The start thread's half (audio_io's start job): no GC, no raise, checks off ─────────────
+{.push stackTrace: off, checks: off.}
+
+proc formatOf(dev: ptr MaDevice, s: AudioStream): StreamFormat {.gcsafe, raises: [].} =
   ## Read back from an initialised device: the client side of stream `s`.
   case s
   of asCapture:
@@ -213,7 +223,7 @@ proc formatOf(dev: ptr MaDevice, s: AudioStream): StreamFormat =
      s16: dev.playback.format == ma_format_s16)
   of asIdle: (rate: 0, channels: 0, s16: false)
 
-proc playbackTail(dev: ptr MaDevice): int =
+proc playbackTail(dev: ptr MaDevice): int {.gcsafe, raises: [].} =
   ## The frames a playback device still holds once the callback has handed a frame over, at
   ## the client rate: miniaudio's intermediary buffer, then the device's own periods at its
   ## rate, rounded up. ma_device_uninit drops them, so `done` waits for this much silence.
@@ -223,30 +233,27 @@ proc playbackTail(dev: ptr MaDevice): int =
   let held = int(dev.playback.internalPeriods) * int(dev.playback.internalPeriodSizeInFrames)
   int(dev.playback.intermediaryBufferCap) + (held * ClipRate + rate - 1) div rate
 
-proc streamFormat*(io: MiniaudioIo): StreamFormat =
-  ## The open stream's client-side settings, read back from the device miniaudio initialised;
-  ## (0, 0, false) when idle. A start refuses any but 48 kHz mono s16 ("device-format").
-  if io.dev == nil: (rate: 0, channels: 0, s16: false)
-  else: formatOf(cast[ptr MaDevice](io.dev), io.stream)
+proc maRelease(m: ptr MaStart) {.gcsafe, raises: [].} =
+  ## Uninitialise what this start holds: the device (miniaudio stops it and waits for its
+  ## thread), then the context.
+  if m.devUp:
+    ma_device_uninit(m.dev)
+    m.devUp = false
+  if m.ctxUp:
+    discard ma_context_uninit(m.ctx)
+    m.ctxUp = false
 
-proc closeStream(io: MiniaudioIo) =
-  ## Uninitialise the open device: miniaudio stops it and waits for its thread. Module thread.
-  if io.dev != nil:
-    ma_device_uninit(cast[ptr MaDevice](io.dev))
-    deallocShared(io.dev)
-    io.dev = nil
-  io.stream = asIdle
-  io.buffer = nil
-
-proc openStream(io: MiniaudioIo, s: AudioStream, buf: AudioBuffer): string =
-  # A nil reaching pUserData is dereferenced on miniaudio's thread with checks off: a SIGSEGV
-  # in logos_host. Refused here, on the module thread, before a context or device is made.
-  if buf == nil: return "no-buffer"
-  if io.stream != asIdle: return "busy"
-  let ctx = io.context()
-  if ctx == nil: return "no-device"
+proc maRun(job: StartJob): int {.cdecl, gcsafe, raises: [].} =
+  ## The blocking half of a start, on its start thread: the context (unless handed over), the
+  ## device, its read-back, then its start. Core Audio can hold either while a microphone
+  ## prompt stands (S11). A failure releases all of it, a handed-over context included.
+  let m = cast[ptr MaStart](job.data)
+  if not m.ctxUp:
+    if ma_context_init(addr m.backends[0], uint32(m.n), nil, m.ctx) != MA_SUCCESS:
+      return StartNoDevice
+    m.ctxUp = true
   var cfg: MaDeviceConfig
-  if s == asCapture:
+  if job.stream == asCapture:
     cfg = ma_device_config_init(ma_device_type_capture)
     cfg.capture.format = ma_format_s16
     cfg.capture.channels = uint32(ClipChannels)
@@ -257,44 +264,141 @@ proc openStream(io: MiniaudioIo, s: AudioStream, buf: AudioBuffer): string =
     cfg.playback.channels = uint32(ClipChannels)
     cfg.dataCallback = cast[MaDataProc](onPlayback)
   cfg.sampleRate = uint32(ClipRate)
-  cfg.pUserData = buf
-  let dev = cast[ptr MaDevice](allocShared0(sizeof(MaDevice)))
-  if ma_device_init(ctx, addr cfg, dev) != MA_SUCCESS:
-    deallocShared(dev)
-    return "no-device"
-  if formatOf(dev, s) != ClipFormat:    # read back before the stream starts
-    ma_device_uninit(dev)
-    deallocShared(dev)
-    return "device-format"
-  if s == asCapture: buf.beginCapture() else: buf.beginPlayback(playbackTail(dev))
-  io.dev = dev
+  cfg.pUserData = job.buf
+  if ma_device_init(m.ctx, addr cfg, m.dev) != MA_SUCCESS:
+    maRelease(m)
+    return StartNoDevice
+  m.devUp = true
+  if formatOf(m.dev, job.stream) != ClipFormat:    # read back before the stream starts
+    maRelease(m)
+    return StartDeviceFormat
+  if job.stream == asCapture: job.buf.beginCapture()
+  else: job.buf.beginPlayback(playbackTail(m.dev))
+  if ma_device_start(m.dev) != MA_SUCCESS:
+    maRelease(m)
+    return StartNoDevice
+  0
+
+proc maStop(job: StartJob) {.cdecl, gcsafe, raises: [].} =
+  ## A start let go while it ran, that started its stream: stop it and release it all.
+  maRelease(cast[ptr MaStart](job.data))
+
+proc freeMaStart(m: ptr MaStart) {.gcsafe, raises: [].} =
+  ## Free a start's memory: what the io did not take (`ctx`, `dev` set nil) and the block.
+  if m == nil: return
+  if m.ctx != nil: cFree(m.ctx)
+  if m.dev != nil: cFree(m.dev)
+  cFree(m)
+
+proc maDispose(job: StartJob) {.cdecl, gcsafe, raises: [].} =
+  freeMaStart(cast[ptr MaStart](job.data))
+
+{.pop.}
+
+# ── The module thread's half ─────────────────────────────────────────────────────────────────
+
+proc streamFormat*(io: MiniaudioIo): StreamFormat =
+  ## The open stream's client-side settings, read back from the device miniaudio initialised;
+  ## (0, 0, false) when idle or starting. A start refuses any but 48 kHz mono s16
+  ## ("device-format").
+  if io.dev == nil: (rate: 0, channels: 0, s16: false)
+  else: formatOf(cast[ptr MaDevice](io.dev), io.stream)
+
+proc closeStream(io: MiniaudioIo) =
+  ## Uninitialise the open device: miniaudio stops it and waits for its thread. Module thread.
+  if io.dev != nil:
+    ma_device_uninit(cast[ptr MaDevice](io.dev))
+    cFree(io.dev)
+    io.dev = nil
+  io.stream = asIdle
+  io.buffer = nil
+
+proc settle(io: MiniaudioIo): string =
+  ## The start in flight: "" while pending, or once it runs (the io takes its context and
+  ## device), or the failure's word, once, with the io idle and nothing open.
+  case startPhase(io.job)
+  of spPending: return ""
+  of spRunning:
+    let m = cast[ptr MaStart](io.job.data)
+    io.ctx = m.ctx
+    io.dev = m.dev
+    m.ctx = nil
+    m.dev = nil
+    result = ""
+  of spFailed, spLetGo:
+    result = startFailure(io.job)
+    io.stream = asIdle
+    io.buffer = nil
+  finishStart(io.job)
+  io.job = nil
+  io.starting = false
+
+proc letGoStart(io: MiniaudioIo) =
+  ## Stop or close while the start is in flight: never waits on it. Let go, its start thread
+  ## stops whatever it started and frees it once its start returns; returned meanwhile, it is
+  ## settled here and its device closed.
+  if letGo(io.job):
+    io.job = nil
+    io.starting = false
+  else:
+    discard io.settle()
+  io.closeStream()
+
+proc openStream(io: MiniaudioIo, s: AudioStream, buf: AudioBuffer): string =
+  # A nil reaching pUserData is dereferenced on miniaudio's thread with checks off: a SIGSEGV
+  # in logos_host. Refused here, on the module thread, before a context or device is made.
+  if buf == nil: return "no-buffer"
+  if io.stream != asIdle: return "busy"
+  let list = backendsOf(io.backend)
+  if list.n == 0: return "no-device"
+  let m = cast[ptr MaStart](cCalloc(1, csize_t(sizeof(MaStart))))
+  m.backends = list.at
+  m.n = list.n
+  if io.ctx != nil:                     # the context moves with the start, and back if it runs
+    m.ctx = cast[ptr MaContext](io.ctx)
+    m.ctxUp = true
+    io.ctx = nil
+  else:
+    m.ctx = cast[ptr MaContext](cCalloc(1, csize_t(sizeof(MaContext))))
+  m.dev = cast[ptr MaDevice](cCalloc(1, csize_t(sizeof(MaDevice))))
+  let (job, why) = spawnStart(buf, s, maRun, maStop, maDispose, m)
+  if job == nil:                        # nothing started: the io keeps its context
+    if m.ctxUp:
+      io.ctx = m.ctx
+      m.ctx = nil
+    freeMaStart(m)
+    return why
+  io.job = job
   io.stream = s
   io.buffer = buf
-  if ma_device_start(dev) != MA_SUCCESS:
-    io.closeStream()
-    return "no-device"
+  io.starting = true
   ""
 
 method startCapture*(io: MiniaudioIo, buf: AudioBuffer): string =
-  ## "", "no-buffer", "busy", "no-device" (no backend listed for this platform initialised, or
-  ## it has no capture device), or "device-format" (the device read back as other than 48 kHz
-  ## mono s16).
+  ## "" once the start is on its way (`starting` until the pump sees it run), or at once
+  ## "no-buffer", "busy", "no-device" (no backend listed for this platform), "no-thread", or
+  ## "device-start-slow" (MaxStartsInFlight starts have not returned). The pump reports a
+  ## start that failed: "no-device" (no backend initialised, or no capture device), or
+  ## "device-format" (the device read back as other than 48 kHz mono s16).
   io.openStream(asCapture, buf)
 method stopCapture*(io: MiniaudioIo): string =
-  if io.stream == asCapture: io.closeStream()
+  if io.stream == asCapture:
+    if io.starting: io.letGoStart() else: io.closeStream()
   ""
 method startPlayback*(io: MiniaudioIo, buf: AudioBuffer): string =
   io.openStream(asPlayback, buf)
 method stopPlayback*(io: MiniaudioIo): string =
-  if io.stream == asPlayback: io.closeStream()
+  if io.stream == asPlayback:
+    if io.starting: io.letGoStart() else: io.closeStream()
   ""
 method pump*(io: MiniaudioIo): string =
-  ## Nothing to move: the device thread does it. The voice pump reads the buffer.
-  ""
+  ## A start in flight is settled here; nothing else to move: the device thread does it,
+  ## and the voice pump reads the buffer.
+  if io.starting: io.settle() else: ""
 method close*(io: MiniaudioIo): string =
-  io.closeStream()
+  if io.starting: io.letGoStart() else: io.closeStream()
   if io.ctx != nil:
     discard ma_context_uninit(cast[ptr MaContext](io.ctx))
-    deallocShared(io.ctx)
+    cFree(io.ctx)
     io.ctx = nil
   ""

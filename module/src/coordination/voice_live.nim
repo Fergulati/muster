@@ -3,16 +3,29 @@
 ## live in the module only, and no method returns audio: every reply is a small JSON object
 ## of integers, strings, booleans and null (voice_live_test §8).
 ##
-##              recordStart              recordStop, or the 60 s cap (the pump sees `capped`)
-##    idle ───────────────────▶ recording ──────────────────────────────────────────▶ draft
-##     ▲                                                                              │  │
-##     ├────────────── draftSend: two author-signed parts published ──────────────────┘  │
-##     └────────────── draftDiscard (also drops a recording in progress) ────────────────┘
+##          recordStart          the pump sees       recordStop, or the 60 s cap (`capped`)
+##    idle ─────────────▶ starting ─────────────▶ recording ──────────────────────────▶ draft
+##     ▲ ▲                   │  the device runs                                         │  │
+##     │ └───────────────────┘ Stop (not-started), Discard, close; or the start failed, │  │
+##     │                       or still pending after StartBoundMs (StartSlow)          │  │
+##     ├────────────── draftSend: two author-signed parts published ────────────────────┘  │
+##     └────────────── draftDiscard (also drops a recording in progress) ──────────────────┘
 ##
-##    play(note | "draft") from idle or draft → playing → done (the pump sees it), or
-##    playStop → back where it was. Never while recording; one stream at a time.
+##    play(note | "draft") from idle or draft → playing (`starting` until its device runs)
+##    → done (the pump sees it), or playStop → back where it was. Never while recording or
+##    starting one; one stream at a time.
 ##
-## The module has no clock (side-modules.md:66), so nothing here waits. `pump` is the voice
+## A device's start can wait on the person (Core Audio held one behind an unanswered
+## microphone prompt, S11), so it never runs on the module thread: recordStart and play answer
+## at once while the AudioIo starts the device on a thread of its own (audio_io's start job),
+## and the pump sees it land, fail (the device's word in ready.capture / ready.playback, and
+## recording.error) or stay pending past StartBoundMs (StartSlow). Stop, Discard, close and a
+## start past the bound let the start go: the io never waits on it, and the start's own thread
+## closes what it opens if it ever returns. The recording's time and its cap count from the
+## device's start, since only the device side fills the buffer.
+##
+## The module has no clock to run on (side-modules.md:66), so nothing here waits; the
+## recorder reads one (`clock`) only to time a start against StartBoundMs. `pump` is the voice
 ## pump that voice_status and coordinate_intents drive: it moves what the device side has
 ## done since the last call, drains the capture buffer into the incremental Opus encoder (so
 ## Stop finds at most what arrived since the last pump to encode), notices the device side's
@@ -93,10 +106,17 @@ const
     ## The platform note on macOS (§11): Basecamp 0.3.2's logos_host carries no audio-input
     ## entitlement and its Info.plist no NSMicrophoneUsageDescription.
   SamplesPerMs = ClipRate div 1000
+  StartBoundMs* = 15_000
+    ## How long a device start may stay pending before the recorder gives up on it: past it
+    ## the recording (or the playback) ends with StartSlow, and the start is let go, its
+    ## thread closing the device if it ever starts. A working device starts in well under a
+    ## second; the one slow start seen is Core Audio waiting on a microphone prompt (S11), and
+    ## 15 s leaves a person time to read and answer one, while "Starting the microphone…"
+    ## does not stand for longer than someone would wait on it (voice-notes.md §8, §9).
 
 type
   RecState* = enum
-    rsIdle = "idle", rsRecording = "recording", rsDraft = "draft"
+    rsIdle = "idle", rsStarting = "starting", rsRecording = "recording", rsDraft = "draft"
 
   VoiceIoKind* = enum
     vkSystem = "system"         ## the platform's own backends (MiniaudioIo abSystem)
@@ -108,7 +128,8 @@ type
     capture, playback: string   ## each device's readiness: DeviceUnknown until one opens
     note: string                ## ready.note: the platform note once a recording came back silent
     state: RecState
-    capBuf: AudioBuffer         ## the capture buffer while recording (60 s, allocShared0); else nil
+    capBuf: AudioBuffer         ## the capture buffer while starting or recording (60 s); else nil
+    startedAt: int64            ## the clock when the capture's start was asked for
     enc: ClipEncoder            ## the recording's incremental encoder while recording
     draft: VoiceClip            ## the draft, in state rsDraft
     room: string                ## the topic of the room the recording or draft belongs to
@@ -121,7 +142,10 @@ type
     playBuf: AudioBuffer        ## the decoded clip while playing; else nil
     playNote: string            ## what plays: a note id, or DraftNote; "" when nothing does
     playMs: int
+    playStarting: bool          ## its device has not started yet
+    playStartedAt: int64        ## the clock when its start was asked for
     memos: Table[string, VoiceMemo]   ## one per room topic (§6)
+    clock: AudioClock                 ## ms; times a device start against StartBoundMs
 
 proc platformNote*(os = hostOS): string =
   ## What the module says about a silent recording on `os` (§11), so every UI shows the same
@@ -136,9 +160,9 @@ proc voiceIoChoice*(source, sink, backend: string): tuple[kind: VoiceIoKind, sou
   elif backend == "null": (vkNull, "", "")
   else: (vkSystem, "", "")
 
-proc newVoiceRecorder*(io: AudioIo): VoiceRecorder =
+proc newVoiceRecorder*(io: AudioIo, clock = monotonicClock()): VoiceRecorder =
   ## Opens nothing.
-  VoiceRecorder(io: io, capture: DeviceUnknown, playback: DeviceUnknown)
+  VoiceRecorder(io: io, capture: DeviceUnknown, playback: DeviceUnknown, clock: clock)
 
 proc refusal(why: string): JsonNode = %*{"error": why}
 
@@ -149,8 +173,10 @@ proc hexOf(b: openArray[byte]): string =
 # ── the streams ─────────────────────────────────────────────────────────────────────
 
 proc releaseCapture(v: VoiceRecorder) =
-  ## Stop the capture and release the device; the buffer is freed only once the stream that
-  ## wrote it stopped (ma_device_uninit waits for the device thread).
+  ## Stop the capture and release the device, never waiting on a start in flight (the io lets
+  ## it go). The recorder lets go of its buffer only once the stream that wrote it stopped
+  ## (ma_device_uninit waits for the device thread); a start let go holds a reference of its
+  ## own, so its thread frees the buffer once its start returns.
   discard v.io.stopCapture()
   discard v.io.close()
   freeAudioBuffer(v.capBuf)
@@ -163,6 +189,7 @@ proc releasePlayback(v: VoiceRecorder) =
   v.playBuf = nil
   v.playNote = ""
   v.playMs = 0
+  v.playStarting = false
 
 proc drain(v: VoiceRecorder): string =
   ## Encode what the device side captured since the last drain; keep the peak. "" or the
@@ -208,11 +235,25 @@ proc dropDraft(v: VoiceRecorder) =
   v.capped = false
   v.recPeak = 0
 
+proc startTimedOut(v: VoiceRecorder, at: int64): bool =
+  v.clock() - at >= StartBoundMs
+
 proc pump*(v: VoiceRecorder): string =
-  ## The voice pump (§8): move what is due, drain and encode the capture, end a recording the
-  ## cap filled, end a playback the device side has heard to the end, and release the device
-  ## of every stream that ended. "" or the device seam's refusal.
+  ## The voice pump (§8): see a device start land, fail or pass StartBoundMs; move what is
+  ## due, drain and encode the capture, end a recording the cap filled, end a playback the
+  ## device side has heard to the end, and release the device of every stream that ended.
+  ## "" or the device seam's refusal.
   result = v.io.pump()
+  if v.state == rsStarting:
+    if result.len > 0:                # the start failed: the device's word
+      v.capture = result
+      v.dropRecording(result)
+    elif not v.io.starting:           # the device runs: the recording starts now
+      v.state = rsRecording
+      v.capture = DeviceOk
+    elif v.startTimedOut(v.startedAt):
+      v.capture = StartSlow
+      v.dropRecording(StartSlow)      # the start is let go; its thread closes what it opens
   if v.state == rsRecording:
     let capped = v.capBuf.capped      # read before the drain: everything up to it is drained
     let why = v.drain()
@@ -221,9 +262,16 @@ proc pump*(v: VoiceRecorder): string =
       v.capped = true
       v.finishRecording()
   if v.playNote.len > 0:
-    if result.len > 0:
+    if result.len > 0:                # the start failed, or the sink refused a write
       v.playback = result
       v.releasePlayback()
+    elif v.playStarting:
+      if not v.io.starting:
+        v.playStarting = false
+        v.playback = DeviceOk
+      elif v.startTimedOut(v.playStartedAt):
+        v.playback = StartSlow
+        v.releasePlayback()
     elif v.playBuf.done: v.releasePlayback()
 
 # ── the methods ─────────────────────────────────────────────────────────────────────
@@ -236,18 +284,19 @@ proc voiceStatus*(v: VoiceRecorder): JsonNode =
   let elapsed = case v.state
     of rsRecording: v.capBuf.written div SamplesPerMs
     of rsDraft: v.draft.durationMs
-    of rsIdle: 0
+    of rsIdle, rsStarting: 0
   let silent = case v.state
     of rsRecording: v.capBuf.written > 0 and v.recPeak == 0
     of rsDraft: v.silentDraft()
-    of rsIdle: false
+    of rsIdle, rsStarting: false
   let peak = v.peakSince
   v.peakSince = 0
   var playing = newJNull()
   if v.playNote.len > 0:
     playing = %*{"note": v.playNote,
-                 "positionMs": min(v.playBuf.readIndex, v.playBuf.written) div SamplesPerMs,
-                 "durationMs": v.playMs}
+                 "positionMs": (if v.playStarting: 0
+                                else: min(v.playBuf.readIndex, v.playBuf.written) div SamplesPerMs),
+                 "durationMs": v.playMs, "starting": v.playStarting}
   %*{"ready": {"capture": v.capture, "playback": v.playback, "codec": opusVersion(),
                "note": v.note},
      "recording": {"state": $v.state, "elapsedMs": elapsed, "capMs": VoiceMaxMs, "peak": peak,
@@ -255,9 +304,12 @@ proc voiceStatus*(v: VoiceRecorder): JsonNode =
      "playing": playing}
 
 proc recordStart*(v: VoiceRecorder, s: CoordinationSession): JsonNode =
-  ## voice_record_start: {ok}, or {error}: not-joined (no room: nothing opens), busy (a
-  ## recording, a playback or a draft held), codec, or the device seam's word (no-device, …),
-  ## which ready.capture then says. The recording, and its draft, belong to `s`'s room.
+  ## voice_record_start: {ok} at once, the device's start on its way (state starting until
+  ## the pump sees it run, then recording; a start that fails or passes StartBoundMs ends in
+  ## idle with recording.error and ready.capture its word), or {error}: not-joined (no room:
+  ## nothing opens), busy (a recording, a playback or a draft held), codec, or the device
+  ## seam's own word at once (no-device, no-source, device-start-slow, …), which
+  ## ready.capture then says. The recording, and its draft, belong to `s`'s room.
   discard v.pump()                    # a playback heard to its end is not busy
   if s == nil: return refusal("not-joined")
   if v.state != rsIdle or v.playNote.len > 0: return refusal("busy")
@@ -271,16 +323,20 @@ proc recordStart*(v: VoiceRecorder, s: CoordinationSession): JsonNode =
     freeAudioBuffer(buf)
     v.capture = rc
     return refusal(rc)
-  v.capture = DeviceOk
   v.capBuf = buf
   v.enc = enc
   v.room = s.topic
-  v.state = rsRecording
   v.recPeak = 0
   v.peakSince = 0
   v.capped = false
   v.error = ""
   v.note = ""
+  if v.io.starting:                   # the device starts on a thread of its own
+    v.state = rsStarting
+    v.startedAt = v.clock()
+  else:
+    v.state = rsRecording
+    v.capture = DeviceOk
   %*{"ok": true}
 
 proc draftJson(v: VoiceRecorder): JsonNode =
@@ -288,14 +344,23 @@ proc draftJson(v: VoiceRecorder): JsonNode =
 
 proc recordStop*(v: VoiceRecorder): JsonNode =
   ## voice_record_stop: {draft: {durationMs, silent, peak}}, the draft the 60 s cap already
-  ## made included, or {error}: not-recording, or why the recording could not be encoded.
+  ## made included, or {error}: not-recording; not-started (the device had not started, so
+  ## nothing was recorded: its start is let go, never waited on); the word of a start that
+  ## failed or was too slow; or why the recording could not be encoded.
   case v.state
   of rsIdle: refusal("not-recording")
   of rsDraft: v.draftJson()
-  of rsRecording:
-    discard v.pump()                  # what is due; the cap may make the draft here
-    if v.state == rsRecording: v.finishRecording()
-    if v.state == rsDraft: v.draftJson() else: refusal(v.error)
+  of rsStarting, rsRecording:
+    discard v.pump()                  # what is due: the start may land, the cap may make the draft
+    case v.state
+    of rsStarting:
+      v.dropRecording("")
+      refusal("not-started")
+    of rsRecording:
+      v.finishRecording()
+      if v.state == rsDraft: v.draftJson() else: refusal(v.error)
+    of rsDraft: v.draftJson()
+    of rsIdle: refusal(if v.error.len > 0: v.error else: "not-recording")
 
 proc draftSend*(v: VoiceRecorder, s: CoordinationSession, ks: Keystore, ts: int64): JsonNode =
   ## voice_draft_send: publish the draft as its two author-signed parts at `ts` (fixed at the
@@ -327,10 +392,10 @@ proc draftSend*(v: VoiceRecorder, s: CoordinationSession, ks: Keystore, ts: int6
   %*{"note": nid}
 
 proc draftDiscard*(v: VoiceRecorder): string =
-  ## voice_draft_discard: drop the draft, or a recording in progress, and its playback.
-  ## Always "ok".
+  ## voice_draft_discard: drop the draft, or a recording in progress or starting (its start
+  ## let go, never waited on), and the draft's playback. Always "ok".
   case v.state
-  of rsRecording: v.dropRecording("")
+  of rsStarting, rsRecording: v.dropRecording("")
   of rsDraft:
     if v.playNote == DraftNote: v.releasePlayback()
   of rsIdle: discard
@@ -419,12 +484,15 @@ proc roomProof*(s: CoordinationSession): JsonNode =
 
 proc play*(v: VoiceRecorder, s: CoordinationSession, noteId: string): JsonNode =
   ## voice_play: play the draft (`noteId` "draft") or a complete note of the joined room,
-  ## decoded whole in the module. {ok}, or {error}: busy (recording or playing), no-draft,
-  ## not-joined (a note with no room), unknown-note, incomplete (one part so far), broken (the
-  ## fold's verdict, or a clip libopus refuses), codec, or the device seam's word, which
-  ## ready.playback then says.
+  ## decoded whole in the module. {ok} at once, the device's start on its way (playing names
+  ## the note, `starting` until the pump sees the device run; a start that fails or passes
+  ## StartBoundMs ends it, playing null and ready.playback its word), or {error}: busy
+  ## (recording, starting one, or playing), no-draft, not-joined (a note with no room),
+  ## unknown-note, incomplete (one part so far), broken (the fold's verdict, or a clip
+  ## libopus refuses), codec, or the device seam's own word at once, which ready.playback
+  ## then says.
   discard v.pump()                    # a playback heard to its end is not busy
-  if v.state == rsRecording or v.playNote.len > 0: return refusal("busy")
+  if v.state in {rsStarting, rsRecording} or v.playNote.len > 0: return refusal("busy")
   var pcm: seq[int16]
   var durMs: int
   try:
@@ -457,10 +525,12 @@ proc play*(v: VoiceRecorder, s: CoordinationSession, noteId: string): JsonNode =
     freeAudioBuffer(buf)
     v.playback = rc
     return refusal(rc)
-  v.playback = DeviceOk
   v.playBuf = buf
   v.playNote = noteId
   v.playMs = durMs
+  v.playStarting = v.io.starting      # the device starts on a thread of its own
+  if v.playStarting: v.playStartedAt = v.clock()
+  else: v.playback = DeviceOk
   %*{"ok": true}
 
 proc playStop*(v: VoiceRecorder): string =
@@ -477,8 +547,10 @@ proc encodedMs*(v: VoiceRecorder): int =
 
 proc close*(v: VoiceRecorder): string =
   ## Stop any recording (dropped) or playback and release the device, before the module
-  ## unloads (§9). A draft stays in memory. Idempotent; always "ok".
-  if v.state == rsRecording: v.dropRecording("")
+  ## unloads (§9). A start in flight is let go, never waited on: its thread closes what it
+  ## opens if its start ever returns (the hosted exit proc then waits a bounded while for
+  ## that, `waitStarts`). A draft stays in memory. Idempotent; always "ok".
+  if v.state in {rsStarting, rsRecording}: v.dropRecording("")
   if v.playNote.len > 0: v.releasePlayback()
   discard v.io.close()
   "ok"

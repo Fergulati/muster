@@ -1034,7 +1034,7 @@ proc autopayTick(o: MusterUi) =
     " intents= " & qs(o.intentsJson)
 
 var
-  voiceStarted, voiceAsking: bool
+  voiceStarted, voiceTimed, voiceAsking: bool
   voicePlayed: HashSet[string]
   voiceTries: Table[string, int]
 
@@ -1050,7 +1050,9 @@ proc autovoicePlay(o: MusterUi, id: string) =
 proc autovoiceTick(o: MusterUi) =
   # Voice self-test (docs/design/voice-notes.md S9): MUSTER_AUTOVOICE=<seconds> records that
   # long once someone else is in the room, then sends the draft: the mic's Start, Stop and
-  # Send. MUSTER_AUTOVOICEPLAY=1 plays a complete note another member sent, while nothing
+  # Send. The module answers Start at once and starts the device on a thread of its own
+  # (§9), so the seconds count from the first voice_status that says recording, not from
+  # the call. MUSTER_AUTOVOICEPLAY=1 plays a complete note another member sent, while nothing
   # plays, as the card's Play does; a refused Play is tried again on the next tick, up to
   # five times. Each tick logs voice_status as VOICE and the thread's notes as VOICE-NOTES,
   # and each call's answer as VOICE-RESULT <call>.
@@ -1072,12 +1074,15 @@ proc autovoiceTick(o: MusterUi) =
     if secs > 0 and not voiceStarted and o.membersJson.contains("\"self\":false"):
       voiceStarted = true
       o.startVoiceRecordingDo(proc (r: string) =
-        info "VOICE-RESULT start " & o.voiceResultJson
-        after(secs * 1000, proc () =
-          o.stopVoiceRecordingDo(proc (r: string) =
-            info "VOICE-RESULT stop " & o.voiceResultJson
-            o.sendVoiceDraftDo(proc (r: string) =
-              info "VOICE-RESULT send " & o.voiceResultJson))))
+        info "VOICE-RESULT start " & o.voiceResultJson)
+    let recState = obj(o.voiceJson){"recording"}{"state"}.getStr("")
+    if secs > 0 and voiceStarted and not voiceTimed and recState == "recording":
+      voiceTimed = true
+      after(secs * 1000, proc () =
+        o.stopVoiceRecordingDo(proc (r: string) =
+          info "VOICE-RESULT stop " & o.voiceResultJson
+          o.sendVoiceDraftDo(proc (r: string) =
+            info "VOICE-RESULT send " & o.voiceResultJson)))
     let playing = obj(o.voiceJson){"playing"}
     if play and playing != nil and playing.kind == JNull:
       for n in notes:

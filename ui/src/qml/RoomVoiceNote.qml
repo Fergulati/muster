@@ -6,7 +6,10 @@ import Logos.Controls
 
 // The composer's voice note (docs/design/voice-notes.md §8), above the message row. The
 // module records, holds the draft and sends it; nothing reaches this view but voice_status
-// and each call's answer (Room.voice, Room.voiceResult). Three states:
+// and each call's answer (Room.voice, Room.voiceResult). Four states:
+//   starting   the same banner, "Starting the microphone…", with Stop and Discard: the module
+//              answered at once and starts the device on a thread of its own, and nothing is
+//              recorded until it runs (§8, §9);
 //   recording  a banner whenever voice_status says so, whoever started it (§13): the time on a
 //              clock of this view's own (the module's 60 s cap is the one that counts), the
 //              level, Stop and Discard. It is part of the room's composer, so it shows only
@@ -29,6 +32,7 @@ ColumnLayout {
     readonly property var rec: (vn.room.voice && vn.room.voice.recording) || ({})
     readonly property var ready: (vn.room.voice && vn.room.voice.ready) || ({})
     readonly property string recState: vn.room.voiceState
+    readonly property bool starting: vn.recState === "starting"
     readonly property int capMs: Number(vn.rec.capMs || 60000)
     readonly property bool draftPlaying: !!vn.room.voicePlaying && String(vn.room.voicePlaying.note || "") === "draft"
     function mss(ms) {
@@ -52,10 +56,10 @@ ColumnLayout {
                                      ? Math.min(vn.capMs, Math.max(0, vn.nowMs - vn.startedAt))
                                      : Number(vn.rec.elapsedMs || 0)
 
-    // ── recording: the banner ────────────────────────────────────────────
+    // ── starting, then recording: the banner ─────────────────────────────
     Rectangle {
         objectName: "voiceRecording"
-        visible: vn.recState === "recording"
+        visible: vn.recState === "recording" || vn.starting
         Layout.fillWidth: true
         implicitHeight: recRow.implicitHeight + 2 * Theme.spacing.medium
         radius: Theme.spacing.radiusLarge
@@ -63,7 +67,7 @@ ColumnLayout {
         border.width: 1
         border.color: MusterStyle.tint(MusterStyle.refused, 0.42)
         Accessible.role: Accessible.AlertMessage
-        Accessible.name: qsTr("Recording a voice note")
+        Accessible.name: vn.starting ? qsTr("Starting the microphone") : qsTr("Recording a voice note")
 
         RowLayout {
             id: recRow
@@ -73,7 +77,10 @@ ColumnLayout {
 
             Rectangle {
                 implicitWidth: 10; implicitHeight: 10; radius: 5
-                color: MusterStyle.refused
+                // hollow while the microphone starts: nothing is recorded yet
+                color: vn.starting ? "transparent" : MusterStyle.refused
+                border.width: vn.starting ? 2 : 0
+                border.color: MusterStyle.refused
             }
             ColumnLayout {
                 Layout.fillWidth: true
@@ -81,13 +88,15 @@ ColumnLayout {
                 RowLayout {
                     spacing: Theme.spacing.small
                     LogosText {
-                        text: qsTr("Recording a voice note")
+                        objectName: "voiceRecordingTitle"
+                        text: vn.starting ? qsTr("Starting the microphone…") : qsTr("Recording a voice note")
                         color: Theme.palette.text
                         font.pixelSize: MusterStyle.body
                         font.weight: Theme.typography.weightBold
                     }
                     LogosText {
                         objectName: "voiceRecordingTime"
+                        visible: !vn.starting
                         text: qsTr("%1 of %2").arg(vn.mss(vn.elapsedMs)).arg(vn.mss(vn.capMs))
                         color: Theme.palette.textSecondary
                         font.family: MusterStyle.mono
@@ -95,18 +104,22 @@ ColumnLayout {
                     }
                 }
                 LogosText {
+                    objectName: "voiceRecordingLine"
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: vn.rec.silent
+                    text: vn.starting
+                          ? qsTr("Nothing is recorded until it starts. If you are asked whether to allow the microphone, answer that first.")
+                          : vn.rec.silent
                           ? qsTr("The microphone is on, but no sound has reached it yet.")
                           : qsTr("The microphone is on. Nothing is sent until you press Send.")
-                    color: vn.rec.silent ? MusterStyle.warning : Theme.palette.textSecondary
+                    color: vn.rec.silent && !vn.starting ? MusterStyle.warning : Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.caption
                 }
                 // the level: the loudest sample since the last look, on a square-root scale
                 // so speech moves it
                 Rectangle {
                     objectName: "voiceLevel"
+                    visible: !vn.starting
                     Layout.preferredWidth: 160
                     implicitHeight: 4
                     radius: 2
@@ -171,7 +184,9 @@ ColumnLayout {
                 LogosText {
                     objectName: "voiceDraftTime"
                     Layout.fillWidth: true
-                    text: vn.draftPlaying
+                    text: vn.draftPlaying && !!vn.room.voicePlaying.starting
+                          ? qsTr("Starting the speaker…")
+                          : vn.draftPlaying
                           ? qsTr("%1 / %2").arg(vn.mss(vn.room.voicePlaying.positionMs)).arg(vn.mss(vn.elapsedMs))
                           : vn.mss(vn.elapsedMs)
                     color: Theme.palette.textSecondary
@@ -228,6 +243,10 @@ ColumnLayout {
         if (e === "device-format")
             return play ? qsTr("The speaker would not play sound in the form voice notes use.")
                         : qsTr("The microphone would not record in the form voice notes use.");
+        if (e === "device-start-slow")
+            return play ? qsTr("The speaker took too long to start. Try again in a moment.")
+                        : qsTr("The microphone took too long to start. If you were asked whether to allow it, answer that, then try again.");
+        if (e === "not-started") return qsTr("Nothing was recorded: the microphone had not started yet.");
         if (e === "not-recording") return qsTr("Nothing is recording.");
         if (e === "no-draft") return qsTr("There is no recording to send or play.");
         if (e === "too-short") return qsTr("Too short to send: record at least half a second.");
@@ -253,11 +272,23 @@ ColumnLayout {
     readonly property string noticeText: {
         if (vn.err.length > 0)
             return vn.refusalWords(vn.err, vn.room.voiceOp) + (vn.detail.length > 0 ? " " + vn.detail : "");
-        // a recording the module dropped, or a note the platform gives (on macOS, why the
-        // microphone gave nothing)
+        // a recording the module dropped: its device did not start (the module says that
+        // word as ready.capture too), or the encoder refused what it captured
         var re = String(vn.rec.error || "");
-        if (re.length > 0) return qsTr("The recording stopped: the voice encoder could not encode it (%1).").arg(re);
+        if (re.length > 0) {
+            if (re === String(vn.ready.capture || ""))
+                return vn.refusalWords(re, "record");
+            return qsTr("The recording stopped: the voice encoder could not encode it (%1).").arg(re);
+        }
+        // a Play the module took, whose speaker then did not start (ready.playback says why)
+        if (vn.playFailed.length > 0 && vn.room.voiceOp === "play" && !vn.room.voicePlaying)
+            return vn.refusalWords(vn.playFailed, "play");
+        // a note the platform gives (on macOS, why the microphone gave nothing)
         return String(vn.ready.note || "");
+    }
+    readonly property string playFailed: {
+        var p = String(vn.ready.playback || "");
+        return p === "" || p === "ok" || p === "unknown" ? "" : p;
     }
     InlineNotice {
         id: voiceNotice
@@ -268,7 +299,8 @@ ColumnLayout {
         // the next call is in flight Room shows no answer at all), and shows again if that
         // answer refuses in the same words; a platform note is dismissed until its words change
         occasion: vn.err.length > 0 ? String(vn.room.voiceAnswers) : ""
-        tone: vn.err.length > 0 || String(vn.rec.error || "").length > 0 ? "error" : "info"
+        tone: vn.err.length > 0 || String(vn.rec.error || "").length > 0
+              || (vn.playFailed.length > 0 && vn.room.voiceOp === "play") ? "error" : "info"
         title: vn.noticeTitle
         text: vn.noticeText
     }

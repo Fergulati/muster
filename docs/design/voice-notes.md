@@ -469,16 +469,32 @@ What this means for each kind of reader:
 ## 8. Record → draft → send
 
 ```
-             voice_record_start               voice_record_stop, or the 60 s cap
-   idle ─────────────────────────▶ recording ─────────────────────────────────▶ draft
-    ▲                                                                          │   │
-    │                voice_draft_send: two frames published                    │   │
-    ├──────────────────────────────────────────────────────────────────────────┘   │
-    └──────────────────────────────── voice_draft_discard ─────────────────────────┘
+        voice_record_start           the device runs           voice_record_stop, or the 60 s cap
+   idle ──────────────────▶ starting ────────────────▶ recording ─────────────────────────▶ draft
+    ▲ ▲                        │                                                            │   │
+    │ └────────────────────────┘ Stop (not-started), Discard, close: the start let go;      │   │
+    │                            a start that fails, or still pending after 15 s: error     │   │
+    │              voice_draft_send: two frames published                                   │   │
+    ├───────────────────────────────────────────────────────────────────────────────────────┘   │
+    └─────────────────────────────────────── voice_draft_discard ───────────────────────────────┘
 
-   voice_play(note | "draft"), from idle or draft → playing → (end, or voice_play_stop)
-                                                              → back where it was
+   voice_play(note | "draft"), from idle or draft → playing (starting until its device runs)
+                                       → (end, or voice_play_stop) → back where it was
 ```
+
+**A device starts off the module thread** (PR 340's review; §9). `voice_record_start` and
+`voice_play` answer at once: the device's start runs on a thread of its own, and
+`voice_status` says where it stands. A recording is `starting` until the device runs, then
+`recording`; its elapsed time and its 60 s cap count from the device's start, since only the
+device side fills the buffer. A note playing carries `starting: true` until its device runs,
+at position 0. A start that fails ends the recording, or the playback, with the device's word
+(`no-device`, `device-format`), which `ready.capture` or `ready.playback` then says, and
+`recording.error` for a recording; one still pending 15 s after the call ends it the same way
+with `device-start-slow` (`StartBoundMs`: a working device starts in well under a second, the
+one slow start seen is Core Audio waiting on a microphone prompt, §11, and 15 s leaves a
+person time to read and answer one while "Starting the microphone…" does not stand longer
+than anyone would wait on it). Stop, Discard and close while a start is pending never wait on
+it: they let it go, and its thread closes whatever it opens if its start ever returns (§9).
 
 **The draft.** It lives in module memory only: never on disk, never over IPC. A crash loses
 it. There is one draft at a time. Nothing is posted without Send. The draft surface shows Play,
@@ -495,11 +511,11 @@ declares a return type.
 | Method | Returns |
 |---|---|
 | `voice_status()` | the JSON below; it also drives the voice pump |
-| `voice_record_start()` | `{ok}`, or `{error}`: `not-joined` · `busy` (recording, playing, or a draft held) · `codec` · `no-device`, or another word the device seam gives (`FileAudioIo`'s `no-source`, …), which `ready.capture` then says |
-| `voice_record_stop()` | `{draft: {durationMs, silent, peak}}` (a draft the 60 s cap already made included), or `{error}`: `not-recording`, or why the encoder refused |
+| `voice_record_start()` | `{ok}` at once, the device's start on its way (above), or `{error}`: `not-joined` · `busy` (starting, recording, playing, or a draft held) · `codec` · `no-device`, or another word the device seam gives at once (`FileAudioIo`'s `no-source`, `device-start-slow` while four earlier starts have not returned, …), which `ready.capture` then says |
+| `voice_record_stop()` | `{draft: {durationMs, silent, peak}}` (a draft the 60 s cap already made included), or `{error}`: `not-recording` · `not-started` (the device had not started, so nothing was recorded; its start is let go) · the word of a start that failed or passed 15 s · why the encoder refused |
 | `voice_draft_send()` | `{note}`, or `{error}`: `no-draft` · `too-short` · `silent` (with `detail`, the platform note of §11) · `not-joined` · `room-changed` (the joined room is not the one the draft was recorded in) · `too-large`. The draft is kept on every refusal |
-| `voice_draft_discard()` | `"ok"`; it also drops a recording in progress |
-| `voice_play(note_id)` | `"draft"` or a note id; `{ok}`, or `{error}`: `unknown-note` · `incomplete` · `broken` (the fold's verdict, or a clip libopus refuses) · `busy` · `no-draft` · `not-joined` (a note with no room) · `codec`, or the device seam's word, which `ready.playback` then says |
+| `voice_draft_discard()` | `"ok"`; it also drops a recording in progress or starting |
+| `voice_play(note_id)` | `"draft"` or a note id; `{ok}` at once, the device's start on its way, or `{error}`: `unknown-note` · `incomplete` · `broken` (the fold's verdict, or a clip libopus refuses) · `busy` · `no-draft` · `not-joined` (a note with no room) · `codec`, or the device seam's word at once, which `ready.playback` then says. A start that fails or passes 15 s ends the playback, `playing` null and `ready.playback` its word |
 | `voice_play_stop()` | `"ok"` |
 
 `voice_status` returns integers, strings, booleans and null, never a float, and never audio:
@@ -507,8 +523,8 @@ declares a return type.
 ```
 { ready:     { capture: "unknown|ok|no-device|…", playback: "…", codec: "<opus_get_version_string()>",
                note: "<a platform note, e.g. §11's, or empty>" },
-  recording: { state: "idle|recording|draft", elapsedMs, capMs: 60000, peak, capped, silent, error },
-  playing:   { note, positionMs, durationMs } | null }
+  recording: { state: "idle|starting|recording|draft", elapsedMs, capMs: 60000, peak, capped, silent, error },
+  playing:   { note, positionMs, durationMs, starting } | null }
 ```
 
 **Refusals at Send**, in this order:
@@ -548,7 +564,10 @@ decides on what the device side has done by now: a playback heard to its end is 
 and a recording the cap ended is a draft Send can send, whether or not anything read
 `voice_status` since (`voice_live_test` §17). `voice_status`'s `peak` is the largest |sample| captured since the
 last read, and reading it resets it, raw (its coarsening is still open, §13). `elapsedMs` is
-what the device side has captured, at 48 samples a millisecond.
+what the device side has captured, at 48 samples a millisecond. The `starting` state, the
+pump that sees a start land, fail or pass 15 s, and Stop, Discard, Play and close around a
+start in flight are `voice_live_test` §29–§31, on `SyntheticAudioIo` with a start held by a
+`StartGate` until the test releases it.
 
 **Polling only.** The `.rep` declares no SIGNAL, the module has no clock
 (`docs/design/side-modules.md:66`), and the SDK's `emit` callback is a threadvar, so the audio
@@ -561,7 +580,15 @@ thread cannot emit. So:
 - the room's 1 s timer reads it too, so a recording any caller started shows a banner (§13),
   while a room's view is on screen: the banner is part of the room's composer.
 
-Elapsed time on screen comes from a QML clock. The module's cap is the one that counts.
+Elapsed time on screen comes from a QML clock, started when `voice_status` first says
+`recording`. The module's cap is the one that counts. While a recording is `starting`, the
+message row's banner says "Starting the microphone…", with Stop and Discard, no time and no
+level, and that nothing is recorded until it starts; a note's card says "Starting…" while its
+speaker starts. A start that failed or was too slow shows in words (`no-device`: "No
+microphone was found on this device."; `device-start-slow`: "The microphone took too long to
+start. If you were asked whether to allow it, answer that, then try again."), and so does a
+Play the module took whose speaker then did not start. The gallery fixture
+`room-voice-starting` holds each.
 
 **A refusal shows while it holds.** The UI keeps the last voice call's answer with the room the
 call was made in and where `voice_status` stood then (the recording's state, the note playing).
@@ -595,8 +622,9 @@ same rule as `transport/inbound_queue.nim:1-11`:
 - `ptr UncheckedArray` and an explicit `min()` everywhere;
 - only atomics shared with the module thread.
 
-**Capture.** One buffer, `allocShared0` at record start, sized to the cap: 60 × 48,000 samples
-× 2 B = 5,760,000 B.
+**Capture.** One buffer, made at record start on C's heap (`calloc`, so any thread can free
+it), sized to the cap: 60 × 48,000 samples × 2 B = 5,760,000 B. It is counted by reference:
+the recorder holds it, and so does a device start while its start thread runs (below).
 - It is **linear and never wraps.** The callback advances an `Atomic[int]` write index, stops
   writing at the cap and sets `capped`. However long the module thread is busy, the buffer
   cannot overflow.
@@ -610,11 +638,39 @@ same rule as `transport/inbound_queue.nim:1-11`:
 buffer; the prototype decoded 60 s in about 27 ms. The callback copies out at an atomic read
 index, writes zeros past the end and sets `done`. The pump then releases the device.
 
-**Device lifetime.** A device is opened lazily, by `voice_record_start` or `voice_play`, and
-released at the first pump after its stream ends (below). With the access policy off, any
-caller can make those calls (§13). It is stopped and
-uninitialised on the module thread only, never from the callback: on stop, on done, and before
-the module unloads. That is the `abandoned` lesson from the storage FFI (CLAUDE.md, pattern
+**The start thread** (built since PR 340's review: `audio_io.spawnStart`, `MiniaudioIo`'s
+start). A device's start is the one device call that can wait on the person: on a Mac, Core
+Audio held a capture start while a microphone prompt stood unanswered (S11, §11). So no start
+runs on the module thread. `startCapture` and `startPlayback` make the start's job (the
+buffer, a reference to it, the context the io holds or a new one, the device's memory, all
+on C's heap) and hand it to a detached pthread, then return at once with the stream
+`starting`. That thread runs `ma_context_init`, `ma_device_init`, the read-back (S1's rule:
+48 kHz mono s16, or `device-format`) and `ma_device_start`, and Nim does not own it, so it
+keeps the callback's rule (above): no GC allocation, no raise, no Defect, C's heap and atomics
+only. The two threads
+meet at one atomic by compare-and-swap:
+- the start thread, once its start returns: pending → running, or failed with its word;
+- the module thread, at Stop, Discard or close before then: pending → let go, and it forgets
+  the start at once. The start thread's own swap then fails, so that thread finishes the job:
+  it uninitialises the device and context it started, lets go of its buffer reference and
+  frees the rest.
+
+The voice pump settles a running start (the io takes the context and the device) or a failed
+one (its word, once; nothing is left open) on the module thread. So nothing is freed twice or
+used after its free, whichever side finishes last, and a start that never returns holds its
+own job, buffer and thread, never the module thread. At most four starts wait at once
+(`MaxStartsInFlight`); past them a start is refused `device-start-slow`, so no caller can
+pile up threads behind a start that never returns. `audio_io_test` §7–§9 hold this on
+`SyntheticAudioIo` with a held start, and `audio_io_null_test` §6 on miniaudio's null
+device: 80 starts each stopped or closed at once, every one let go before its start
+returned, every buffer freed.
+
+**Device lifetime.** A device is opened lazily, by `voice_record_start` or `voice_play`, on its
+start thread, and released at the first pump after its stream ends (below). With the access
+policy off, any caller can make those calls (§13). It is stopped and uninitialised on the
+module thread, never from the callback: on stop, on done, and before the module unloads; a
+start let go before it returned is stopped by its own start thread instead. That is the
+`abandoned` lesson from the storage FFI (CLAUDE.md, pattern
 sources). The module has no unload hook: the generated surface exports none (`muster_gen.nim`:
 seven `logos_module_*` entry points and a constructor). So S7 does two things (built):
 - **Every stream releases its device at the first pump after it ends.** At Stop, at
@@ -634,6 +690,15 @@ seven `logos_module_*` entry points and a constructor). So S7 does two things (b
   and when the plugin's image is unloaded, since `atexit` ties a handler to the image that
   registered it (Apple's libc by `dladdr`, glibc by the DSO handle). That window, a recording
   or a playback in progress when the host unloads the plugin, is not tested (§15).
+  `close` never waits on a start in flight: it lets it go. The exit proc then waits up to
+  2 s for start threads to return (`waitStarts`), so a start that lands just after `close`
+  is closed by its own thread while the image is still mapped. A start that never returns
+  costs those 2 s, never a hang: `logos_host` runs one module per process, so the process's
+  exit ends that thread. An image unloaded without the process ending, while such a start is
+  still blocked inside miniaudio, would leave that thread to return into code no longer
+  mapped; that is not tested, and whether a host ever does it is not known (§15). In process,
+  `voice_live_test` §31 makes it deterministic: close returns at once, and the bounded wait
+  ends.
 
 **The build** (built, S1–S3; the traps found on the way are in
 `docs/labbook/voice-notes-audio-stack.md`):
@@ -897,7 +962,15 @@ responsible for it: the terminal app, or the app that started the shell (S11's r
 names the one it was there). macOS asks the person to grant that app the microphone, and
 Core Audio holds the device's start while it asks: in S11 the start had not returned after
 20 s, with the prompt unanswered. That the start returns once the person answers is inferred,
-since nobody answered. S11's opt-in microphone test runs only with that consent.
+since nobody answered. S11's opt-in microphone test runs only with that consent. Since PR
+340's review the module starts the device on a thread of its own (§9), so a prompt like that
+holds that thread only: `voice_record_start` answers at once, `voice_status` says
+`starting`, the room says "Starting the microphone…" and that nothing is recorded until it
+starts, and 15 s after the call the recording ends with `device-start-slow`, its start let
+go. If the person allows the microphone after that, the start returns, its own thread closes
+the device, and the next Record starts at once (inferred, as above: not seen with a real
+prompt). A start that never returns costs its thread and its buffer until the process ends,
+never the module thread.
 
 ## 12. Linux
 
@@ -997,18 +1070,43 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   capture anywhere without the person's grant is unobserved too, and so is real capture with
   it: `voice_device_e2e`'s microphone leg got no frame, because the prompt went unanswered
   (§17 S11).
-- **A device start has no timeout, so on a Mac it can hold the module thread** (asked of the
-  maintainer, §18). On a Mac where the responsible app can prompt for the microphone (it has a
+- **A device start held the module thread: fixed in this PR** (PR 340's review, its second
+  should-fix; §18). On a Mac where the responsible app can prompt for the microphone (it has a
   usage string, and the permission is not decided), Core Audio's device start waited for the
   permission prompt, and nobody answered it: `voice_device_e2e`'s `startCapture` had not
-  returned after 20 s (S11). Nothing in the module times out a device start, and the module
-  starts the device on its own thread (§9), so that thread could wait with it, and every
-  other module call behind it, until the person answers (inferred: not run in a host). The
-  options, neither built: start the device off the module thread, so `voice_record_start`
-  answers at once and `voice_status` says when the start lands or fails; or a start timeout,
-  after which the call refuses while the start, which has to run on another thread for that,
-  finishes or is closed when Core Audio returns. Whether `logos_host` under Basecamp, with no
-  usage string, is asked at all is §11's check.
+  returned after 20 s (S11). The module started the device on its own thread, so that
+  thread, and every module call behind it, could wait with it; the C++ UI calls
+  `voice_record_start` synchronously, so its view would have frozen too. Now a device starts
+  on a thread of its own, `voice_status` says `starting` until it runs, and a start still
+  pending 15 s after the call ends with `device-start-slow` (§8, §9). What ran, on this Mac:
+  - `audio_io_test` §7–§9 and `voice_live_test` §29–§31, written first and run red on the
+    seam as it was, whose start blocked its caller ("the start returns at once while the
+    device start is held: 1774 ms"; "voice_record_start answers at once while the device
+    start is held: 1760 ms", a safety net releasing the held start after 1.5 s), then green:
+    the call under 100 ms with the start held, `coordinate_messages`' rows and
+    `voice_status` answering meanwhile, the recording timed and capped from the device's
+    start, Stop (`not-started`), Discard and close letting the start go and its thread
+    freeing the buffer once released (the buffers counted), a failed start idle with
+    `no-device` in `recording.error` and `ready.capture`, one past 15 s `device-start-slow`,
+    and the same for Play;
+  - `audio_io_null_test` §6 on miniaudio's null device thread: 80 starts each stopped or
+    closed at once, 80 of them let go before their start returned, every buffer freed; and
+    §1–§4 pumping until the start lands before they read the device back;
+  - the host probe (`probe_return_marshalling_host`): its `voice_status` and the six voice
+    methods as before, with no room joined;
+  - `ui-nim/tests/autovoice/run.sh`, against a fake module whose recording is `starting`
+    for 1.5 s: red on the backend before this change ("the fake never said recording": its
+    Stop came while starting and was answered `not-started`), green on this one (recording
+    1,994 ms after Start, Stop about a second after that);
+  - the gallery fixture `room-voice-starting` (below).
+
+  What has not run: a real device's start on its start thread (`voice_device_e2e` now pumps
+  until a start lands, under its watchdog, and compiles; it has not been run since, so its
+  microphone leg, §17 S11, is the first real check of it), a prompt answered while a start
+  waits, any of it in a host (`logos_host`, Basecamp), the C++ autopilot's wait for
+  `recording` (it compiles into the `.lgx` and has not run), and an image unloaded while a
+  start is still blocked (§9). Whether `logos_host` under Basecamp, with no usage string, is
+  asked at all is §11's check.
 - **A device past the end of its stream.** The cap and `done` are noticed by the voice pump
   alone (§9), so with nothing calling the module the microphone stays open past 60 s (a
   review probe on the null device: still capturing 63 s after the start, 2,880,000 frames,
@@ -1042,7 +1140,8 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   under the author's name, as any older UI paired with this module would. S8 (built) draws it
   as a card; S8 and S7 should land in one push.
 - **S8 is seen only through the gallery, on a Mac, with no module.** The S8 fixtures
-  (`room-voice-forged`, `-notes`, `-record`, `-refused`, `-flow`, and `room-map-voice`) pass
+  (`room-voice-forged`, `-notes`, `-record`, `-refused`, `-flow`, `-starting`, and
+  `room-map-voice`) pass
   against the real `Main.qml` and the generated `FakeBackend.qml`, offscreen with Qt 6.9.2's
   software renderer (icons draw blank there) and both design systems, Basecamp 0.3.2's and
   the runner's; their voice rows, `voiceJson`, `voiceResultJson` and its count
@@ -1166,7 +1265,9 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
     a fake module with §8's state machine, and runs its timers in real time, with nim 2.2.12
     from ui-nim's own nixpkgs pin. It was a scratch harness in S9 and is committed since
     S9's review. On `9cc1005`'s backend: no voice call and no `VOICE` line. With S9's: Start,
-    Stop a second later and Send, once each; Play for each complete note from another
+    Stop a second later and Send, once each (since PR 340's review the fake's recording is
+    `starting` for 1.5 s, as the module's now is, and Stop comes a second after the first
+    `voice_status` that says `recording`); Play for each complete note from another
     member, one at a time, once each, and never for an arriving note, one's own, or a
     message whose body claims a note; a refused Play tried five times, no more. Six mutants
     are each caught: no self check, no played set, no complete check, Play while one plays,
@@ -1208,7 +1309,7 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   "B never played A's note (sent: none".
 - **The voice gallery fixtures break the gallery's own rule.** `ui/tests/gallery/CLAUDE.md`
   says fixture data is recorded, never hand-typed. S8's voice fixtures (`room-voice-notes`,
-  `-record`, `-refused`, `-flow`, `-forged`, and `room-map-voice`) are typed from the
+  `-record`, `-refused`, `-flow`, `-forged`, `-starting`, and `room-map-voice`) are typed from the
   module's shapes (above), and S9's recorded ones, the card complete, playing, arriving and
   broken and the message row recording and holding a draft, are not made:
   `scripts/ui-screenshot.sh record scripts/voice-self-test.sh` needs a runner, Xvfb and Qt's
@@ -1294,8 +1395,11 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   provenance read through it too, and each hosted method calls the recorder's proc
   (`lastTs`, `flowRows`, `graphOf`, `provenanceOf`) that `voice_live_test` §28 drives.
   Until the operator decides (§10), `coordinate_proof` refuses a room holding a voice note.
-  Test: `voice_live_test` on `SyntheticAudioIo` and `LocalTransport`, which holds §8's type
-  rule (no float) in every state, and the marshalling probe's not-joined replies.
+  Since the review's second should-fix a device starts on a thread of its own: Start and Play
+  answer at once, the recording is `starting` until the device runs, and a start that fails
+  or is still pending after 15 s ends in its word (§8, §9). Test: `voice_live_test` on
+  `SyntheticAudioIo` and `LocalTransport`, which holds §8's type rule (no float) in every
+  state, `starting` among them, and the marshalling probe's not-joined replies.
 - **S8 — The UI (built).** The `.rep` (SLOTs `loadVoice`, `startVoiceRecording`,
   `stopVoiceRecording`, `sendVoiceDraft`, `discardVoiceDraft`, `playVoiceNote(noteId)`,
   `stopVoicePlayback`; PROPs `voiceJson`, `voiceResultJson` and, since `adb9812`,
@@ -1326,6 +1430,8 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   microphone note as `detail`), its own thread must hold no note of its own after the Send,
   and B must hold one note still (`VOICE_SILENT=0` skips C). The autopilot,
   in both backends (ADR-019): `MUSTER_AUTOVOICE=<seconds>` is the mic's Start, Stop and Send
+  (the seconds counted from the first `voice_status` that says `recording`, since the module
+  starts the device on a thread of its own)
   once someone else is in the room; `MUSTER_AUTOVOICEPLAY=1` is the card's Play for a
   complete note another member sent, while nothing plays, a refused Play tried again up to
   five times; each tick logs `VOICE` (voice_status), `VOICE-NOTES` (the thread's `voice`
@@ -1369,7 +1475,10 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   - **A watchdog thread** ends the test, with a message, when a device call has not returned
     after 20 s. It ends the whole test, so a leg after the one that stalled does not run (the
     speaker leg below was run alone for that reason); a leg that fails a check is recorded,
-    and the next leg still runs.
+    and the next leg still runs. Since the review's second should-fix a start returns at once
+    and the device starts on a thread of its own (§9), so the test pumps until the start
+    lands, and the watchdog times that (20 s), as it times a stop or close (10 s); a start
+    call that takes 100 ms or more to return fails the leg. Not run since that change.
 
   **Run on this Mac, 2026-10-22** (macOS 26.5.2, Apple Silicon, outside Basecamp, run from Claude
   Code in the Claude desktop app, with the person's consent; `MUSTER_VOICE_REAL=1`, then
@@ -1435,14 +1544,17 @@ Asked of the maintainer (corpetty):
   acceptance criterion still names only `health()`, `propose()` and `status()`, so a voice
   regression now turns exo-526 red. Sign off on the wider oracle, or a voice spec's own probe
   takes these checks over once the epic has an exo id.
-- **A device start with no timeout** (§15). On a Mac where the responsible app can prompt,
-  Core Audio's device start waited for an unanswered permission prompt (S11), and nothing in
-  the module times out a device start, so the module thread could wait with it, and every
-  module call behind it. The options: start the device off the module thread, so the call
-  answers at once and `voice_status` reports the start; or a start timeout, the call refusing
-  after it while the start, run on another thread, finishes or is closed. This PR builds
-  neither. Which one, or neither until §11's check says whether Basecamp's `logos_host` is
-  asked at all?
+- **A device start with no timeout** (§15): **done in this PR**, the way the review
+  preferred (its second should-fix). On a Mac where the responsible app can prompt, Core
+  Audio's device start waited for an unanswered permission prompt (S11), so the module thread
+  could wait with it, and every module call behind it. Now the device starts off the module
+  thread: `voice_record_start` and `voice_play` answer at once, `voice_status` says
+  `starting` until the device runs, a start that fails ends in its word, one still pending
+  15 s after the call ends in `device-start-slow` with its start let go, and Stop, Discard
+  and close never wait on a start (§8, §9). The maintainer may still object: to the bound
+  (15 s), to the word, to a start thread at all, or to keeping this beside §11's open check
+  of whether Basecamp's `logos_host` is asked at all. A real device's start on that thread
+  has not run (§15).
 - **The Linux-only checks** (§15): who runs them? This PR is built on a Mac.
 - **Scope.** This PR regenerates the stale gallery `FakeBackend.qml`, which also pulls in
   FileShare's missing slots, and fixes the unknown-card fallback. The Nim backend's missing

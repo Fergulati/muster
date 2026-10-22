@@ -20,6 +20,7 @@ Item {
     property string authorName: ""
     property var ts: 0
     property bool playing: false           // this is the note the module is playing
+    property bool starting: false          // …and its speaker has not started yet (§9)
     property int positionMs: 0
     property bool canPlay: true            // false while something else records or plays
     signal playVoice(string note)
@@ -114,8 +115,9 @@ Item {
                 }
                 LogosText {
                     objectName: "voiceNoteTime_" + card.rowId
-                    text: card.playing ? qsTr("%1 / %2").arg(card.mss(card.positionMs)).arg(card.mss(card.durationMs))
-                                       : card.mss(card.durationMs)
+                    text: card.playing && card.starting ? qsTr("Starting…")
+                        : card.playing ? qsTr("%1 / %2").arg(card.mss(card.positionMs)).arg(card.mss(card.durationMs))
+                        : card.mss(card.durationMs)
                     color: Theme.palette.textSecondary
                     font.family: MusterStyle.mono
                     font.pixelSize: MusterStyle.caption

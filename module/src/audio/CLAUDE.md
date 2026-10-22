@@ -14,12 +14,16 @@ given (`MUSTER_VOICE_SINK`, the offscreen self-test) (§7, §9).
 - `voice_codec.nim`: PCM to a clip record and back at one fixed set of settings (§3.1):
   an incremental encoder (`feed` / `finish` / `clip`) and `decodeClip`.
 - `audio_io.nim`: the device seam (§9), shaped like `Transport` and `BlobStore`. `AudioBuffer`
-  is the only thing a device thread touches: `allocShared0`, sized to its cap, linear, two
-  `Atomic` indices, `capped`, `done` and the peak. `captureInto` / `playFrom` are the device
-  side. `AudioIo`'s methods (`startCapture`, `stopCapture`, `startPlayback`, `stopPlayback`,
-  `pump`, `close`) return `""` or a refusal word. `SyntheticAudioIo` (a virtual clock, a
-  collecting sink) and `FileAudioIo` (a 48 kHz mono s16 WAV source, a raw PCM sink) are the
-  in-process stand-ins; their `pump` drives the same device side 10 ms at a time.
+  is the only thing a device thread touches: `calloc`'d (C's heap, so any thread may free
+  it), counted by reference, sized to its cap, linear, two `Atomic` indices, `capped`, `done`
+  and the peak. `captureInto` / `playFrom` are the device side. `AudioIo`'s methods
+  (`startCapture`, `stopCapture`, `startPlayback`, `stopPlayback`, `pump`, `close`) return
+  `""` or a refusal word; a start may return with the stream `starting`, its blocking half on
+  a start thread (`spawnStart`, the start job), and `pump` settles it. `SyntheticAudioIo` (a
+  virtual clock, a collecting sink; with a `StartGate`, a start held on its start thread
+  until the test releases it) and `FileAudioIo` (a 48 kHz mono s16 WAV source, a raw PCM
+  sink; its start is synchronous: no device) are the in-process stand-ins; their `pump`
+  drives the same device side 10 ms at a time.
 - `miniaudio.nim`: `MiniaudioIo`, miniaudio 0.11.23 behind the seam, on the platform's
   backends (`abSystem`: CoreAudio; PulseAudio, then ALSA) or the null device (`abNull`). The C
   comes from the `codegen.nim.packages` pin and is `{.compile.}`d from the `--path`, so no C is
@@ -52,11 +56,33 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   stay `cdecl` / `gcsafe` / `raises: []` under `{.push stackTrace: off, checks: off.}`, with no
   GC allocation, no raise, an explicit `min()` on every index, and only the buffer's atomics
   shared. Only that side holds the 60 s cap: the module has no clock.
-- Devices start and stop on the module thread only, never from a callback; one stream per
-  `AudioIo` at a time (a second start is `busy`). Every start refuses a nil buffer
-  (`no-buffer`) on the module thread, before anything opens. A buffer is freed only after the
-  stream using it stopped (`ma_device_uninit` waits for the device thread). `close` runs before
-  unload.
+- **The start thread** (PR 340's review: a start held the module thread behind a microphone
+  prompt). No device start runs on the module thread: `ma_context_init`, `ma_device_init`,
+  the read-back and `ma_device_start` run on a detached pthread per start (`spawnStart`,
+  `MiniaudioIo`'s `maRun`), which Nim does not own, so it keeps the device thread's rule
+  above: `{.push stackTrace: off, checks: off.}`, `cdecl` / `noconv`, `gcsafe`, `raises: []`,
+  no GC allocation (no string, no seq, no ref, no closure), C's heap (`calloc` / `free`)
+  and atomics only. Never `allocShared` / `deallocShared` there: under ORC that is the
+  calling thread's own heap. The module thread makes the job and everything in it (the
+  buffer's extra reference, the context the io held or a new one, the device's memory)
+  before the thread starts; after that the two meet only at the job's `phase`, by
+  compare-and-swap: the start thread swaps pending → running or failed; the module thread,
+  at a stop or close before then, swaps pending → let go and forgets the job, never waiting.
+  Whoever loses the swap's race does not touch the job again: a let-go start's own thread
+  stops what it started (`stop`), lets go of its buffer reference, frees the rest
+  (`dispose`) and the job; otherwise the module thread's `pump` settles it (`finishStart`).
+  A start that fails releases everything it initialised before it reports. At most
+  `MaxStartsInFlight` (4) start threads wait at once: past them a start is refused
+  `device-start-slow`. A start that never returns holds its own thread, job and buffer until
+  the process ends: `close` lets it go, and the hosted exit proc waits for start threads
+  `waitStarts(2_000)`, at most 2 s, never longer (voice-notes.md §9).
+- Devices stop on the module thread, never from a callback, except a start let go before it
+  returned, which its own start thread stops; one stream per `AudioIo` at a time (a second
+  start, a starting one's included, is `busy`). Every start refuses a nil buffer
+  (`no-buffer`) on the module thread, before anything opens or any thread starts. A caller
+  lets go of a buffer (`freeAudioBuffer`) only after the stream using it stopped
+  (`ma_device_uninit` waits for the device thread); a start let go holds its own reference,
+  so the buffer is freed when its thread is done with it. `close` runs before unload.
 - `done` means heard, not handed over: `playFrom` sets it once the buffer's `tail` of silence
   has followed the last sample. The tail is what the implementation counts as still queued
   past the callback: 0 for the in-process sinks; for `MiniaudioIo`, the intermediary buffer
@@ -73,8 +99,8 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   `voice_live.voiceIoChoice` picks it: `FileAudioIo` when MUSTER_VOICE_SOURCE or
   MUSTER_VOICE_SINK is set, `MiniaudioIo(abNull)` for MUSTER_VOICE_BACKEND=null, else
   `MiniaudioIo(abSystem)`, and hands it to `voice_live`. That opens nothing: the context is
-  made on the first start. It registers an exit proc that closes the recorder, since the
-  generated surface has no unload hook. `voice_live` codes against `AudioIo` only. Every
+  made on the first start. It registers an exit proc that closes the recorder, then waits up to
+  2 s for start threads (`waitStarts`), since the generated surface has no unload hook. `voice_live` codes against `AudioIo` only. Every
   miniaudio header type stays in `miniaudio.nim`, never inside a generic (a `seq` of one put
   miniaudio.h into system's C: use a fixed array), and the `-D` backend flags stay one global
   `passC` (they change struct layouts).
@@ -83,14 +109,18 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   E2E list, and skips without it. It prints a capture's peak and RMS and nothing else from the
   audio, writes no file, and plays digital silence unless `MUSTER_VOICE_REAL_AUDIBLE=1`. On
   macOS a first capture start blocks while a microphone prompt stands unanswered (seen: still
-  not returned after 20 s; that it returns on an answer is inferred; the labbook, §9), so a
-  watchdog thread ends the test when a device call has not returned.
+  not returned after 20 s; that it returns on an answer is inferred; the labbook, §9). The
+  start now returns at once and blocks its start thread instead, so the test pumps until it
+  lands, and a watchdog thread ends the test when it has not landed after 20 s, or a stop
+  or close has not returned after 10 s.
 - Tests: `module/tests/voice_clip_test.nim` (pure), `module/tests/voice_codec_test.nim`
   (libopus; `run-suite.sh` links the builder pin's on macOS, the .lgx's 1.5.2, and nixpkgs'
   beside libsodium on Linux; `MUSTER_OPUS` picks another; §1 prints the version),
-  `module/tests/audio_io_test.nim` (the seam with no device),
-  `module/tests/audio_io_null_test.nim` (miniaudio's null device thread; `run-suite.sh` puts
-  the pin's checkout on `--path`), `module/tests/voice_device_e2e.nim` (the real devices,
+  `module/tests/audio_io_test.nim` (the seam with no device; §7–§9 a start held by a
+  `StartGate`: let go, failed, the in-flight cap, the buffers counted),
+  `module/tests/audio_io_null_test.nim` (miniaudio's null device thread, its starts on the
+  start thread, §6 stopping and closing 80 of them at once; `run-suite.sh` puts the pin's
+  checkout on `--path`), `module/tests/voice_device_e2e.nim` (the real devices,
   gated, above), and `module/tests/voice_live_test.nim` (the recorder over
   `SyntheticAudioIo`, `FileAudioIo` and the null device, two members over `LocalTransport`).
   `probes/probe_return_marshalling_host.nim` (exo-526) builds the whole module into a host,

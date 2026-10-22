@@ -717,8 +717,10 @@ Rectangle {
                     playing: msg.isVoice && !!room.voicePlaying
                              && String(room.voicePlaying.note || "") === String((msg.voice || {}).note || "")
                     positionMs: voiceCard.playing ? Number(room.voicePlaying.positionMs || 0) : 0
-                    // one stream at a time: nothing plays over a recording or another note
-                    canPlay: room.voiceState !== "recording" && !room.voicePlaying
+                    starting: voiceCard.playing && !!room.voicePlaying.starting
+                    // one stream at a time: nothing plays over a recording (or one starting)
+                    // or another note
+                    canPlay: (room.voiceState === "idle" || room.voiceState === "draft") && !room.voicePlaying
                     onPlayVoice: function (note) { room.playVoice(note); }
                     onStopVoice: room.stopVoicePlay()
                 }

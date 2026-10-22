@@ -2,10 +2,11 @@
 ## no device: SyntheticAudioIo (deterministic PCM on a virtual clock, a collecting sink) and
 ## FileAudioIo (a 48 kHz mono s16 WAV source, a raw PCM sink). Both move samples through
 ## `captureInto` / `playFrom`, the procs the miniaudio device callback runs, so the cap,
-## `capped`, the peak and `done` are held here on a clock the test owns. The real device
+## `capped`, the peak and `done` are held here on a clock the test owns, and (§7–§9) a start
+## held on its start thread by a StartGate: let go, failed, the in-flight cap. The real device
 ## thread runs in audio_io_null_test. Pure Nim: no libopus, no miniaudio.
 
-import std/os
+import std/[monotimes, os]
 import ../src/audio/[audio_io, voice_clip]
 
 proc ramp(n: int): seq[int16] =
@@ -259,5 +260,150 @@ block:
     doAssert io.close() == ""
   doAssert not fileExists(sink), "a refused playback opened its sink"
 echo "6. a nil buffer: no-buffer from every start, nothing opened OK"
+
+# ── A device start that does not return (PR 340's review, voice-notes.md §9, §15) ─────────
+# On a Mac, Core Audio held a capture start while a microphone prompt stood unanswered (S11:
+# still not returned after 20 s). A start held by a StartGate stands in for it: the start's
+# blocking half waits on the gate until the test releases it. The seam's answer is a start
+# that runs on a thread of its own: startCapture / startPlayback return at once with the
+# stream `starting`, and the pump says when it lands or fails. A safety net releases each
+# gate after 1.5 s, so a start that blocks its caller (the seam before the start thread)
+# returns late and fails on the time instead of hanging the test.
+
+proc msSince(t: MonoTime): int = int((getMonoTime().ticks - t.ticks) div 1_000_000)
+
+proc waitUntil(cond: proc (): bool, limitMs: int): bool =
+  let t0 = getMonoTime()
+  while not cond():
+    if msSince(t0) >= limitMs: return false
+    sleep(2)
+  true
+
+type Net = object
+  g: StartGate
+  ms: int
+proc netMain(n: Net) {.thread.} =
+  var waited = 0
+  while waited < n.ms and n.g.held:
+    sleep(10)
+    waited += 10
+  n.g.releaseStart()                  # a no-op once the test has released it
+
+# 7. A held capture start: the call returns at once, `starting`; a second start is busy; the
+#    pump moves nothing while it is held, so time that passes then is not captured. Released,
+#    the next pumps see it run, and the clock counts from there.
+block:
+  let base = liveAudioBuffers()
+  let vc = VirtualClock(ms: 1_000)
+  let g = newStartGate()
+  var net: Thread[Net]
+  createThread(net, netMain, Net(g: g, ms: 1_500))
+  let io = newSyntheticAudioIo(ramp(10_000), vc.clock, g)
+  let buf = newAudioBuffer(4_800)
+  let t = getMonoTime()
+  doAssert io.startCapture(buf) == ""
+  doAssert msSince(t) < 100, "the start returns at once while the device start is held: " & $msSince(t) & " ms"
+  doAssert io.starting and io.stream == asCapture
+  doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000), "the start's blocking half runs on a thread of its own"
+  doAssert startsInFlight() == 1
+  doAssert io.startCapture(buf) == "busy" and io.startPlayback(buf) == "busy"
+  vc.advance(50)
+  doAssert io.pump() == "" and io.starting and buf.written == 0, "nothing moves while the start is held"
+  g.releaseStart()
+  doAssert waitUntil(proc (): bool = (discard io.pump(); not io.starting), 1_000), "the pump sees it run"
+  doAssert io.stream == asCapture and buf.written == 0
+  vc.advance(10)
+  doAssert io.pump() == "" and buf.written == 480, "the clock counts from the device start: " & $buf.written
+  doAssert buf.takeCaptured() == ramp(480)
+  doAssert io.stopCapture() == "" and io.stream == asIdle
+  joinThread(net)
+  doAssert waitUntil(proc (): bool = startsInFlight() == 0, 1_000)
+  freeAudioBuffer(buf)
+  doAssert liveAudioBuffers() == base, "every buffer freed: " & $(liveAudioBuffers() - base)
+  doAssert g.startsStopped == 0, "a start the io adopted is stopped by the io, not its thread"
+  freeStartGate(g)
+echo "7. a held start: it returns at once, starting, busy to a second; released, it runs, timed from there OK"
+
+# 8. Stop, close, or a failure while the start is held. Stop and close return at once and let
+#    the start go: the io is idle at once, while the start thread holds the buffer (its own
+#    reference) until its start returns, then stops what it started and frees it. A start
+#    that fails is reported by the pump with the device's word, once, and the io is idle.
+block:
+  for how in ["stop-capture", "stop-playback", "close", "fail"]:
+    let base = liveAudioBuffers()
+    let vc = VirtualClock()
+    let g = newStartGate()
+    var net: Thread[Net]
+    createThread(net, netMain, Net(g: g, ms: 1_500))
+    let io = newSyntheticAudioIo(ramp(4_800), vc.clock, g)
+    let buf = newAudioBuffer(4_800)
+    let play = how == "stop-playback"
+    if play: doAssert buf.loadPlayback(ramp(4_800)) == 4_800
+    let t = getMonoTime()
+    doAssert (if play: io.startPlayback(buf) else: io.startCapture(buf)) == ""
+    doAssert msSince(t) < 100, how & ": the start returns at once"
+    doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000), how
+    doAssert liveAudioBuffers() == base + 1
+    if how == "fail":
+      g.releaseStart("no-device")
+      var why = ""
+      doAssert waitUntil(proc (): bool = (why = io.pump(); why.len > 0), 1_000), "the pump reports the failure"
+      doAssert why == "no-device" and io.stream == asIdle and not io.starting, why
+      doAssert io.pump() == "", "a failure is reported once"
+      freeAudioBuffer(buf)
+      doAssert waitUntil(proc (): bool = startsInFlight() == 0, 1_000)
+      doAssert liveAudioBuffers() == base, how & ": freed"
+    else:
+      let t2 = getMonoTime()
+      case how
+      of "stop-capture": doAssert io.stopCapture() == ""
+      of "stop-playback": doAssert io.stopPlayback() == ""
+      else: doAssert io.close() == ""
+      doAssert msSince(t2) < 100, how & " returns at once while the start is held"
+      doAssert io.stream == asIdle and not io.starting and io.buffer == nil, how
+      vc.advance(100)
+      doAssert io.pump() == "", how & ": a start let go reports nothing"
+      freeAudioBuffer(buf)                # the caller's reference: the start thread holds its own
+      doAssert liveAudioBuffers() == base + 1 and startsInFlight() == 1, how & ": the start thread holds it"
+      doAssert not waitStarts(30), how & ": its start has not returned"
+      g.releaseStart()
+      doAssert waitStarts(1_000), how & ": the start returned"
+      doAssert liveAudioBuffers() == base, how & ": its thread freed the buffer"
+      doAssert g.startsStopped == 1, how & ": its thread stopped what it started"
+    joinThread(net)
+    freeStartGate(g)
+echo "8. stop, close or a failure while held: idle at once; the start thread frees the buffer and stops ",
+     "what it started once its start returns; a failure reported once OK"
+
+# 9. No more than MaxStartsInFlight starts wait at once: past it a start is refused,
+#    `device-start-slow`, so a caller cannot pile up threads behind a start that never returns.
+block:
+  let base = liveAudioBuffers()
+  let vc = VirtualClock()
+  let g = newStartGate()
+  var net: Thread[Net]
+  createThread(net, netMain, Net(g: g, ms: 1_500))
+  var bufs: seq[AudioBuffer]
+  for i in 0 ..< MaxStartsInFlight:
+    let io = newSyntheticAudioIo(@[], vc.clock, g)
+    bufs.add newAudioBuffer(480)
+    doAssert io.startCapture(bufs[^1]) == ""
+    doAssert io.stopCapture() == ""     # let go: its thread still waits on the gate
+  doAssert startsInFlight() == MaxStartsInFlight
+  let more = newSyntheticAudioIo(@[], vc.clock, g)
+  bufs.add newAudioBuffer(480)
+  doAssert more.startCapture(bufs[^1]) == "device-start-slow" and more.stream == asIdle
+  for b in bufs: freeAudioBuffer(b)
+  g.releaseStart()
+  doAssert waitStarts(1_000) and liveAudioBuffers() == base
+  let again = newAudioBuffer(480)       # once they have returned, a start is taken again
+  doAssert more.startCapture(again) == ""
+  doAssert waitUntil(proc (): bool = (discard more.pump(); not more.starting), 1_000)
+  doAssert more.stream == asCapture and more.stopCapture() == ""
+  freeAudioBuffer(again)
+  doAssert waitStarts(1_000) and liveAudioBuffers() == base
+  joinThread(net)
+  freeStartGate(g)
+echo "9. at most ", MaxStartsInFlight, " starts wait at once; past them device-start-slow OK"
 
 removeDir(dir)

@@ -1498,15 +1498,19 @@ void MusterUiBackend::onContextReady()
                 }
                 // Voice self-test (docs/design/voice-notes.md S9): MUSTER_AUTOVOICE=<seconds>
                 // records that long once someone else is in the room, then sends the draft:
-                // the mic's Start, Stop and Send. MUSTER_AUTOVOICEPLAY=1 plays a complete note
-                // another member sent, while nothing plays, as the card's Play does; a refused
-                // Play is tried again on the next tick, up to five times. Each tick logs
+                // the mic's Start, Stop and Send. The module answers Start at once and starts
+                // the device on a thread of its own (§9), so the seconds count from the first
+                // voice_status that says recording, not from the call. MUSTER_AUTOVOICEPLAY=1
+                // plays a complete note another member sent, while nothing plays, as the
+                // card's Play does; a refused Play is tried again on the next tick, up to five
+                // times. Each tick logs
                 // voice_status as VOICE and the thread's notes as VOICE-NOTES, and each call's
                 // answer as VOICE-RESULT <call>.
                 const int voiceSecs = qgetenv("MUSTER_AUTOVOICE").toInt();
                 const bool voicePlay = !qgetenv("MUSTER_AUTOVOICEPLAY").isEmpty();
                 if (voiceSecs > 0 || voicePlay) {
                     static bool voiceStarted = false;
+                    static bool voiceTimed = false;
                     static QSet<QString> voicePlayed;
                     static QHash<QString, int> voiceTries;
                     loadVoice();
@@ -1525,6 +1529,11 @@ void MusterUiBackend::onContextReady()
                         voiceStarted = true;
                         startVoiceRecording();
                         qInfo().noquote() << "[muster_ui] VOICE-RESULT start" << voiceResultJson();
+                    }
+                    const QString recState = QJsonDocument::fromJson(voiceJson().toUtf8()).object()
+                                                 .value("recording").toObject().value("state").toString();
+                    if (voiceSecs > 0 && voiceStarted && !voiceTimed && recState == "recording") {
+                        voiceTimed = true;
                         QTimer::singleShot(voiceSecs * 1000, this, [this]() {
                             stopVoiceRecording();
                             qInfo().noquote() << "[muster_ui] VOICE-RESULT stop" << voiceResultJson();

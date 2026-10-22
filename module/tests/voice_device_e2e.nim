@@ -22,10 +22,12 @@
 ## The speaker leg plays through the real output device: 48,000 frames a second (±5%), and on
 ## a short buffer `done` only after the device's own tail of silence (audio_io_null_test §3).
 ##
-## A device call that never returns (a permission prompt nobody answers can hold one) is
-## caught by a watchdog thread, which prints what it was waiting on and exits 1: that ends the
-## whole test, so the legs after it do not run (run them alone). A leg that fails a check is
-## recorded, and the next leg still runs.
+## A device start returns at once and the device starts on a thread of its own (voice-notes.md
+## §9), so this test's thread is never held: it pumps until the start lands. A start that never
+## lands (a permission prompt nobody answers can hold one), or a stop or close that does not
+## return, is caught by a watchdog thread, which prints what it was waiting on and exits 1:
+## that ends the whole test, so the legs after it do not run (run them alone). A leg that
+## fails a check is recorded, and the next leg still runs.
 
 import std/[atomics, math, monotimes, os, strutils, times]
 import ../src/audio/[audio_io, miniaudio, voice_clip, voice_codec]
@@ -156,6 +158,20 @@ proc waitUntil(cond: proc (): bool, limitMs: int): int =
   while not cond() and msSince(t0) < limitMs: sleep(5)
   msSince(t0)
 
+proc startAndLand(io: MiniaudioIo, buf: AudioBuffer, play: bool, stage: int): tuple[why: string, callMs: int] =
+  ## Start, then pump until the start lands, under the watchdog's `stage`: "" once the device
+  ## runs, or the word of a start refused at once or failed on its start thread. `callMs`
+  ## is how long the start call itself took: the device starts on a thread of its own.
+  let t = getMonoTime()
+  var why = (if play: io.startPlayback(buf) else: io.startCapture(buf))
+  result.callMs = msSince(t)
+  arm(stage, 20_000)
+  while why.len == 0 and io.starting:
+    sleep(2)
+    why = io.pump()
+  disarm()
+  result.why = why
+
 proc dbfs(x: float): string =
   if x <= 0: "-inf dBFS" else: formatFloat(20 * log10(x / 32_768), ffDecimal, 1) & " dBFS"
 
@@ -177,10 +193,10 @@ proc micLeg() =
     freeAudioBuffer(other)
   echo "   mic: opening the capture device on ", sys, " (if the process ends here with no " &
        "FAIL line, the OS ended it: on macOS, TCC refusing the microphone)"
-  arm(1, 20_000)
-  let started = io.startCapture(buf)
-  disarm()
+  let (started, callMs) = io.startAndLand(buf, play = false, stage = 1)
   let t0 = getMonoTime()                                 # the cap's pace is timed from here
+  check callMs < 100, "mic: startCapture took " & $callMs & " ms to return; it must return at " &
+    "once, its device starting on a thread of its own"
   check started != "no-device", "mic: the system backend opened no capture device " &
     "(no-device). " & NoDeviceHint
   check started == "", "mic: startCapture refused: " & started &
@@ -288,9 +304,9 @@ proc speakerLeg() =
   echo "   speaker: playing ", (if audible: "0.5 s of a 440 Hz tone at -30 dBFS, then 1.5 s " &
        "of silence" else: "2 s of digital silence (zeros): nothing to hear")
   check buf.loadPlayback(pcm) == pcm.len, "speaker: load"
-  arm(3, 20_000)
-  let started = io.startPlayback(buf)
-  disarm()
+  let (started, callMs) = io.startAndLand(buf, play = true, stage = 3)
+  check callMs < 100, "speaker: startPlayback took " & $callMs & " ms to return; it must return " &
+    "at once, its device starting on a thread of its own"
   check started == "", "speaker: startPlayback refused: " & started &
     (if started == "no-device": " (no output device, or the OS refused to open one)" else: "")
   check io.stream == asPlayback, "speaker: stream " & $io.stream
@@ -325,9 +341,7 @@ proc speakerLeg() =
   # that rule against a regression; it measures nothing of when the sound is heard. Always
   # silence.
   check short.loadPlayback(newSeq[int16](short.cap)) == 4_800, "speaker: short load"
-  arm(3, 20_000)
-  let again = io.startPlayback(short)
-  disarm()
+  let (again, _) = io.startAndLand(short, play = true, stage = 3)
   check again == "", "speaker: the second start refused: " & again
   let tail = short.tail
   check tail > 0 and tail < ClipRate, "speaker: a tail of " & $tail & " frames"

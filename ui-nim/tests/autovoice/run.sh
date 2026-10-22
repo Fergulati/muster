@@ -4,8 +4,10 @@
 # muster.lidl and a fake muster_module (gen.py, fake_module.nim), its timers run in real
 # time. It runs where ui-nim's flake does not build (a Mac) as well as on Linux. It checks the
 # autopilot's decisions only; scripts/voice-self-test.sh checks a note between two runners.
-#   recorder (MUSTER_AUTOVOICE=1): Start, Stop about a second later, Send, each once, each
-#     answer logged as VOICE-RESULT, and the thread showing the sent note as one's own;
+#   recorder (MUSTER_AUTOVOICE=1): Start, Stop about a second after the first voice_status
+#     that says recording (the fake starts the device for 1.5 s, as the module answers Start
+#     at once and starts it on a thread of its own), Send, each once, each answer logged as
+#     VOICE-RESULT, and the thread showing the sent note as one's own;
 #   player (MUSTER_AUTOVOICEPLAY=1), over a thread holding an arriving note, one's own
 #     complete note, two complete notes from another member, a message whose body claims a
 #     note and a note whose Play is always refused: Play for the two, one at a time, each
@@ -46,7 +48,7 @@ FORGED='{"id":"e11","author":"bb","ts":1,"alias":"","self":false,"body":"{\"kind
 ROWS="[$(row e7 n7 arriving false),$(row e8 n8 complete true),$(row e9 n9 complete false),$(row e10 n10 complete false),$FORGED,$(row e12 n12 complete false)]"
 
 # contextReady autojoins after 5 s, and the room's tick runs each second from then on
-MUSTER_AUTOJOIN_TOPIC=/muster/1/t/proto MUSTER_AUTOVOICE=1 HARNESS_SECS=10 \
+MUSTER_AUTOJOIN_TOPIC=/muster/1/t/proto MUSTER_AUTOVOICE=1 HARNESS_SECS=13 \
   "$OUT/h" >"$OUT/recorder.out" 2>"$OUT/recorder.err"
 MUSTER_AUTOJOIN_TOPIC=/muster/1/t/proto MUSTER_AUTOVOICEPLAY=1 HARNESS_SECS=24 \
   HARNESS_ROWS="$ROWS" HARNESS_REFUSE=n12 "$OUT/h" >"$OUT/player.out" 2>"$OUT/player.err"
@@ -58,6 +60,8 @@ def run(role):
     o = open("%s/%s.out" % (out, role)).read().splitlines()
     calls = json.loads([l for l in o if l.startswith("HARNESS-CALLS ")][-1].split(" ", 1)[1])
     gaps = json.loads([l for l in o if l.startswith("HARNESS-GAPS-MS ")][-1].split(" ", 1)[1])
+    rec = [int(l.split(" ", 1)[1]) for l in o if l.startswith("HARNESS-RECORDING-AFTER-MS ")]
+    if role == "recorder": gaps = gaps + [rec[-1] if rec else -1]
     log = [l.split("] ", 1)[1] for l in open("%s/%s.err" % (out, role)) if l.startswith("[muster_ui] ")]
     return calls, gaps, log
 def tagged(log, tag): return [l[len(tag) + 1:] for l in log if l.startswith(tag + " ")]
@@ -66,7 +70,10 @@ errs = []
 calls, gaps, log = run("recorder")
 want = ["voice_record_start()", "voice_record_stop()", "voice_draft_send()"]
 if calls != want: errs.append("recorder: calls %s, not %s" % (calls, want))
-elif not 900 <= gaps[0] <= 2500: errs.append("recorder: Stop %d ms after Start, not about 1000" % gaps[0])
+elif gaps[-1] < 1500: errs.append("recorder: the fake never said recording (%d ms)" % gaps[-1])
+elif not 900 <= gaps[0] - gaps[-1] <= 2500:
+    errs.append("recorder: Stop %d ms after the device started (%d ms after Start), not about 1000"
+                % (gaps[0] - gaps[-1], gaps[0]))
 res = [l for l in log if l.startswith("VOICE-RESULT ")]
 wantres = ['VOICE-RESULT start {"ok":true}', 'VOICE-RESULT stop {"draft":', 'VOICE-RESULT send {"note":"n1"}']
 if len(res) != 3 or any(not r.startswith(w) for r, w in zip(res, wantres)):
@@ -75,7 +82,7 @@ after = log[next((i for i, l in enumerate(log) if l.startswith("VOICE-RESULT sen
 mine = [n for l in tagged(after, "VOICE-NOTES") for n in json.loads(l) if n.get("note") == "n1"]
 if not mine or not all(n.get("self") is True and n.get("state") == "complete" for n in mine):
     errs.append("recorder: the thread after the Send does not show n1 as one's own: %s" % mine)
-print("recorder: %s, Stop %s ms after Start" % (calls, gaps[0] if gaps else "-"))
+print("recorder: %s, recording %s ms after Start, Stop %s ms after Start" % (calls, gaps[-1] if gaps else "-", gaps[0] if gaps else "-"))
 
 calls, gaps, log = run("player")
 want = ["voice_play(n9)", "voice_play(n10)"] + ["voice_play(n12)"] * 5

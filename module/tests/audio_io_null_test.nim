@@ -17,6 +17,16 @@ proc waitUntil(cond: proc (): bool, limitMs: int): int =
   while not cond() and msSince(t0) < limitMs: sleep(5)
   msSince(t0)
 
+proc started(io: MiniaudioIo, limitMs = 2_000): string =
+  ## A start returns at once and the device starts on a thread of its own (voice-notes.md
+  ## §9): pump until it lands. "" once it runs, its failure's word, or "still-starting".
+  let t0 = getMonoTime()
+  while io.starting and msSince(t0) < limitMs:
+    let why = io.pump()
+    if why.len > 0: return why
+    sleep(1)
+  if io.starting: "still-starting" else: ""
+
 const Clip: StreamFormat = (rate: ClipRate, channels: ClipChannels, s16: true)
 
 # 1. Capture starts a device thread: within 1 s frames arrive, and every one is zero (the
@@ -29,8 +39,9 @@ block:
   let buf = newAudioBuffer(ClipRate)                     # 1 s
   doAssert io.streamFormat == (rate: 0, channels: 0, s16: false), "idle: no device to read"
   doAssert io.startCapture(buf) == ""
-  doAssert io.backendName == "Null", io.backendName
   doAssert io.stream == asCapture
+  doAssert io.started() == ""
+  doAssert io.backendName == "Null", io.backendName
   doAssert io.streamFormat == Clip, $io.streamFormat
   let ms = waitUntil(proc (): bool = buf.written > 0, 1_000)
   doAssert buf.written > 0, "no frames within " & $ms & " ms"
@@ -85,6 +96,7 @@ block:
   doAssert buf.loadPlayback(pcm) == pcm.len
   doAssert io.startPlayback(buf) == ""
   doAssert io.stream == asPlayback
+  doAssert io.started() == ""
   doAssert io.streamFormat == Clip, $io.streamFormat
   sleep(100)
   let r1 = buf.readIndex
@@ -98,7 +110,7 @@ block:
   doAssert io.stopPlayback() == ""
   let short = newAudioBuffer(ClipRate div 10)            # 100 ms
   doAssert short.loadPlayback(pcm) == 4_800
-  doAssert io.startPlayback(short) == ""
+  doAssert io.startPlayback(short) == "" and io.started() == ""
   doAssert short.tail == 1_920, $short.tail
   let doneMs = waitUntil(proc (): bool = short.done, 1_000)
   doAssert short.done, "not done within " & $doneMs & " ms"
@@ -159,3 +171,50 @@ block:
   doAssert io.close() == ""
   echo "   abSystem lists ", sys
 echo "5. backend lists: abNull is Null alone; abSystem never Null, never empty OK"
+
+# 6. The start runs on a thread of its own (PR 340's review, voice-notes.md §9): a stop or a
+#    close right after a start never waits on it, whether the start thread has returned yet
+#    or not. Twenty rounds of each, capture and playback: every call returns at once, the io
+#    is idle after it, and once every start thread has returned (waitStarts) every buffer is
+#    freed, so neither the io nor a start thread let go leaks one or frees one twice. Then a
+#    start whose context the io already holds hands it to the start and back.
+block:
+  doAssert waitStarts(2_000)           # §4's last start may have been let go: let it return first
+  let base = liveAudioBuffers()
+  var slowest, letGo = 0
+  for round in 0 ..< 20:
+    for how in ["stop", "close"]:
+      for play in [false, true]:
+        # starts let go return on their own time; at MaxStartsInFlight a start is refused
+        # (device-start-slow, audio_io_test §9), so each round waits for them first
+        doAssert waitStarts(2_000)
+        let io = newMiniaudioIo(abNull)
+        let buf = newAudioBuffer(ClipRate div 10)
+        if play: doAssert buf.loadPlayback(newSeq[int16](buf.cap)) == buf.cap
+        let t = getMonoTime()
+        doAssert (if play: io.startPlayback(buf) else: io.startCapture(buf)) == ""
+        if how == "stop":
+          doAssert (if play: io.stopPlayback() else: io.stopCapture()) == ""
+        doAssert io.close() == ""
+        slowest = max(slowest, msSince(t))
+        if startsInFlight() > 0: inc letGo     # stopped before its start returned: let go
+        doAssert io.stream == asIdle and not io.starting and io.backendName == ""
+        freeAudioBuffer(buf)
+  doAssert slowest < 100, "a start then a stop took " & $slowest & " ms"
+  doAssert letGo > 0, "no stop came before its start returned, so the let-go path never ran"
+  doAssert waitStarts(2_000), "a start thread did not return"
+  doAssert liveAudioBuffers() == base, "buffers left: " & $(liveAudioBuffers() - base)
+  # the context moves with a start and comes back when it runs
+  let io = newMiniaudioIo(abNull)
+  let a = newAudioBuffer(ClipRate)
+  doAssert io.startCapture(a) == "" and io.started() == "" and io.backendName == "Null"
+  doAssert io.stopCapture() == "" and io.backendName == "Null", "stop keeps the context"
+  doAssert io.startCapture(a) == "" and io.backendName == "", "a start holds it while in flight"
+  doAssert io.started() == "" and io.backendName == "Null", "and hands it back when it runs"
+  doAssert waitUntil(proc (): bool = a.written > 0, 1_000) < 1_000
+  doAssert io.close() == "" and io.backendName == ""
+  freeAudioBuffer(a)
+  doAssert waitStarts(2_000) and liveAudioBuffers() == base
+  echo "   slowest start-then-stop: ", slowest, " ms; ", letGo, " of 80 let go before their start returned"
+echo "6. start thread: stop and close right after a start never wait, nothing leaks; the context ",
+     "moves with the start OK"

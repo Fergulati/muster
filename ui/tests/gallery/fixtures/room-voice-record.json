@@ -172,7 +172,8 @@
           "playing": {
             "note": "6f1d0c2b9a8e7d6c5b4a39281706f5e4",
             "positionMs": 2000,
-            "durationMs": 7000
+            "durationMs": 7000,
+            "starting": false
           }
         }
       }
@@ -205,7 +206,8 @@
           "playing": {
             "note": "draft",
             "positionMs": 1000,
-            "durationMs": 4200
+            "durationMs": 4200,
+            "starting": false
           }
         }
       }

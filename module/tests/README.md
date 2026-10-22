@@ -190,8 +190,11 @@ MUSTER_VOICE_REAL=speaker module/tests/run-suite.sh e2e voice_device_e2e   # the
   `audio_io_null_test` §3 does. By default it plays digital silence (zeros), so nothing can be
   heard. Only `MUSTER_VOICE_REAL_AUDIBLE=1` plays a short quiet tone: 0.5 s of 440 Hz at
   about -30 dBFS.
-- A device call that never returns is caught by a watchdog thread, which prints what it
-  waited on and exits 1. A microphone permission prompt nobody answers does this on macOS.
+- A device start returns at once and the device starts on a thread of its own, so the test
+  pumps until the start lands. A start that never lands, or a stop or close that never
+  returns, is caught by a watchdog thread, which prints what it waited on and exits 1. A
+  microphone permission prompt nobody answers does this on macOS. A start call that takes
+  100 ms or more to return fails the leg.
   That ends the whole test, so a leg after the one that stalled does not run: run it alone
   (`MUSTER_VOICE_REAL=speaker`). A leg that fails a check is recorded, and the next leg
   still runs.

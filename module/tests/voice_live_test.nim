@@ -1,7 +1,8 @@
 ## Voice notes' hosted half (docs/design/voice-notes.md §8, §9; S7): `VoiceRecorder`, the state
 ## machine the six voice methods and voice_status run, over the AudioIo seam, the room's session
 ## and the member's keystore. Two members over LocalTransport, each with a recorder of their own
-## on SyntheticAudioIo and a virtual clock (FileAudioIo in §12, miniaudio's null device in §13),
+## on SyntheticAudioIo and a virtual clock (FileAudioIo in §12, miniaudio's null device in §13,
+## a start held by a StartGate in §29–§31),
 ## so the cap, the draft, every refusal and playback are held on a clock the test owns, and
 ## libopus encodes and decodes for real. No seam is mocked.
 ##   1. Alice records 3.000 s of a 1 kHz tone and stops: a draft of 3,000 ms; she sends it: two
@@ -86,9 +87,24 @@
 ##      the events the method read) each give the memo-less fold's output; a cold memo parses
 ##      each part once across all four, a warm one none, and after the thread's rows have read
 ##      the room (`memoFor`'s memo) none of them parses a part
+##  29. a device start held (PR 340's review: a start could hold the module thread):
+##      voice_record_start answers in under 100 ms while a StartGate holds SyntheticAudioIo's
+##      start on its start thread; voice_status says starting, at 0 ms, while time passes,
+##      and the thread's rows and voice_status answer meanwhile; released, recording, its
+##      elapsed time and its 60 s cap counted from the device's start
+##  29b. Stop (not-started), Discard and close while the start is held answer at once and
+##      leave the recorder idle; the start thread frees the buffer once its start returns (the
+##      buffers counted) and stops the device it started; a start that fails: idle, error and
+##      ready.capture no-device, the buffer freed at once; one still pending at StartBoundMs:
+##      device-start-slow, let go
+##  30. the same for Play: playing names the note, starting, at 0 ms; released, it plays to
+##      done as before; Stop lets it go; a failure says no-device in ready.playback; past the
+##      bound device-start-slow
+##  31. close while a start is held returns at once, and the hosted exit proc's bounded wait
+##      for start threads (waitStarts) ends: it never hangs on a start that never returns
 ## Needs libopus, libsecp256k1, libsodium and the miniaudio pin (run-suite.sh links them all).
 
-import std/[algorithm, json, math, os, strutils, sequtils, tables]
+import std/[algorithm, json, math, monotimes, os, strutils, sequtils, tables]
 from std/posix import RLimit, getrlimit, setrlimit, signal, SIGXFSZ, SIG_IGN, SIG_DFL
 import ../src/transport/transport
 import ../src/crypto/epoch_crypto
@@ -197,6 +213,37 @@ proc recordFor(v: VoiceRecorder, vc: VirtualClock, s: CoordinationSession, ms: i
     discard v.status()
   v.recordStop().ck
 
+proc msSince(t: MonoTime): int = int((getMonoTime().ticks - t.ticks) div 1_000_000)
+
+proc waitUntil(cond: proc (): bool, limitMs: int): bool =
+  let t0 = getMonoTime()
+  while not cond():
+    if msSince(t0) >= limitMs: return false
+    sleep(2)
+  true
+
+type Net = object
+  g: StartGate
+  ms: int
+proc netMain(n: Net) {.thread.} =
+  var waited = 0
+  while waited < n.ms and n.g.held:
+    sleep(10)
+    waited += 10
+  n.g.releaseStart()                  # a no-op once the test has released it
+
+proc state(v: VoiceRecorder): string = v.status()["recording"]["state"].getStr()
+
+proc landed(io: AudioIo, limitMs = 2_000): string =
+  ## Pump until the start in flight lands (the device starts on a thread of its own): "" once
+  ## it runs, its failure's word, or "still-starting".
+  let t0 = getMonoTime()
+  while io.starting and msSince(t0) < limitMs:
+    let why = io.pump()
+    if why.len > 0: return why
+    sleep(1)
+  if io.starting: "still-starting" else: ""
+
 # ── 1. record → draft → send → the other member plays ──────────────────────────────
 var nid1 = ""
 block:
@@ -242,7 +289,7 @@ block:
   doAssert b.play(bobS, nid1).ck.ok
   doAssert ioB.stream == asPlayback
   st = b.status()
-  doAssert st["playing"] == %*{"note": nid1, "positionMs": 0, "durationMs": 3_000}, $st
+  doAssert st["playing"] == %*{"note": nid1, "positionMs": 0, "durationMs": 3_000, "starting": false}, $st
   doAssert st["ready"]["playback"].getStr() == "ok" and st["recording"]["state"].getStr() == "idle", $st
   vcB.advance(1_500)
   doAssert b.status()["playing"]["positionMs"].getInt() == 1_500
@@ -498,6 +545,7 @@ block:
   let io = newMiniaudioIo(abNull)
   let a = newVoiceRecorder(io)
   doAssert a.recordStart(aliceS).ck.ok
+  doAssert waitUntil(proc (): bool = a.state == "recording", 2_000), "the null device starts"
   doAssert io.backendName() == "Null"
   for _ in 0 ..< 8:
     sleep(100)
@@ -663,11 +711,11 @@ block:
   let io = newMiniaudioIo(abNull)
   let a = newVoiceRecorder(io)
   let held = newAudioBuffer(Second)
-  doAssert io.startPlayback(held) == "" and io.backendName() == "Null"
+  doAssert io.startPlayback(held) == "" and io.landed() == "" and io.backendName() == "Null"
   let r = a.recordStart(aliceS).ck
   doAssert r.err == "busy" and a.status()["ready"]["capture"].getStr() == "busy", $r
   doAssert io.backendName() == "" and io.stream == asIdle, "a refused start released the context"
-  doAssert io.startPlayback(held) == "" and io.backendName() == "Null"
+  doAssert io.startPlayback(held) == "" and io.landed() == "" and io.backendName() == "Null"
   doAssert a.close() == "ok"
   doAssert io.backendName() == "" and io.stream == asIdle, "close released the device and the context"
   freeAudioBuffer(held)
@@ -974,6 +1022,189 @@ block:
   echo "28. the flow, the map, provenance and lastTs go through the room's memo, the thread's own: the ",
        "memo-less output; each part parsed once across them, none on the next poll OK"
 
+# ── A device start held (PR 340's review: starting a device could hold the module thread) ─
+# A StartGate holds SyntheticAudioIo's device start, as Core Audio held one behind an
+# unanswered microphone prompt (S11). A safety net releases each gate after 1.5 s, so a start
+# that blocks its caller returns late and fails on the time instead of hanging the test.
+
+
+# ── 29. voice_record_start answers at once; the recording starts when the device does ─
+block:
+  let base = liveAudioBuffers()
+  let vc = VirtualClock(ms: 1_000)
+  let g = newStartGate()
+  var net: Thread[Net]
+  createThread(net, netMain, Net(g: g, ms: 1_500))
+  let io = newSyntheticAudioIo(sine(1000.0, 70 * Second), vc.clock, g)
+  let a = newVoiceRecorder(io, vc.clock)
+  let t = getMonoTime()
+  let r = a.recordStart(aliceS).ck
+  doAssert r.ok and msSince(t) < 100,
+           "voice_record_start answers at once while the device start is held: " & $msSince(t) & " ms, " & $r
+  doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000), "the device starts on a thread of its own"
+  var st = a.status()
+  doAssert st["recording"]["state"].getStr() == "starting" and st["recording"]["elapsedMs"].getInt() == 0, $st
+  doAssert st["ready"]["capture"].getStr() == "unknown", "not known until the start lands: " & $st
+  # the module answers meanwhile: coordinate_messages' rows and voice_status, each at once
+  let t2 = getMonoTime()
+  doAssert a.messagesJson(aliceS, proc (who: string): string = "").len > 0
+  doAssert a.state == "starting"
+  doAssert msSince(t2) < 100, "the module answered other calls in " & $msSince(t2) & " ms"
+  doAssert a.recordStart(aliceS).ck.err == "busy" and a.play(aliceS, nid1).ck.err == "busy"
+  vc.advance(5_000)                   # time passes while it starts: none of it is recorded
+  st = a.status()
+  doAssert st["recording"]["state"].getStr() == "starting" and st["recording"]["elapsedMs"].getInt() == 0, $st
+  g.releaseStart()
+  doAssert waitUntil(proc (): bool = a.state == "recording", 1_000), "the recording starts with the device"
+  st = a.status()
+  doAssert st["ready"]["capture"].getStr() == "ok" and st["recording"]["elapsedMs"].getInt() == 0, $st
+  # the elapsed time and the 60 s cap count from the device start, not from the call
+  vc.advance(59_000)
+  st = a.status()
+  doAssert st["recording"]["state"].getStr() == "recording" and st["recording"]["elapsedMs"].getInt() == 59_000 and
+           not st["recording"]["capped"].getBool(), $st
+  vc.advance(1_000)
+  st = a.status()
+  doAssert st["recording"]["state"].getStr() == "draft" and st["recording"]["capped"].getBool() and
+           st["recording"]["elapsedMs"].getInt() == 60_000, $st
+  doAssert a.draftDiscard() == "ok"
+  joinThread(net)
+  doAssert waitStarts(1_000) and liveAudioBuffers() == base, "every buffer freed: " & $(liveAudioBuffers() - base)
+  freeStartGate(g)
+  echo "29. voice_record_start answers at once while the device start is held: starting, the module ",
+       "answering meanwhile; released, recording, timed and capped from the device start OK"
+
+# ── 29b. Stop, Discard and close while the start is held; a start that fails; one too slow ─
+block:
+  for how in ["stop", "discard", "close", "fail", "slow"]:
+    let base = liveAudioBuffers()
+    let vc = VirtualClock()
+    let g = newStartGate()
+    var net: Thread[Net]
+    createThread(net, netMain, Net(g: g, ms: 1_500))
+    let io = newSyntheticAudioIo(sine(1000.0, Second), vc.clock, g)
+    let a = newVoiceRecorder(io, vc.clock)
+    doAssert a.recordStart(aliceS).ck.ok
+    doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000), how
+    doAssert liveAudioBuffers() == base + 1, how
+    let t = getMonoTime()
+    case how
+    of "stop": doAssert a.recordStop().ck.err == "not-started", "Stop before the device started records nothing"
+    of "discard": doAssert a.draftDiscard() == "ok"
+    of "close": doAssert a.close() == "ok"
+    of "fail":
+      g.releaseStart("no-device")
+      doAssert waitStarts(1_000)
+    of "slow":
+      vc.advance(StartBoundMs - 1)
+      doAssert a.state == "starting", "still within the bound"
+      vc.advance(1)
+    doAssert msSince(t) < (if how == "fail": 1_100 else: 100), how & " answers at once while the start is held"
+    let st = a.status()
+    let want = (case how
+                of "fail": "no-device"
+                of "slow": "device-start-slow"
+                else: "")
+    doAssert st["recording"]["state"].getStr() == "idle" and st["recording"]["error"].getStr() == want, how & ": " & $st
+    if want.len > 0:
+      doAssert st["ready"]["capture"].getStr() == want, how & ": ready.capture says it: " & $st
+    doAssert io.stream == asIdle and not io.starting, how
+    doAssert a.recordStop().ck.err == "not-recording", how
+    if how == "fail":
+      doAssert liveAudioBuffers() == base, "a failed start's buffer is freed at once"
+    else:
+      # let go, never waited on: the start thread holds the buffer until its start returns
+      doAssert startsInFlight() == 1 and liveAudioBuffers() == base + 1, how & ": the start thread holds it"
+      doAssert not waitStarts(30), how
+      g.releaseStart()
+      doAssert waitStarts(1_000), how & ": the start returned"
+      doAssert liveAudioBuffers() == base, how & ": its thread freed the buffer"
+      doAssert g.startsStopped == 1, how & ": its thread stopped the device it started"
+      doAssert a.state == "idle", how & ": a start let go never becomes a recording"
+    joinThread(net)
+    freeStartGate(g)
+  echo "29b. Stop (not-started), Discard and close while the start is held answer at once, idle, the start ",
+       "thread freeing the buffer once it returns; a start that fails: idle, error and ready.capture ",
+       "no-device; one past ", StartBoundMs, " ms: device-start-slow, let go OK"
+
+# ── 30. voice_play answers at once; the note plays when the device starts ────────────
+block:
+  for how in ["play", "stop", "fail", "slow"]:
+    let base = liveAudioBuffers()
+    let vc = VirtualClock()
+    let g = newStartGate()
+    var net: Thread[Net]
+    createThread(net, netMain, Net(g: g, ms: 1_500))
+    let io = newSyntheticAudioIo(@[], vc.clock, g)
+    let b = newVoiceRecorder(io, vc.clock)
+    let t = getMonoTime()
+    let r = b.play(bobS, nid1).ck
+    doAssert r.ok and msSince(t) < 100, how & ": voice_play answers at once: " & $msSince(t) & " ms, " & $r
+    doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000), how
+    var st = b.status()
+    doAssert st["playing"] == %*{"note": nid1, "positionMs": 0, "durationMs": 3_000, "starting": true}, how & ": " & $st
+    doAssert b.play(bobS, nid1).ck.err == "busy" and b.recordStart(bobS).ck.err == "busy", how
+    vc.advance(2_000)
+    doAssert b.status()["playing"]["positionMs"].getInt() == 0, how & ": nothing plays while it starts"
+    case how
+    of "play":
+      g.releaseStart()
+      doAssert waitUntil(proc (): bool = not b.status()["playing"]{"starting"}.getBool(true), 1_000)
+      st = b.status()
+      doAssert st["playing"] == %*{"note": nid1, "positionMs": 0, "durationMs": 3_000, "starting": false}, $st
+      doAssert st["ready"]["playback"].getStr() == "ok", $st
+      vc.advance(1_500)
+      doAssert b.status()["playing"]["positionMs"].getInt() == 1_500
+      vc.advance(1_600)
+      doAssert b.status()["playing"].kind == JNull, "done: idle again, the pump's done detection as before"
+      let (_, pcm, _) = decodeClip(voiceRecordOf(bobS.roomEvents(), nid1).record)
+      doAssert io.played == pcm, "the sink holds exactly the clip's samples"
+    of "stop":
+      doAssert b.playStop() == "ok" and msSince(t) < 200
+      doAssert b.status()["playing"].kind == JNull and io.stream == asIdle
+      doAssert startsInFlight() == 1 and liveAudioBuffers() == base + 1
+      g.releaseStart()
+      doAssert waitStarts(1_000) and g.startsStopped == 1
+    of "fail":
+      g.releaseStart("no-device")
+      doAssert waitStarts(1_000)
+      st = b.status()
+      doAssert st["playing"].kind == JNull and st["ready"]["playback"].getStr() == "no-device", $st
+    else:
+      vc.advance(StartBoundMs)
+      st = b.status()
+      doAssert st["playing"].kind == JNull and st["ready"]["playback"].getStr() == "device-start-slow", $st
+      g.releaseStart()
+      doAssert waitStarts(1_000) and g.startsStopped == 1
+    doAssert io.stream == asIdle and not io.starting, how
+    doAssert liveAudioBuffers() == base, how & ": every buffer freed"
+    joinThread(net)
+    freeStartGate(g)
+  echo "30. voice_play answers at once while the device start is held: playing, starting; released, ",
+       "it plays to done as before; Stop lets it go, a failure says no-device, past the bound ",
+       "device-start-slow OK"
+
+# ── 31. close at unload: never waits on a start that never returns ───────────────────
+# The hosted exit proc closes the recorder, then waits a bounded while for start threads
+# (waitStarts): a start that never returns costs that wait, never a hang.
+block:
+  let base = liveAudioBuffers()
+  let vc = VirtualClock()
+  let g = newStartGate()
+  var net: Thread[Net]
+  createThread(net, netMain, Net(g: g, ms: 1_500))
+  let a = newVoiceRecorder(newSyntheticAudioIo(@[], vc.clock, g), vc.clock)
+  doAssert a.recordStart(aliceS).ck.ok
+  doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000)
+  let t = getMonoTime()
+  doAssert a.close() == "ok" and msSince(t) < 100
+  doAssert not waitStarts(200) and msSince(t) in 190 .. 600, "the bounded wait ends: " & $msSince(t) & " ms"
+  g.releaseStart()
+  doAssert waitStarts(1_000) and liveAudioBuffers() == base
+  joinThread(net)
+  freeStartGate(g)
+  echo "31. close while a start is held returns at once, and the bounded wait for start threads ends OK"
+
 # ── 8. no JSON carries audio or a float ─────────────────────────────────────────────
 block:
   proc walk(j: JsonNode, path: string) =
@@ -998,7 +1229,7 @@ block:
     if j{"recording"} != nil:
       states.inc j["recording"]["state"].getStr()
       if j["playing"].kind != JNull: states.inc "playing"
-  for s in ["idle", "recording", "draft", "playing"]:
+  for s in ["idle", "starting", "recording", "draft", "playing"]:
     doAssert states[s] > 0, "no status was read in state " & s
   echo "8. ", seen.len, " JSON replies, every state: no part, no base64 run over 64, no float, under 1 KB OK"
 
