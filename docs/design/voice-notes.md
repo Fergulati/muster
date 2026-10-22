@@ -816,13 +816,24 @@ S1–S7 are built (§17) and S8–S11 are not. What is unverified, built or plan
 - **The size budget** (§5) is arithmetic until S4 and S5 measure the worst case.
 - **The voice methods through a host** (S7). `voice_live_test` runs `VoiceRecorder` in
   process, on `SyntheticAudioIo`, `FileAudioIo` and miniaudio's null device, with two members
-  over `LocalTransport`. The hosted glue in `muster_module.nim` (the six methods,
-  `voicePump` in `coordinate_intents`, `threadRows` in `coordinate_messages`,
-  `threadLastTs` in `coordinate_conversations`) is compiled by the marshalling probe and
-  called through a host only as the S7 commit records; S9's self-test drives it end to end.
-- **The exit proc at unload** (§9). Nothing here unloads a plugin while a device is open, so
-  that the handler runs then, and that miniaudio's context uninitialises cleanly from it, is
-  inferred.
+  over `LocalTransport`. The hosted glue in `muster_module.nim` is compiled by the
+  marshalling probe, and was driven once by hand, headless, in logosctl 0.3.2's `logos_host`
+  on darwin-arm64 (2026-10-21, the S7 `.lgx`, a throwaway room joined on `logos.dev`): with
+  `MUSTER_VOICE_SOURCE` a 3 s 1 kHz WAV and `MUSTER_VOICE_SINK` a scratch file,
+  `voice_record_start` refused `not-joined` before the join and gave `{ok}` after it, Stop
+  made a draft (8,700 ms: the WAV's 3 s, then the silence `FileAudioIo` hears after it),
+  `voice_play("draft")` wrote 8,700 ms to the sink with the source's 1 kHz power in its
+  first 3 s, and Discard, `busy`, `no-draft`, `unknown-note` and `not-recording` answered as
+  §8 says; on `MUSTER_VOICE_BACKEND=null` the null device's zeros were refused at Send as
+  `silent` with the macOS note as `detail`, and nothing was posted. No note was sent from a
+  host: two members, the live fleet and the thread's voice rows through `coordinate_messages`
+  are S9's.
+- **The exit proc at unload** (§9). In that run `module unload muster_module` with a
+  recording open on the null device took `logos_host` down with no crash report, and a
+  reload answered idle; whether the exit proc ran then, rather than the process being ended
+  without it, is not observed. (The daemon's stop afterwards crashed `delivery_module`'s own
+  `logos_host`, in `DeliveryModuleCdylibProvider::emitTrampoline` on its event thread, which
+  is not this code.)
 - **A Send that a member's variant blocks.** The held path re-seals the copy the log keeps,
   the one with the smallest `afterDigest`, and nothing caps the length of `after` on ingest
   (`session.nim` `publish`, `log.nim` `keep` and `ingest`). So a member who saw a part can
