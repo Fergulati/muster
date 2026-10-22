@@ -83,11 +83,11 @@ Pass `--version` for `delivery_module`: installed by name, it takes the catalogu
 ## Tests and releases on a Mac
 
 - `module/tests/run-suite.sh` runs as on Linux. With no `nim` on `PATH` it takes the nim and clang the `.lgx` compiles with; see `module/tests/README.md`.
-- The `Makefile`'s capped targets (`make build`, `make build-lgx`) cap with `systemd-run`, which macOS lacks, so they refuse to start there. The runner has not been built on a Mac; see `.claude/doctrine/codebase.md` § Runner builds before building one.
+- The `Makefile`'s capped targets (`make build`, `make build-lgx`) cap with `systemd-run`, which macOS lacks, so they refuse to start there; `BUILD_MEM=` builds uncapped (see `.claude/doctrine/codebase.md` § Runner builds first). **The runner does not build on a Mac yet.** On 2026-10-22 (macOS 26.5, Command Line Tools, no Xcode) `BUILD_MEM= make build` ran 1 h 28 min from cold and stopped in lez_core 0.5.0's Rust dependencies (`logos-execution-zone-wallet-ffi-deps`): `risc0-sys` 1.5.0's build script runs `xcrun --sdk macosx metal`, the Command Line Tools have no Metal compiler (`unable to find utility "metal"`), and `risc0-build-kernel` panics "Could not build metal kernels". `libmuster_module`, the `muster_ui` plugin and `logos-standalone-app` had built by then. Whether a full Xcode's Metal toolchain is enough is not tried.
 - `scripts/catalog-release.sh --local <dir> --base-url https://x` builds the `darwin-arm64` packages into a local catalogue, to test. A release run on a Mac is refused, since every release carries `linux-amd64`: releases come from the workflow (`--from-run`).
 
 ## Known rough edges
 
 - **A second Basecamp's storage node.** With another Basecamp running, the profile's `storage_module` failed to start ("Failed to create Storage: Should create metadata store!"). Muster does not use it, and nothing else was affected. The cause was not looked into.
-- **Not yet run on macOS:** the catalogue install (no release carries the variant), `scripts/ui-parity.sh` and the other offscreen self-tests (they use Xvfb), two instances in one room, and the Monero and chain-bound flows.
+- **Not yet run on macOS:** the catalogue install (no release carries the variant), `scripts/ui-parity.sh` and the other offscreen self-tests (they need the runner, above; `scripts/lib/ui-build.sh` launches and cleans up there since voice notes' S9, and `MUSTER_UI=dev` and `scripts/ui-screenshot.sh` need Xvfb), two instances in one room, and the Monero and chain-bound flows.
 - **No macOS download-and-run bundle.** The AppImage has no DMG counterpart; `scripts/release-appimage.sh`, `make appimage` and `scripts/basecamp-profile.sh` are Linux only on purpose (`docs/design/platforms.md`).

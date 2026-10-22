@@ -127,21 +127,29 @@ ui_require_runner() {
 }
 
 UI_PIDS=()
+# A session of its own for each instance: util-linux's setsid, or on macOS, which has none,
+# the same call from python3. Either way the runner keeps its pid, which names its session
+# and its process group.
+if command -v setsid >/dev/null 2>&1; then UI_SETSID=(setsid)
+else UI_SETSID=(python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])'); fi
 
 # ui_launch <user-dir> <log> [VAR=value …] — one offscreen instance in its own session.
 ui_launch() {
   local dir="$1" log="$2"; shift 2
-  env "$@" QT_QPA_PLATFORM="${MUSTER_QPA:-offscreen}" setsid "$RUNNER" --user-dir "$dir" >"$log" 2>&1 &
+  env "$@" QT_QPA_PLATFORM="${MUSTER_QPA:-offscreen}" "${UI_SETSID[@]}" "$RUNNER" --user-dir "$dir" >"$log" 2>&1 &
   UI_PIDS+=("$!")
   disown "$!"
 }
 
-# ui_cleanup — kill every session ui_launch started, and nothing else.
+# ui_cleanup — kill every session ui_launch started, and nothing else. macOS's ps has no
+# session id, so there it kills the instance's process group, which setsid made its pid.
 ui_cleanup() {
   local pid sid
-  for pid in "${UI_PIDS[@]}"; do
+  for pid in ${UI_PIDS[@]+"${UI_PIDS[@]}"}; do
     sid=$(ps -o sid= -p "$pid" 2>/dev/null | tr -d ' ')
+    case "$sid" in *[!0-9]*) sid="" ;; esac   # macOS's ps prints its keyword list instead
     [ -n "$sid" ] && pkill -9 -s "$sid" 2>/dev/null
+    [ -n "$sid" ] || pkill -9 -g "$pid" 2>/dev/null
     kill -9 "$pid" 2>/dev/null
   done
   UI_PIDS=()

@@ -1489,6 +1489,58 @@ void MusterUiBackend::onContextReady()
                     }
                     qInfo().noquote() << "[muster_ui] FILESHARE" << fileShareJson() << "result=" << fileShareResultJson();
                 }
+                // Voice self-test (docs/design/voice-notes.md S9): MUSTER_AUTOVOICE=<seconds>
+                // records that long once someone else is in the room, then sends the draft:
+                // the mic's Start, Stop and Send. MUSTER_AUTOVOICEPLAY=1 plays a complete note
+                // another member sent, while nothing plays, as the card's Play does; a refused
+                // Play is tried again on the next tick, up to five times. Each tick logs
+                // voice_status as VOICE and the thread's notes as VOICE-NOTES, and each call's
+                // answer as VOICE-RESULT <call>.
+                const int voiceSecs = qgetenv("MUSTER_AUTOVOICE").toInt();
+                const bool voicePlay = !qgetenv("MUSTER_AUTOVOICEPLAY").isEmpty();
+                if (voiceSecs > 0 || voicePlay) {
+                    static bool voiceStarted = false;
+                    static QSet<QString> voicePlayed;
+                    static QHash<QString, int> voiceTries;
+                    loadVoice();
+                    qInfo().noquote() << "[muster_ui] VOICE" << voiceJson();
+                    QJsonArray notes;
+                    for (const auto &v : QJsonDocument::fromJson(messagesJson().toUtf8()).array()) {
+                        const QJsonObject row = v.toObject();
+                        if (!row.value("voice").isObject()) continue;
+                        QJsonObject n = row.value("voice").toObject();
+                        n.insert("self", row.value("self").toBool());
+                        notes.append(n);
+                    }
+                    qInfo().noquote() << "[muster_ui] VOICE-NOTES"
+                                      << QString::fromUtf8(QJsonDocument(notes).toJson(QJsonDocument::Compact));
+                    if (voiceSecs > 0 && !voiceStarted && membersJson().contains("\"self\":false")) {
+                        voiceStarted = true;
+                        startVoiceRecording();
+                        qInfo().noquote() << "[muster_ui] VOICE-RESULT start" << voiceResultJson();
+                        QTimer::singleShot(voiceSecs * 1000, this, [this]() {
+                            stopVoiceRecording();
+                            qInfo().noquote() << "[muster_ui] VOICE-RESULT stop" << voiceResultJson();
+                            sendVoiceDraft();
+                            qInfo().noquote() << "[muster_ui] VOICE-RESULT send" << voiceResultJson();
+                        });
+                    }
+                    const QJsonValue playing = QJsonDocument::fromJson(voiceJson().toUtf8()).object().value("playing");
+                    if (voicePlay && playing.isNull()) {
+                        for (const auto &v : notes) {
+                            const QJsonObject n = v.toObject();
+                            const QString id = n.value("note").toString();
+                            if (id.isEmpty() || n.value("self").toBool() || voicePlayed.contains(id)
+                                || n.value("state").toString() != "complete" || voiceTries.value(id) >= 5)
+                                continue;
+                            voiceTries[id] += 1;
+                            playVoiceNote(id);
+                            qInfo().noquote() << "[muster_ui] VOICE-RESULT play" << id << voiceResultJson();
+                            if (!voiceResultJson().contains("\"error\"")) voicePlayed.insert(id);
+                            break;
+                        }
+                    }
+                }
                 qInfo() << "[muster_ui] SELFTEST pending=" << pendingJson()
                         << "members=" << membersJson()
                         << "intents=" << intentsJson();

@@ -13,7 +13,8 @@
 # Each test runs on the live Logos fleet (MUSTER_FLEET, logos.dev by default), or with
 # MUSTER_FLEET=local on a network the instances make on this host, which checks the code
 # while the fleet is down. split also starts a throwaway anvil, split-btc a
-# fresh Bitcoin Core regtest (bitcoind via nix shell). The LEZ
+# fresh Bitcoin Core regtest (bitcoind via nix shell); voice records from a WAV it writes and
+# plays into a file, no audio device (docs/design/voice-notes.md S9). The LEZ
 # testnet split (~25 min, real proofs) is not in the suite: run it by hand.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -50,8 +51,9 @@ declare -A SUITE=(
   [room-copy]="scripts/room-copy-self-test.sh"
   [split]="scripts/split-self-test.sh"
   [split-btc]="nix shell nixpkgs#bitcoind -c scripts/split-btc-self-test.sh"
+  [voice]="scripts/voice-self-test.sh"
 )
-ORDER=(card install infra-safe infra-threshold audit invite two-instance relaunch leave room-copy split split-btc)
+ORDER=(card install infra-safe infra-threshold audit invite two-instance relaunch leave room-copy split split-btc voice)
 [ $# -gt 0 ] && ORDER=("$@")
 
 LOGS=$(mktemp -d)
