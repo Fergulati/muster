@@ -1,7 +1,8 @@
 # Voice notes' audio stack: libopus and miniaudio inside a Nim plugin (2026-10-21)
 
-**Voice notes, slices S1 to S7 (`docs/design/voice-notes.md`). darwin-arm64 only, with nim
-2.2.4 and clang 19.1.7 at the builder's nixpkgs `e9f00bd`. None of this has run on Linux.**
+**Voice notes, slices S1 to S7 and S11's device test (`docs/design/voice-notes.md`).
+darwin-arm64 only, with nim 2.2.4 and clang 19.1.7 at the builder's nixpkgs `e9f00bd`. None
+of this has run on Linux.**
 
 Cost: a throwaway prototype on an Apple M5, then one review per slice. Most of these traps
 passed every test that existed when they went in. Each was found by a mutation or a
@@ -224,13 +225,48 @@ Nothing pads with NULs. `session_pad_test` finds the JSON's end by re-serializin
 `parseJson` read, so a NUL pad fails it (§1). It first got through, to §5, before that
 change.
 
+## 9. An unanswered microphone prompt holds the capture start (S11)
+
+**What happened.** `voice_device_e2e` (S11) ran on this Mac on 2026-10-22, outside Basecamp,
+from Claude Code in the Claude desktop app, with the person's consent. Its microphone leg
+called `startCapture` on Core Audio, and the call did not return. The test's watchdog ended it
+after 20 s, so no frame arrived and nothing was measured. Its speaker leg, run alone, passed.
+
+**Why.** tccd's log (`log show --predicate 'subsystem == "com.apple.TCC"'`) shows the request:
+- It is charged to `com.anthropic.claude-code`, Claude Code's own `claude.app`, not to the
+  Claude desktop app (`com.anthropic.claude`). The desktop app starts Claude Code through its
+  `disclaimer` helper, so Claude Code is the responsible app, and it carries a microphone
+  usage string and the `audio-input` entitlement.
+- The permission was not decided (a preflight gave `authValue=1`), so tccd showed a prompt
+  (`AUTHREQ_PROMPTING`, `kTCCServiceMicrophone`). Nobody answered it: it was the middle of the
+  night. No `AUTHREQ_RESULT` followed.
+- coreaudiod made that request for the test's process, and the device's start waited on it.
+
+So an undecided permission gives neither zeros nor a refusal: it gives a start that waits for
+the person. The all-zero check never runs.
+
+**What it means for the module (inferred).** `MiniaudioIo` starts a device on the module
+thread, with no timeout. Under an app that has a usage string and an undecided permission, a
+first `voice_record_start` would hold that thread, and every other module call behind it,
+until the person answers. Basecamp's `logos_host` has no usage string, so whether it is asked
+at all is design §11's check, not this one.
+
+**The test's answer.** A watchdog thread in `voice_device_e2e` arms before each device call
+and, past its limit, prints what it waited on (for the microphone: the prompt, which app it
+was for, and how to see that in tccd's log) and exits 1. A test that hangs until run-suite's
+900 s timeout says nothing.
+
 ## Not found out yet
 
 These are inferred, or wait on a host this was not built on. The design doc carries each one:
 - **The microphone under Basecamp's hardened runtime** (§11). `logos_host` has no
   `com.apple.security.device.audio-input`, and `Info.plist` no `NSMicrophoneUsageDescription`.
   Either capture delivers zeros, which Send refuses as `silent`, or TCC terminates
-  `logos_host`. S11 checks which, before anything relies on the refusal.
+  `logos_host`, or, as §9 above found outside Basecamp, the start waits on a prompt. S11
+  checks which, before anything relies on the refusal.
+- **A real microphone's capture.** §9's run got no frame, so no peak, RMS or codec round trip
+  from a real microphone exists yet. Once the prompt is answered:
+  `MUSTER_VOICE_REAL=mic module/tests/run-suite.sh e2e voice_device_e2e`.
 - **Linux** (§12, §15): miniaudio's `dlopen` of `libpulse` and `libasound` from a portable
   `.lgx`, the AppImage and a nix-built runner (whose loader reads no `/etc/ld.so.cache`); the
   Linux plugin links; `libopus.so.0` bundled and resolved by each variant's RUNPATH.

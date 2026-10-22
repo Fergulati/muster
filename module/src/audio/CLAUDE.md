@@ -75,14 +75,19 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   miniaudio header type stays in `miniaudio.nim`, never inside a generic (a `seq` of one put
   miniaudio.h into system's C: use a fixed array), and the `-D` backend flags stay one global
   `passC` (they change struct layouts).
-- No test opens a real device: `abNull` only. A real-device test sits behind
-  `MUSTER_VOICE_REAL`, in run-suite's E2E list (S11).
+- No test in the default run opens a real device: `abNull` only. The real-device test,
+  `module/tests/voice_device_e2e.nim` (S11), sits behind `MUSTER_VOICE_REAL`, in run-suite's
+  E2E list, and skips without it. It prints a capture's peak and RMS and nothing else from the
+  audio, writes no file, and plays digital silence unless `MUSTER_VOICE_REAL_AUDIBLE=1`. On
+  macOS a first capture start can block until the person answers the microphone prompt (the
+  labbook, §9), so a watchdog thread ends the test when a device call has not returned.
 - Tests: `module/tests/voice_clip_test.nim` (pure), `module/tests/voice_codec_test.nim`
   (libopus; `run-suite.sh` links the builder pin's on macOS, the .lgx's 1.5.2, and nixpkgs'
   beside libsodium on Linux; `MUSTER_OPUS` picks another; §1 prints the version),
   `module/tests/audio_io_test.nim` (the seam with no device),
   `module/tests/audio_io_null_test.nim` (miniaudio's null device thread; `run-suite.sh` puts
-  the pin's checkout on `--path`), and `module/tests/voice_live_test.nim` (the recorder over
+  the pin's checkout on `--path`), `module/tests/voice_device_e2e.nim` (the real devices,
+  gated, above), and `module/tests/voice_live_test.nim` (the recorder over
   `SyntheticAudioIo`, `FileAudioIo` and the null device, two members over `LocalTransport`).
   `probes/probe_return_marshalling_host.nim` (exo-526) builds the whole module into a host,
   so it links libopus (`opusTokens`, `MUSTER_OPUS_LIB`) and compiles miniaudio from the

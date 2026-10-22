@@ -11,6 +11,7 @@
 #   module/tests/run-suite.sh unit            # unit tests only
 #   module/tests/run-suite.sh probes          # invariant probes only
 #   module/tests/run-suite.sh e2e <name>...   # a named chain-bound test; bring its chain up first
+#   MUSTER_VOICE_REAL=1 module/tests/run-suite.sh e2e voice_device_e2e   # the real mic and speaker
 #   module/tests/run-suite.sh all dcbor frost # any group, filtered by substring
 #
 # Env: MUSTER_NIMPKGS (closure dir, default ~/.cache/muster/nimpkgs; tools/nim-closure.sh
@@ -160,6 +161,7 @@ FLAGS=(-d:release --threads:on --hints:off
 # 2. Select.
 E2E+=(lez_frost_v030_e2e lez_frost_room_v030_e2e)    # on a local LEZ v0.3 zone (exo-eb6.4 L3)
 E2E+=(lez_multisig_live_v030_e2e)                    # the v0.3 multisig port, deployed on that zone (exo-eb6.4.4)
+E2E+=(voice_device_e2e)                              # the real microphone and speaker, only with MUSTER_VOICE_REAL (voice notes S11)
 is_e2e() { local n; for n in "${E2E[@]}"; do [ "$n" = "$1" ] && return 0; done; return 1; }
 unit=(); probes=(); e2e=()
 for f in tests/*.nim; do
@@ -183,13 +185,19 @@ if [ ${#FILTERS[@]} -gt 0 ]; then
 fi
 [ ${#sel[@]} -gt 0 ] || { echo "no tests match"; exit 2; }
 
-# 3. Run. Each test gets its own log and a PASS/FAIL line; the summary reads those.
+# 3. Run. Each test gets its own log and a PASS/FAIL line; the summary reads those. A test
+# that exits 0 having run nothing, because its gate is closed, says so on a line of its own
+# starting "SKIP <name>:" (voice_device_e2e without MUSTER_VOICE_REAL), and is counted SKIP.
 run_one() {
   local f="$1" n; n=$(basename "$f" .nim)
   local t0=$SECONDS
   # shellcheck disable=SC2086  # TEST_ARGS is deliberately word-split
   if timeout "$TEST_TIMEOUT" nim r "${FLAGS[@]}" "$f" ${TEST_ARGS:-} >"$OUT/$n.log" 2>&1; then
-    echo "PASS $n $((SECONDS - t0))s" | tee -a "$OUT/results"
+    if grep -q "^SKIP $n:" "$OUT/$n.log"; then
+      echo "SKIP $n $((SECONDS - t0))s  ($(grep -m1 "^SKIP $n:" "$OUT/$n.log" | cut -d: -f2- | cut -d. -f1 | cut -c2-))" | tee -a "$OUT/results"
+    else
+      echo "PASS $n $((SECONDS - t0))s" | tee -a "$OUT/results"
+    fi
   else
     echo "FAIL $n $((SECONDS - t0))s  ($OUT/$n.log)" | tee -a "$OUT/results"
   fi
@@ -203,7 +211,9 @@ echo "running ${#sel[@]} tests, $JOBS at a time; logs in $OUT"
 printf '%s\n' "${sel[@]}" | xargs -P "$JOBS" -I{} bash -c 'run_one_q "$1"' _ {}
 
 pass=$(grep -c '^PASS' "$OUT/results"); fail=$(grep -c '^FAIL' "$OUT/results")
+skip=$(grep -c '^SKIP' "$OUT/results")
 echo
-echo "── $pass passed, $fail failed (of ${#sel[@]}) ──"
+if [ "$skip" -gt 0 ]; then echo "── $pass passed, $fail failed, $skip skipped (of ${#sel[@]}) ──"
+else echo "── $pass passed, $fail failed (of ${#sel[@]}) ──"; fi
 grep '^FAIL' "$OUT/results" | sort
 [ "$fail" -eq 0 ]

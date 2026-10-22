@@ -48,6 +48,7 @@ nim runs `clang` from there. With no `timeout` it uses nixpkgs coreutils'.
 | `lez_frost_v030_e2e`, `lez_frost_room_v030_e2e`, `lez_multisig_live_v030_e2e` | a local LEZ **v0.3.0** zone, `infra/lez/localnet.sh`, or the testnet (`https://testnet.lez.logos.co 40`) once its funder holds LEZ: every account the tests use is funded by the zone's funder, `infra/lez/funder.sh`, `MUSTER_LEZ_E2E_FUND` base units each (default 1 LEZ; on the testnet 50000000 for the multisig, 200000000 for FROST) | `[sequencerUrl] [blockSeconds]` (`http://127.0.0.1:3040`, `15`); `lez_multisig_live_v030_e2e` takes the deployed v0.3 multisig's program account as a third argument or `MUSTER_LEZ_MULTISIG_V03_PROGRAM`, or deploys the port's guest first when `MUSTER_LEZ_MULTISIG_V03_BIN` names it (`localnet.sh deploy`) |
 | `split_anvil_e2e` | any fresh anvil (chain id 31337, its default funded accounts; no Safe) | `[rpcUrl]` (`http://127.0.0.1:8547`) |
 | `settle_up_across_anvil_e2e` | any fresh anvil (chain id 31337, its default funded accounts); the Bitcoin split it covers needs no node — it goes final by its creditor's word | `[rpcUrl]` (`http://127.0.0.1:8545`) |
+| `voice_device_e2e` | no chain: this machine's own microphone and speaker, and only with `MUSTER_VOICE_REAL` set (see Voice notes, below); otherwise it skips | none; `MUSTER_VOICE_REAL=1` (both legs), `mic` or `speaker`; `MUSTER_VOICE_REAL_AUDIBLE=1` for a quiet tone in place of silence |
 
 ```bash
 SAFE=$(infra/anvil/devnet.sh | grep -oE '0x[0-9a-fA-F]{40}' | tail -1)   # from the repo root
@@ -143,16 +144,47 @@ wants (below), which the runner supplies.
 - `session_pad_test` (§4, §5 — fixed-size sealed frames, over `LocalTransport` with every frame on the topic recorded: every `voice/` frame is exactly 90,153 B (1 + 24 + 16 + `VoiceFrameBytes` 90,112) with no pad passed, for a 1 KB and a worst-case 84 KB value with 0, 1 and 8 heads and on the held path, the JSON followed by spaces only; prints the worst case's measured JSON (85,257 B, 4,855 B to spare); a padded frame decodes through the unchanged ingest path, live and from the journal, into the same event; FrameTooLarge, and a wrong or negative pad, raise before the log, the journal or the transport see anything; padTo 0 is today's frame byte for byte, held to literals; a padded author-signed event keeps both signatures; `$SECP` + `$SODIUM`)
 - `voice_test` (§3.3, §6, §7 — voice events, the fold and thread rows, over `LocalTransport` with synthetic CDE clips (40-byte packets: the fold checks structure and digest and never decodes audio, so no libopus): the note id is 16 bytes of a `muster.voice.note-id.v1` record over (author, clip digest, ts), the clip digest a `muster.voice.clip.v1` record; `voiceEvents` is exactly two `voice/<nid>/<author>/<i>/2` parts, integers only, the record's halves as canonical base64; a member folds another's note complete, the clip byte for byte; every voice frame 90,153 B at 0.5, 10 and 60 s; forged, unsigned, cross-room, edited and squatted parts drop out (over the wire too); a malformed key or value is dropped, never raised (whitespace in a part's base64 above all, which std/base64's decode reads past the end of, and a durMs no clip has), and any string at all is a part's half only as canonical base64; arriving, broken (parts that disagree, either one the odd one, a digest miss, a bad record or length) and the first copy in canonical order standing; any order and duplication folds the same (invariant 4); `threadRows` merges messages and notes by (ts, id), either kind first at one ts, a voice row's body empty and its `voice` field metadata under 300 B, the newest row's ts counting a note, and a `message/` whose body claims `voice-note` stays its author's plain row (§7); a member admitted later folds no earlier note (F-16); a `VoiceMemo` of verdicts keyed by the standing parts' ids changes no fold, and a part that comes to stand in another's place is judged afresh; `threadLastTs`, from the header pass alone, is the newest row's ts; disclosure (§10, S6), where a part is one the fold stands (`voiceStanding`, the header pass) in every view: `reduceFlow` gives each part exactly `voice-note` and `voice-note-length` to its epoch's key holders and `timing`, `topic` and `fixed-size` to the store node, nothing to anyone else, and an entry under `voice/` that is no note's part (a key the fold refuses, a value it refuses, an equivocating later copy, a squatted note id) the store node's three rows alone; in the room map each part is an author-signed `voice` entry credited to the member its key names, counted exactly when the fold names it in a note's parts (of two copies of one part, only the first by canonical order), its store-node facet naming the one fixed size, its content `v`, `ts`, `durMs` and `digest` at most, field by field, and no 48-character stretch of any half, at every 24-character step and at its end, anywhere in the map `toJson` serves (coordinate_graph); `logProvenance` lists each part as a peer message in its author's name at the epoch that opened it; an entry that is no note's part stays its signer's in the map, uncounted, with a facet that says both (as `swarm_test` §8 now pins for `file/` entries), and is not in provenance; `$SECP` + `$SODIUM`). The probes `probe_voice_fixed_size_stepper` (0.5–60 s × 0, 1, 8 heads × two epochs, and the held path: every frame 90,153 B), `probe_voice_author_stepper` (six part forms × either part, the forged `voice-note` row, and five strings with whitespace that std/base64's decode reads past the end of × either part) and `probe_voice_order_stepper` (every order, duplication and subset of a note's parts with an equivocating copy) are stepper oracles over the shared fixture `probes/voice_room.nim`, for a spec the maintainer has not yet assigned an exo id. `probe_voice_fixed_size_stepper` is also the test the claims registry names for "A voice note's length does not show in its size" (FS-9, `contracts/claims/registry.json`), so `scripts/check-claims-registry.py` fails if it moves
 - `voice_live_test` (§8, §9 — the hosted half, `VoiceRecorder`, the state machine the seven voice methods run, with two members over `LocalTransport`, each recorder on `SyntheticAudioIo` and a virtual clock, libopus encoding and decoding for real: a 3 s 1 kHz tone recorded, stopped into a draft of 3,000 ms, sent as two 90,153 B frames, folded complete by the other member, whose playback sink holds exactly the clip's samples with a 1 kHz Goertzel peak, idle again once the pump sees `done`; the 60 s cap ending a 70 s source at 60,000 ms with `capped`, released by the pump alone; an all-zero recording refused at Send as `silent` with the platform note (the macOS words on macOS) and nothing on the log or the topic; 499 ms `too-short`, 500 ms sent; `busy`, `no-draft`, `not-recording`, `not-joined` with nothing opened; play's `unknown-note`, `incomplete` and `broken`, a note the fold calls complete but libopus refuses included; incremental encoding (after 59 s of pumps Stop encodes 0.5 s); discard, of a draft or a recording; one memo of verdicts per room, served on the second read; `voiceIoChoice` (MUSTER_VOICE_SOURCE / _SINK, MUSTER_VOICE_BACKEND) and `FileAudioIo` end to end, a WAV in and the clip's samples in the PCM sink; miniaudio's null device, whose zeros Send refuses, its context released when the stream ends; close, idempotent; a Send refused between its parts keeps the draft, the sender's own fold already calling the note complete, and its retry re-sends both parts held, the same note; a recording of nothing, or of 300 ms of zeros, `too-short`, not `silent`, with no microphone note; Start, Play and Send each pump first, so a playback heard to its end is not `busy` and Send finds the draft the cap made; a draft sent through another room's session `room-changed`, nothing published, kept; Send and Discard while the draft plays, a sink that refuses a write past a file-size limit (`sink-write`), a start the device refuses and close, each releasing the device; the rows `coordinate_messages` serves (`messagesJson`); `coordinate_proof`'s refusal for a room holding any `voice/` entry (`roomProof`); and every reply, in every state, carries no `part`, no base64 run over 64, no float and under 1 KB; `$SECP` + `$SODIUM` + `$OPUS` + `$MA`)
+- `voice_device_e2e` (§9, S11 — the real microphone and speaker, `MiniaudioIo` on the system backend; gated behind `MUSTER_VOICE_REAL`, in run-suite's E2E list, so never in the default run: below; `$OPUS` + `$MA`)
 
-No test here opens a real audio device: miniaudio runs on its null backend, with no
-microphone, no speaker and no permission prompt. Which `AudioIo` the hosted module makes is
-`voice_live.voiceIoChoice`'s, read from the environment and held by `voice_live_test`:
-`MUSTER_VOICE_SOURCE` (a 48 kHz mono s16 WAV) or `MUSTER_VOICE_SINK` (a raw PCM file) give
-`FileAudioIo`, `MUSTER_VOICE_BACKEND=null` the null device, anything else the platform's own
-backends. A real device means a real microphone and, on macOS, a permission only the person
-can grant. So the real-device test, `voice_device_e2e` (S11, not built yet), goes in
-run-suite's E2E list behind `MUSTER_VOICE_REAL`: run by name only, never by default, and its
-microphone leg only with the person's consent. The traps the audio tests guard are in
+No test in the default run opens a real audio device: miniaudio runs on its null backend,
+with no microphone, no speaker and no permission prompt. Which `AudioIo` the hosted module
+makes is `voice_live.voiceIoChoice`'s, read from the environment and held by
+`voice_live_test`: `MUSTER_VOICE_SOURCE` (a 48 kHz mono s16 WAV) or `MUSTER_VOICE_SINK` (a raw
+PCM file) give `FileAudioIo`, `MUSTER_VOICE_BACKEND=null` the null device, anything else the
+platform's own backends. A real device means a real microphone and, on macOS, a permission
+only the person can grant.
+
+So the real-device test, `voice_device_e2e` (S11), is in run-suite's E2E list and gated
+behind `MUSTER_VOICE_REAL`. It runs by name only, never by default, and its microphone leg
+only with the person's consent. Without `MUSTER_VOICE_REAL` it prints a `SKIP` line and
+exits 0, and the runner counts it as skipped, not passed.
+
+```bash
+MUSTER_VOICE_REAL=1 module/tests/run-suite.sh e2e voice_device_e2e         # both legs
+MUSTER_VOICE_REAL=speaker module/tests/run-suite.sh e2e voice_device_e2e   # the speaker only
+```
+
+- It opens `MiniaudioIo` on the system backend (Core Audio on macOS; PulseAudio, then ALSA,
+  on Linux) through the same `AudioIo` seam the module uses. Nothing is mocked.
+- **The microphone leg** (`mic`, or `1`) captures 2 s. The stream must read back as 48 kHz
+  mono s16, and frames must arrive at 48 a millisecond, ±5%. The write index must only grow,
+  and the 2 s cap must stop it at exactly 96,000 frames with `capped` set, as on the null
+  device. The capture then goes through the module's own libopus path at the fixed settings
+  and back, and its length must be kept. Audio never leaves the process: nothing is written
+  to a file, and the only numbers printed from it are its peak and RMS. A capture of nothing
+  but zeros fails, with a message naming the likely cause: on macOS, the microphone
+  permission of the app macOS holds responsible (run from the Claude desktop app, that is
+  Claude Code, `com.anthropic.claude-code`, not Claude itself), or no input device.
+- **The speaker leg** (`speaker`, or `1`) plays through the real output device: 48,000
+  frames a second, ±5%, and `done` only after the device's own tail of silence, as
+  `audio_io_null_test` §3 does. By default it plays digital silence (zeros), so nothing can be
+  heard. Only `MUSTER_VOICE_REAL_AUDIBLE=1` plays a short quiet tone: 0.5 s of 440 Hz at
+  about -30 dBFS.
+- A device call that never returns is caught by a watchdog thread, which prints what it
+  waited on and exits 1. A microphone permission prompt nobody answers does this on macOS.
+
+What it found on this Mac (2026-10-22): see `docs/design/voice-notes.md` §17 S11. The traps
+the audio tests guard are in
 [`docs/labbook/voice-notes-audio-stack.md`](../../docs/labbook/voice-notes-audio-stack.md).
 
 **Monero (epic exo-dcc, ADR-018).**
@@ -182,10 +214,10 @@ Which group a test needs:
 - **None** — pure Nim: `dcbor_golden_test`, `manifest_test`, `log_proof_test`,
   `psbt_test`, `lez_multisig_chain_test`, `lez_multisig_model_test`, and most probes.
 - **`$OPUS`** — the voice codec, `src/audio/opus.nim` through `voice_codec`:
-  `voice_codec_test`, `voice_live_test`. `voice_clip_test` needs none.
+  `voice_codec_test`, `voice_live_test`, `voice_device_e2e`. `voice_clip_test` needs none.
 - **`$MA`** — the audio devices, `src/audio/miniaudio.nim`: `audio_io_null_test`,
-  `voice_live_test` (§13). Without it the compile stops at `miniaudio.h is on no --path`.
-  `audio_io_test` needs none.
+  `voice_live_test` (§13), `voice_device_e2e`. Without it the compile stops at
+  `miniaudio.h is on no --path`. `audio_io_test` needs none.
 - **`$SODIUM`** — anything whose import closure reaches `crypto/curve25519` (the
   Ed25519/X25519 encryption identity), which is most of the room: `decline_test`,
   `provenance_all_test`, `flow_test`, `materialshare_test`, `schema_unknown_test`,

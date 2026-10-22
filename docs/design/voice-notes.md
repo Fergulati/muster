@@ -1,7 +1,8 @@
 # Voice notes: a short recorded clip in the room, sealed like text, one fixed size on the wire
 
 Status: **proposed 2026-10-21 by an outside contributor; slices S1–S10 are built on this
-branch, and S11 is not. S9's end-to-end self-test has not run yet (§15).** This document is
+branch. Of S11, the real-device test is built and has run in part (§17). S9's end-to-end
+self-test has not run yet (§15).** This document is
 the first commit of a draft PR, so the maintainer can object to the wire format (§3–§5) before any code depends on it. There is no exo id yet
 (§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
 an id is assigned. A code path named below as new is **planned** unless its slice is built.
@@ -508,8 +509,8 @@ implementations:
 - `FileAudioIo`: a 48 kHz mono s16 WAV source (`MUSTER_VOICE_SOURCE`) and a raw PCM sink
   (`MUSTER_VOICE_SINK`), for the offscreen self-test (S9).
 - `MiniaudioIo(system | null)`: miniaudio's null backend runs the real device-thread path with
-  no device and no permission prompt. Real-device tests sit behind `MUSTER_VOICE_REAL`, in
-  run-suite's E2E list (S11).
+  no device and no permission prompt. The real-device test, `voice_device_e2e` (S11, built),
+  sits behind `MUSTER_VOICE_REAL`, in run-suite's E2E list.
 
 **The device callback.** miniaudio calls it on a thread Nim does not own, so it follows the
 same rule as `transport/inbound_queue.nim:1-11`:
@@ -784,9 +785,11 @@ The answer (decided):
 Basecamp adds `com.apple.security.device.audio-input` to `logos_host`'s entitlements (and the
 app's), adds `NSMicrophoneUsageDescription` to `Info.plist`, and re-signs.
 
-**Outside Basecamp.** An unbundled, nix-built binary is charged to the terminal app that runs
-it, and macOS asks the person to grant that app the microphone. S11's opt-in microphone test
-runs only with that consent.
+**Outside Basecamp.** An unbundled, nix-built binary is charged to the app macOS holds
+responsible for it: the terminal app, or, run from the Claude desktop app, Claude Code
+(`com.anthropic.claude-code`), not Claude itself. macOS asks the person to grant that app the
+microphone, and Core Audio holds the device's start until they answer (both seen in S11, §17).
+S11's opt-in microphone test runs only with that consent.
 
 ## 12. Linux
 
@@ -857,14 +860,24 @@ and the PR says so (§18).
 
 ## 15. What is not verified
 
-S1–S10 are built (§17), and S11 is not. What is unverified, built or planned:
+S1–S10 are built (§17). Of S11, the real-device test is built: its speaker leg passed on this
+Mac, and its microphone leg stopped at a permission prompt nobody answered (§17 S11). What is
+unverified, built or planned:
 - **The audio facts came from a throwaway prototype on an Apple M5.** These are packet sizes,
   the varargs hazard, the null backend, encode and decode cost, and miniaudio compiled through
   `{.compile.}`. None of them has run through the real `logos-module-builder` derivation, and
   none has run on Linux.
 - **Microphone capture under Basecamp's hardened runtime.** Neither outcome of §11 is
   observed: zero-filled buffers, or TCC terminating `logos_host`. S11 checks this first. Real
-  capture anywhere without the person's grant is unobserved too.
+  capture anywhere without the person's grant is unobserved too, and so is real capture with
+  it: `voice_device_e2e`'s microphone leg got no frame, because the prompt went unanswered
+  (§17 S11).
+- **A first `voice_record_start` can hold the module thread on a Mac.** Outside Basecamp, for
+  an app with a microphone usage string whose permission is not yet decided, Core Audio held
+  the capture device's start while macOS asked (S11: still not returned after 20 s). The
+  module starts a device on its own thread (§9), so there every other module call would wait
+  for the person's answer too (inferred, not run in a host). No timeout guards the start.
+  Whether `logos_host` under Basecamp, with no usage string, is asked at all is §11's check.
 - **Linux dlopen** of `libpulse` and `libasound`, from a portable `.lgx`, the AppImage and a
   nix-built runner; and PipeWire.
 - **Delivery of two 90,153 B frames:**
@@ -1118,8 +1131,56 @@ Each slice's test is written and run red before its code (worker.md), and every 
 - **S11 — Checks on a Mac display, the opt-in device test, and the draft PR.** First, before
   anything relies on the `silent` refusal: under Basecamp 0.3.2, with a throwaway profile,
   does `logos_host` survive `voice_record_start`? If it does not, that goes back to the
-  operator (§11). Test: `voice_device_e2e`, behind `MUSTER_VOICE_REAL`. Its microphone leg
-  runs only with the person's consent.
+  operator (§11).
+
+  **The device test (built): `voice_device_e2e`**, in run-suite's E2E list and gated behind
+  `MUSTER_VOICE_REAL`. Without it, it prints a `SKIP` line and exits 0, and run-suite counts it
+  as skipped. It opens `MiniaudioIo` on the system backend through the `AudioIo` seam, with
+  no mock (`module/tests/README.md` has the details):
+  - **The microphone leg** (`MUSTER_VOICE_REAL=mic`, or `1`), only with the person's consent.
+    It captures 2 s. The stream must read back as 48 kHz mono s16, frames must arrive at 48 a
+    millisecond (±5%), the write index must only grow, and the cap must stop it at exactly
+    96,000 frames with `capped` set. Then the capture goes through the module's libopus path
+    at §3.1's settings and back, its length kept. It prints only the capture's peak and RMS,
+    and writes nothing. An all-zero capture fails, naming the likely cause: the microphone
+    permission, or no input device.
+  - **The speaker leg** (`speaker`, or `1`) plays digital silence by default, so nothing can
+    be heard; only `MUSTER_VOICE_REAL_AUDIBLE=1` plays 0.5 s of 440 Hz at about -30 dBFS. It
+    must run at 48,000 frames a second (±5%), and a short buffer must be `done` only after the
+    device's own tail of silence, as on the null device.
+  - **A watchdog thread** ends the test, with a message, when a device call has not returned
+    after 20 s.
+
+  **Run on this Mac, 2026-10-22** (macOS 26.5.2, Apple Silicon, outside Basecamp, run from Claude
+  Code in the Claude desktop app, with the person's consent; `MUSTER_VOICE_REAL=1`, then
+  `MUSTER_VOICE_REAL=speaker`):
+  - **The speaker leg passed** on Core Audio, playing silence. It read back as 48 kHz mono s16,
+    took 48,480 frames in 1,010 ms (48.00 a millisecond), and a 100 ms buffer was `done` after
+    130 ms, once 1,920 frames of silence had followed it. That is the tail the device read
+    back (40 ms), the same as the null device's. A second run, on the committed text, gave the
+    same numbers but 127 ms.
+  - **The microphone leg got no frame.** macOS asked for the microphone and nobody answered:
+    it was the middle of the night. Core Audio held the device's start while it asked, so
+    `startCapture` had not returned after 20 s, and the watchdog ended the test. So there is
+    no peak, no RMS and no codec round trip from a real microphone yet. tccd's log charged the
+    request to Claude Code (`com.anthropic.claude-code`, its own `claude.app`, which the
+    Claude desktop app starts through its `disclaimer` helper), not to the Claude desktop
+    app: `AUTHREQ_PROMPTING` for `kTCCServiceMicrophone`, then no result. A minute later, a
+    preflight for the speaker run still read the permission as not decided (`authValue=1`).
+    The microphone leg was not run again. After that run its messages were reworded to name
+    Claude Code, and the cap's pace is now timed from the start's return; neither touches the
+    step where it stopped.
+  - **Before it, the same test on the null device** (a scratch mutant, not committed: the
+    system backend swapped for null): with the backend checks in, both legs FAIL "backend
+    Null not in @["Core Audio"]"; with them out, the microphone leg FAILs on its all-zero capture with
+    the permission message, after every other check passed (48.13 frames a millisecond, capped
+    at exactly 96,000 after 2,010 ms, 101 packets of 40 B, a 4,318 B record decoded back to
+    96,000 samples), while its speaker leg passes.
+
+  **To finish it:** answer the prompt, or grant Claude Code the microphone in System Settings >
+  Privacy & Security > Microphone, then run `MUSTER_VOICE_REAL=mic module/tests/run-suite.sh
+  e2e voice_device_e2e`. Linux has not run it (§12): PulseAudio, then ALSA, with no
+  permission prompt there.
 
 ## 18. Decisions
 
