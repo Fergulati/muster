@@ -13,8 +13,9 @@
 ##     opens no device and prompts for nothing.
 ##
 ## Planned for S7: recording, the draft, sending it and playing (§8's six other methods), the
-## voice pump that voice_status drives, and the thread rows. This module codes against
-## AudioIo, never against miniaudio, so voice_live_test can run it on SyntheticAudioIo.
+## voice pump that voice_status drives, and `threadRows` (voice.nim) in coordinate_messages.
+## This module codes against AudioIo, never against miniaudio, so voice_live_test can run it
+## on SyntheticAudioIo.
 
 import std/json
 import ../audio/[audio_io, voice_clip, voice_codec]

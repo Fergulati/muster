@@ -35,8 +35,8 @@ Rules:
   reads them off the TOC byte (and a code-3 packet's frame count). That is a sample count, not
   one frame: several frames adding up to 20 ms pass. A refusal is a value naming why, never a
   raise.
-- The room's fold and thread rows (coordination, S5) import `voice_clip` only, never `opus`
-  or `voice_codec`: the fold must not link a codec (§6). The hosted half,
+- The room's fold and thread rows (`coordination/voice.nim`) import `voice_clip` only, never
+  `opus` or `voice_codec`: the fold must not link a codec (§6). The hosted half,
   `coordination/voice_live.nim`, is the one coordination file that links the codec: it
   imports `voice_codec` and the `AudioIo` seam.
 - A change to any clip constant or the record's fields strands notes already sent: it is a

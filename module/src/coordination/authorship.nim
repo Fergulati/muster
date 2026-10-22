@@ -21,6 +21,8 @@
 ##                                        set, from that member's wallet (exo-dcc.34.3)
 ##   file/<fid>[/…]                      the room swarm (exo-4d0.4): a seed names the member
 ##                                        in its key, a share or retract the value's "author"
+##   voice/<nid>/<author>/<i>/<n>        a voice note's part (voice-notes.md §3.3): the
+##                                        author is the key's third segment, never the value
 ##
 ## Each of those carries `authorSig`: the named author's Ed25519 signature (the
 ## encryption identity's signing half, F-14) over a domain-separated hash-input record
@@ -98,6 +100,12 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
   ## Whether this event's kind names an author, and the author it names ("" when the
   ## key is too short to name one — still author-bearing, so it can never verify).
   let p = e.key.split('/')
+  if p[0] == "voice":
+    # a voice note's part (voice-notes.md §3.3): its value is about 84 KB of base64, so
+    # the author is read off the key, never by parsing the value on every hosted read. Any
+    # shape under `voice` is author-bearing, so one too short to name an author never
+    # verifies; the fold (voice.nim) checks the rest of the key
+    return (true, (if p.len >= 3: p[2] else: ""))
   if p[0] == "message":
     var author = ""
     try:

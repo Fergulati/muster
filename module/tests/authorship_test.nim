@@ -9,6 +9,9 @@
 ## any whose signature does not verify. Other kinds pass through untouched: approvals
 ## are verified by their driver, and the rest name no author.
 ##
+## §11 (voice-notes.md §3.3): a voice note's part names its author in its key, so its
+## author is read off the key and every `voice` shape is author-bearing.
+##
 ## Needs $SECP + $STINT + libsodium (tests/README.md; run-suite.sh supplies them).
 
 import std/[json, strutils, algorithm, sequtils]
@@ -193,5 +196,29 @@ block:
   doAssert reduceMessages(seen).mapIt(it.body) == @["hello"], "only Victor's own message"
   doAssert reduceShares(seen, intentId).mapIt(it.who) == @[victor]
   echo "10. over the wire: the log keeps the forgeries, the room's reads drop them OK"
+
+# ── 11. a voice note's part names its author in its key (voice-notes.md §3.3) ────
+# authorOf reads the key, never the value (a part's value is about 84 KB of base64), so a
+# value naming someone else changes nothing, and every shape under `voice` is author-bearing:
+# one too short to name an author can never verify. `voicemail/` is another kind.
+block:
+  let nid = "0f".repeat(16)
+  let part = "voice/" & nid & "/" & victor & "/0/2"
+  for k in [part, "voice/" & nid, "voice/" & nid & "/" & victor & "/x", "voice/", "voice"]:
+    let e = Event(key: k, value: "{}")
+    doAssert authorOf(e).authored, "author-bearing shape: " & k
+    doAssert authenticEvents(@[e], roomA).len == 0, "dropped unsigned: " & k
+  doAssert authorOf(Event(key: part, value: "not json")).author == victor
+  doAssert authorOf(Event(key: "voice/" & nid, value: "{}")).author == ""
+  doAssert not authorOf(Event(key: "voicemail/" & nid, value: "{}")).authored
+  let claim = Event(key: part, value: $(%*{"v": 1, "author": mallory}))
+  doAssert authorOf(claim).author == victor, "the key names the author, not the value"
+  let signed = signAuthored(victorKs, roomA, claim)
+  doAssert authorVerified(roomA, signed) and authenticEvents(@[signed], roomA).len == 1
+  doAssert not authorVerified(roomB, signed), "bound to its room"
+  doAssert not authorVerified(roomA, forgedBy(malloryKs, roomA, claim)), "Mallory's signature under Victor's key"
+  doAssertRaises(CatchableError):
+    discard signAuthored(malloryKs, roomA, claim)
+  echo "11. a voice/ part names its author in its key: every shape is author-bearing, only that member's signature counts OK"
 
 echo "authorship_test: all OK"

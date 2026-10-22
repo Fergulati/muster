@@ -1,0 +1,474 @@
+## Voice notes in the room (docs/design/voice-notes.md §3.3, §4, §6, §7; S5). A note is
+## exactly two author-signed `voice/<nid>/<author>/<i>/2` events, each one half of a clip
+## record, folded by `reduceVoice` over the room's authentic view into notes that are
+## complete, arriving or broken, and merged with the room's messages into thread rows by
+## `threadRows`, which alone sets a row's `voice` field.
+##   1. noteIdOf is deterministic, is 16 bytes of a `muster.voice.note-id.v1` hash-input
+##      record, and changes with the author, the clip digest and ts; the clip digest is a
+##      `muster.voice.clip.v1` record over the record's bytes
+##   2. voiceEvents gives exactly two events: the documented keys, no parents, integer-only
+##      values, the record's two halves (the larger first) as canonical base64
+##   3. Alice publishes a note; Bob's fold holds one complete note, Alice's, her clip byte
+##      for byte
+##   4. every frame a note leaves in is 90,153 B, for clips of 0.5 s, 10 s and 60 s
+##   5. a part forged (Mallory signs under Alice's key segment), unsigned, replayed from
+##      another room or edited drops out of the authentic view, so the note is never
+##      complete; over the wire too, where the raw log keeps the forgery
+##   6. squatting: a part under a note id that is not noteIdOf(author, digest, ts) is
+##      dropped, whoever signed it
+##   7. a key with n other than 2, i out of range or a malformed author, a part that is not
+##      canonical base64, a float or any other malformed value: dropped, never raised
+##   8. states: one part reads arriving; parts that disagree on ts, length or digest, a
+##      record that misses its digest, fails the structural checks or is not its own length,
+##      read broken; of two equivocating copies of a part, the first by canonical order
+##      stands, whichever order they arrived in
+##   9. every permutation and duplication of a room's voice events folds identically
+##      (invariant 4), notes and thread rows alike
+##  10. threadRows merges messages and notes by (ts, id); a voice row's body is "", its
+##      `voice` field is metadata under 300 B and carries no clip; the newest row's ts counts
+##      a note; a `message/` whose body claims kind `voice-note` with another member's note
+##      id is a plain row of its author's, never a voice row (§7)
+##  11. a member admitted after a note cannot fold it (F-16, invariant 7); a note sent in
+##      their epoch they can
+## Clips are synthetic CDE records of 40-byte packets: the fold checks structure and digest
+## and never decodes audio, so this test links no codec. LocalTransport + epoch crypto;
+## needs libsecp256k1 + libsodium.
+
+import std/[json, strutils, base64, algorithm, random, sequtils]
+import ../src/log/log
+import ../src/transport/transport
+import ../src/crypto/epoch_crypto
+import ../src/crypto/keystore
+import ../src/crypto/curve25519
+import ../src/hashing/hash_input
+import ../src/dcbor/dcbor
+import ../src/audio/voice_clip
+import ../src/coordination/session
+import ../src/coordination/authorship
+import ../src/coordination/intent_events
+import ../src/coordination/voice
+
+proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
+proc hex(b: openArray[byte]): string =
+  const d = "0123456789abcdef"
+  for x in b: (result.add d[int(x shr 4)]; result.add d[int(x and 0x0F)])
+proc unhex(s: string): seq[byte] =
+  for i in 0 ..< s.len div 2: result.add byte(parseHexInt(s[2*i .. 2*i+1]))
+proc bytesOf(s: string): seq[byte] = (for c in s: result.add byte(c))
+
+let aliceKs = newInMemoryKeystore(seed(0x51), seed(0x61))
+let bobKs   = newInMemoryKeystore(seed(0x52), seed(0x62))
+let carolKs = newInMemoryKeystore(seed(0x53), seed(0x63))
+let malKs   = newInMemoryKeystore(seed(0x54), seed(0x64))
+let alice   = hex(aliceKs.encIdentity().toBytes())
+let bob     = hex(bobKs.encIdentity().toBytes())
+let mallory = hex(malKs.encIdentity().toBytes())
+
+const topic = "/muster/1/room-voice/proto"
+const otherTopic = "/muster/1/another-room/proto"
+const WireBytes = 1 + 24 + 16 + 90_112       ## kind byte, secretbox nonce and MAC, the pad
+
+type Wire = ref object
+  frames: seq[seq[byte]]   ## every frame the topic carries, as a store node holds them
+
+proc tap(net: LocalNetwork, topic: string): Wire =
+  let w = Wire()
+  newLocalTransport(net).subscribe(topic, proc (m: IncomingMessage) {.gcsafe.} =
+    w.frames.add m.payload)
+  w
+
+proc dataFrames(w: Wire): seq[seq[byte]] =
+  for f in w.frames: (if f.len > 0 and f[0] == 0x00'u8: result.add f)
+
+let net = newLocalNetwork()
+let aliceCrypto = newEpochCrypto(aliceKs, topic, @[bobKs.encIdentity(), malKs.encIdentity()])
+let bobCrypto = newEpochJoiner(bobKs)
+bobCrypto.ingestGrant(aliceCrypto.grantFor(0, bobKs.encIdentity()))
+let malCrypto = newEpochJoiner(malKs)
+malCrypto.ingestGrant(aliceCrypto.grantFor(0, malKs.encIdentity()))
+let aliceS = newCoordinationSession(newLocalTransport(net), aliceCrypto, topic)
+let bobS = newCoordinationSession(newLocalTransport(net), bobCrypto, topic)
+let malS = newCoordinationSession(newLocalTransport(net), malCrypto, topic)
+let wire = tap(net, topic)
+
+proc synthClip(ms: int, salt: byte): VoiceClip =
+  ## A clip as the encoder shapes one: a 40-byte packet per 20 ms, flushed through a 312-
+  ## sample lookahead. The bytes are not Opus; the fold never decodes them.
+  let samples = ms * (ClipRate div 1000)
+  result = VoiceClip(preskip: 312, samples: samples)
+  for i in 0 ..< packetCount(samples, 312):
+    var p = newSeq[byte](PacketBytes)
+    for j in 0 ..< PacketBytes: p[j] = byte((i * 31 + j * 7 + int(salt) * 13) and 0xFF)
+    result.packets.add p
+
+proc signedNote(ks: Keystore, clip: VoiceClip, ts: int64, room = topic): (string, seq[Event]) =
+  let (nid, evs) = voiceEvents(hex(ks.encIdentity().toBytes()), clip, ts)
+  (nid, evs.mapIt(signAuthored(ks, room, it)))
+
+proc signedBy(ks: Keystore, e: Event, room = topic): Event =
+  ## `e` signed by `ks` for `room`, whoever its key names: a forgery unless `ks` is its author.
+  var j = parseJson(e.value)
+  if j.hasKey(AuthorSigField): j.delete(AuthorSigField)
+  let unsigned = Event(parents: e.parents, key: e.key, value: $j)
+  j[AuthorSigField] = %hex(ks.edSign(authorDigest(room, unsigned)))
+  Event(parents: e.parents, key: e.key, value: $j)
+
+proc stripped(e: Event): Event =
+  var j = parseJson(e.value)
+  if j.hasKey(AuthorSigField): j.delete(AuthorSigField)
+  Event(parents: e.parents, key: e.key, value: $j)
+
+proc withField(e: Event, field: string, v: JsonNode): Event =
+  ## `e`'s value with one field set, its signature (if any) untouched.
+  var j = parseJson(e.value)
+  j[field] = v
+  Event(parents: e.parents, key: e.key, value: $j)
+
+proc view(events: seq[Event]): seq[VoiceNote] = reduceVoice(authenticEvents(events, topic))
+
+proc noteIn(notes: seq[VoiceNote], nid: string): VoiceNote =
+  var found = 0
+  for n in notes:
+    if n.nid == nid: (result = n; inc found)
+  doAssert found == 1, "one note " & nid & ", not " & $found
+
+proc only(notes: seq[VoiceNote]): VoiceNote =
+  doAssert notes.len == 1, "one note, not " & $notes.len
+  notes[0]
+
+# ── 1. the note id and the clip digest ───────────────────────────────────────────
+block:
+  let dg = "ab".repeat(32)
+  let ts = 1_792_000_000'i64
+  let id = noteIdOf(alice, dg, ts)
+  doAssert id.len == 32 and id.allCharsInSet({'0' .. '9', 'a' .. 'f'}), id
+  doAssert noteIdOf(alice, dg, ts) == id, "deterministic"
+  let want = digest(hashInput("muster.voice.note-id.v1", @[
+    ("author", cbText(alice)), ("clip", cbBytes(unhex(dg))), ("ts", cbInt(ts))]))
+  doAssert id == hex(want[0 ..< 16]), "16 bytes of the note-id hash-input record"
+  doAssert noteIdOf(bob, dg, ts) != id, "another author"
+  doAssert noteIdOf(alice, "cd".repeat(32), ts) != id, "another clip"
+  doAssert noteIdOf(alice, dg, ts + 1) != id, "another ts"
+  let record = encodeRecord(synthClip(500, 1))
+  doAssert clipDigest(record) == digest(hashInput("muster.voice.clip.v1", @[("clip", cbBytes(record))]))
+  doAssert clipDigest(record) != clipDigest(encodeRecord(synthClip(500, 2)))
+  echo "1. noteIdOf is 16 bytes of a hash-input record over (author, clip digest, ts); the clip digest is a record too OK"
+
+# ── 2. voiceEvents: two parts, the documented keys, integers only ─────────────────
+block:
+  let clip = synthClip(10_000, 2)
+  let record = encodeRecord(clip)
+  let ts = 1_792_000_100'i64
+  let (nid, evs) = voiceEvents(alice, clip, ts)
+  doAssert VoiceParts == 2 and evs.len == VoiceParts, $evs.len
+  doAssert nid == noteIdOf(alice, hex(clipDigest(record)), ts)
+  var joined: seq[byte]
+  for i, e in evs:
+    doAssert e.key == "voice/" & nid & "/" & alice & "/" & $i & "/2", e.key
+    doAssert e.parents.len == 0, "a part names no parents: its order rides `after`"
+    let j = parseJson(e.value)
+    var fields: seq[string]
+    for k, v in j:
+      fields.add k
+      doAssert v.kind in {JInt, JString}, k & " is a " & $v.kind & ": integers and strings only"
+    doAssert fields.sorted() == @["digest", "durMs", "part", "ts", "v"], $fields
+    doAssert j["v"].getInt() == 1 and j["ts"].getBiggestInt() == ts
+    doAssert j["durMs"].getInt() == 10_000 and clip.durationMs == 10_000
+    doAssert j["digest"].getStr() == hex(clipDigest(record))
+    let raw = decode(j["part"].getStr())
+    doAssert encode(raw) == j["part"].getStr(), "canonical base64"
+    doAssert raw.len == (if i == 0: (record.len + 1) div 2 else: record.len div 2), "halves, the larger first"
+    joined.add bytesOf(raw)
+  doAssert joined == record, "the two parts are the record, in order"
+  # signed as its author: dCBOR takes every value (a float would refuse), the key names her
+  for e in evs:
+    let s = signAuthored(aliceKs, topic, e)
+    doAssert authorOf(s).author == alice and authorVerified(topic, s)
+  doAssertRaises(ValueError): discard voiceEvents("not-an-identity", clip, ts)
+  echo "2. voiceEvents: two parts under voice/<nid>/<author>/<i>/2, integer-only values, the record's halves OK"
+
+# ── 3. Alice publishes; Bob folds her note whole ─────────────────────────────────
+let clip3 = synthClip(3_000, 3)
+let (nid3, parts3) = voiceEvents(alice, clip3, 1_792_000_200)
+block:
+  for e in parts3: aliceS.publishAuthored(aliceKs, e)
+  for (who, s) in {"alice": aliceS, "bob": bobS}:
+    let n = only(reduceVoice(s.roomEvents()))
+    doAssert n.nid == nid3 and n.author == alice, who
+    doAssert n.ts == 1_792_000_200 and n.durMs == 3_000 and n.state == vsComplete, who & ": " & $n
+    let (ok, record) = voiceRecordOf(s.roomEvents(), nid3)
+    doAssert ok and record == encodeRecord(clip3), who & ": Alice's clip, byte for byte"
+  doAssert not voiceRecordOf(bobS.roomEvents(), "00".repeat(16)).ok, "no record for a note the room lacks"
+  echo "3. Alice publishes a note; Bob holds it complete, her clip byte-identical OK"
+
+# ── 4. every voice frame is one size ─────────────────────────────────────────────
+block:
+  for (ms, salt) in [(500, 41'u8), (10_000, 42'u8), (60_000, 43'u8)]:
+    let before = wire.dataFrames().len
+    let (nid, evs) = voiceEvents(alice, synthClip(ms, salt), 1_792_000_300 + int64(ms))
+    for e in evs: aliceS.publishAuthored(aliceKs, e)
+    let sent = wire.dataFrames()[before .. ^1]
+    doAssert sent.len == 2, $sent.len
+    for f in sent: doAssert f.len == WireBytes, $ms & " ms: a " & $f.len & " B frame"
+    let n = noteIn(reduceVoice(bobS.roomEvents()), nid)
+    doAssert n.state == vsComplete and n.durMs == ms, $n
+  echo "4. a note of 0.5 s, 10 s or 60 s leaves as two frames of ", WireBytes, " B OK"
+
+# ── 5. forged, unsigned, replayed and edited parts drop out ──────────────────────
+block:
+  let ts = 1_792_000_400'i64
+  let (nid, parts) = signedNote(aliceKs, synthClip(2_000, 5), ts)
+  let (_, elsewhere) = signedNote(aliceKs, synthClip(2_000, 5), ts, otherTopic)
+  let (_, another) = signedNote(aliceKs, synthClip(2_000, 6), ts)
+  for i in 0 .. 1:
+    let tampered = @[
+      ("forged", signedBy(malKs, parts[i])),
+      ("unsigned", stripped(parts[i])),
+      ("cross-room", elsewhere[i]),
+      ("edited", withField(parts[i], "part", parseJson(another[i].value)["part"])),
+      ("edited ts", withField(parts[i], "ts", %(ts + 1)))]
+    for (what, t) in tampered:
+      doAssert t.key == parts[i].key, what
+      doAssert not authorVerified(topic, t), what
+      let n = only(view(@[parts[1 - i], t]))
+      doAssert n.nid == nid and n.author == alice, what
+      doAssert n.state == vsArriving, what & ", part " & $i & ": " & $n.state
+      doAssert n.parts[i] == "" and n.parts[1 - i] == eventId(parts[1 - i]), what
+      doAssert view(@[t]).len == 0, what & " alone names no note"
+  doAssert only(view(parts)).state == vsComplete
+  # over the wire: Mallory, a member, sends a part in Alice's name; every member drops it
+  let (nidW, partsW) = signedNote(aliceKs, synthClip(1_000, 7), 1_792_000_450)
+  let forged = signedBy(malKs, partsW[1])
+  malS.publish(forged)
+  aliceS.publishAuthored(aliceKs, partsW[0])
+  doAssert bobS.log.find(eventId(forged)).found, "the raw log keeps the forgery"
+  doAssert noteIn(reduceVoice(bobS.roomEvents()), nidW).state == vsArriving, "the forged part does not count"
+  aliceS.publishAuthored(aliceKs, partsW[1])
+  doAssert noteIn(reduceVoice(bobS.roomEvents()), nidW).state == vsComplete
+  echo "5. forged, unsigned, cross-room and edited parts never complete a note; over the wire too OK"
+
+# ── 6. squatting ─────────────────────────────────────────────────────────────────
+block:
+  let ts = 1_792_000_500'i64
+  let (nid, parts) = signedNote(aliceKs, synthClip(2_000, 8), ts)
+  let base = view(parts)
+  doAssert only(base).state == vsComplete
+  var squats: seq[Event]
+  for i in 0 .. 1:
+    let k = "voice/" & nid & "/" & mallory & "/" & $i & "/2"
+    # Mallory claims Alice's note as hers: Alice's parts, Alice's nid, Mallory's segment
+    squats.add signAuthored(malKs, topic, Event(key: k, value: stripped(parts[i]).value))
+    # Mallory's own clip, posted under Alice's note id
+    let (_, mine) = voiceEvents(mallory, synthClip(2_000, 9), ts)
+    squats.add signAuthored(malKs, topic, Event(key: k, value: mine[i].value))
+    # Alice's own part under a note id her clip does not derive
+    let wrong = "voice/" & "0f".repeat(16) & "/" & alice & "/" & $i & "/2"
+    squats.add signAuthored(aliceKs, topic, Event(key: wrong, value: stripped(parts[i]).value))
+  let evs = authenticEvents(parts & squats, topic)
+  doAssert evs.len == parts.len + squats.len, "every squat is genuinely signed"
+  doAssert reduceVoice(evs) == base, "no squat names a note: " & $reduceVoice(evs)
+  doAssert view(squats).len == 0
+  echo "6. a part under a note id that is not noteIdOf(author, digest, ts) is dropped OK"
+
+# ── 7. malformed keys and values: dropped, never raised ──────────────────────────
+block:
+  let ts = 1_792_000_600'i64
+  let (nid, parts) = signedNote(aliceKs, synthClip(1_000, 10), ts)
+  let p1 = stripped(parts[1])
+  let pre = "voice/" & nid & "/" & alice & "/"
+  proc arriving(evs: seq[Event], what: string) =
+    let n = only(reduceVoice(evs))
+    doAssert n.nid == nid and n.state == vsArriving and n.parts[1] == "", what & ": " & $n
+  # authentic, since Alice signed each, yet not a part: the fold's own checks drop them
+  for k in [pre & "1/3", pre & "1/02", pre & "1/1", pre & "2/2", pre & "-1/2", pre & "x/2",
+            pre & "01/2", pre & "1/2/x", pre & "1", "voice/" & nid & "/" & alice.toUpperAscii & "/1/2",
+            "voice/" & nid.toUpperAscii & "/" & alice & "/1/2"]:
+    let e = signAuthored(aliceKs, topic, Event(key: k, value: p1.value))
+    doAssert authorVerified(topic, e), k
+    arriving(authenticEvents(@[parts[0], e], topic), k)
+  var noDigest = parseJson(p1.value)
+  noDigest.delete("digest")
+  for (what, v) in [("base64 garbage", %"!!not base64!!"), ("unpadded base64", %"QQ"),
+                    ("a number", %42), ("v 2", %2)]:
+    let field = (if what == "v 2": "v" else: "part")
+    let e = signAuthored(aliceKs, topic, withField(p1, field, v))
+    doAssert authorVerified(topic, e), what
+    arriving(authenticEvents(@[parts[0], e], topic), what)
+  block:
+    let e = signAuthored(aliceKs, topic, withField(p1, "author", %mallory))
+    arriving(authenticEvents(@[parts[0], e], topic), "a field no part has")
+  # not even signable, so never authentic; the fold drops them alone as well
+  var raw: seq[(string, Event)]
+  for (what, value) in [("a float", p1.value.replace("\"durMs\":1000", "\"durMs\":1000.5")),
+                        ("ts as a string", withField(p1, "ts", %"1792000600").value),
+                        ("no digest", $noDigest),
+                        ("not json", "not json"), ("an array", "[]"), ("a number", "1"), ("empty", "")]:
+    raw.add (what, Event(key: pre & "1/2", value: value))
+  doAssert "1000.5" in raw[0][1].value
+  for i in 0 ..< 2:
+    raw.add ("an author that is not hex", Event(key: "voice/" & nid & "/" & "zz".repeat(64) & "/" & $i & "/2", value: stripped(parts[i]).value))
+    raw.add ("a short author", Event(key: "voice/" & nid & "/" & alice[0 ..< 64] & "/" & $i & "/2", value: stripped(parts[i]).value))
+    raw.add ("a short nid", Event(key: "voice/" & nid[0 ..< 30] & "/" & alice & "/" & $i & "/2", value: stripped(parts[i]).value))
+  for (what, e) in raw:
+    doAssert not authorVerified(topic, e), what
+    arriving(@[parts[0], e], what)
+    arriving(authenticEvents(@[parts[0], e], topic), what)
+  for k in ["voice", "voice/", "voice/" & nid, "voice/" & nid & "/" & alice]:
+    doAssert reduceVoice(@[Event(key: k, value: p1.value)]).len == 0, k
+  echo "7. a wrong n or i, a malformed author or nid, bad base64, a float or a malformed value: dropped, never raised OK"
+
+# ── 8. arriving, broken, and the first copy standing ─────────────────────────────
+block:
+  let ts = 1_792_000_700'i64
+  let clipX = synthClip(2_000, 11)
+  let clipY = synthClip(2_000, 12)
+  let (nidX, x) = signedNote(aliceKs, clipX, ts)
+  let (_, y) = signedNote(aliceKs, clipY, ts)
+  let x1 = stripped(x[1])
+  proc partOne(value: string): Event = signAuthored(aliceKs, topic, Event(key: x[1].key, value: value))
+  proc stateOf(evs: seq[Event]): VoiceState = noteIn(view(evs), nidX).state
+  doAssert stateOf(@[x[0]]) == vsArriving and stateOf(@[x[1]]) == vsArriving, "one part reads arriving"
+  doAssert stateOf(x) == vsComplete
+  let yPart = parseJson(y[1].value)["part"]
+  let yDigest = parseJson(y[1].value)["digest"]
+  for (what, p) in [("another digest", partOne(withField(withField(x1, "digest", yDigest), "part", yPart).value)),
+                    ("another ts", partOne(withField(x1, "ts", %(ts + 1)).value)),
+                    ("another length", partOne(withField(x1, "durMs", %2_020).value)),
+                    ("bytes that miss the digest", partOne(withField(x1, "part", yPart).value))]:
+    let n = noteIn(view(@[x[0], p]), nidX)
+    doAssert n.state == vsBroken, what & ": " & $n.state
+    doAssert n.author == alice and n.ts == ts and n.durMs == 2_000, what & ": the note is read off the part its id derives from"
+  # the digest matches, but what it names is not a clip record, or not of the length it claims
+  for (what, record, durMs) in [("not a record", newSeq[byte](300), 1_000),
+                                ("a truncated record", encodeRecord(synthClip(500, 13))[0 .. ^2], 500),
+                                ("the wrong length", encodeRecord(clipX), 2_020)]:
+    let (nid, evs) = voicePartEvents(alice, record, ts, durMs)
+    let n = noteIn(view(evs.mapIt(signAuthored(aliceKs, topic, it))), nid)
+    doAssert n.state == vsBroken, what & ": " & $n.state
+  let (nidGood, good) = voicePartEvents(alice, encodeRecord(clipX), ts, 2_000)
+  doAssert nidGood == nidX and good.mapIt(signAuthored(aliceKs, topic, it)) == x
+  # equivocation: Alice signs a second part 1 for the same note (the same ts, length and
+  # digest, other bytes). Of the two, the one first in canonical order stands: neither names
+  # a parent, so the smaller event id. Copies that sort before and after hers, in both orders.
+  var before, after: seq[Event]
+  for salt in 20'u8 .. 120'u8:
+    let other = parseJson(signedNote(aliceKs, synthClip(2_000, salt), ts)[1][1].value)["part"]
+    let e = partOne(withField(x1, "part", other).value)
+    if eventId(e) < eventId(x[1]): (if before.len == 0: before.add e)
+    elif after.len == 0: after.add e
+    if before.len > 0 and after.len > 0: break
+  doAssert before.len == 1 and after.len == 1
+  for evs in [@[x[0], x[1], before[0]], @[before[0], x[0], x[1]]]:
+    let n = noteIn(view(evs), nidX)
+    doAssert n.state == vsBroken and n.parts[1] == eventId(before[0]), "the first copy stands: " & $n
+  for evs in [@[x[0], x[1], after[0]], @[after[0], x[1], x[0]]]:
+    let n = noteIn(view(evs), nidX)
+    doAssert n.state == vsComplete and n.parts[1] == eventId(x[1]), "the first copy stands: " & $n
+  echo "8. one part arriving; disagreeing parts, a digest miss, a bad record or length broken; the first copy stands OK"
+
+# ── 9. order-free and idempotent (invariant 4) ───────────────────────────────────
+block:
+  let ts = 1_792_000_800'i64
+  let (_, a) = signedNote(aliceKs, synthClip(1_500, 30), ts)
+  let (_, b) = signedNote(bobKs, synthClip(2_500, 31), ts)
+  let (_, c) = signedNote(aliceKs, synthClip(700, 32), ts + 5)
+  let (_, d) = signedNote(aliceKs, synthClip(900, 33), ts + 6)
+  let bad = signAuthored(aliceKs, topic, withField(stripped(d[1]), "part", parseJson(c[1].value)["part"]))
+  let (_, hello) = newMessageEvent(alice, ts + 1, "hello", 1)
+  var evs = a & b & @[c[0], d[0], bad, signedBy(malKs, a[0]), signAuthored(aliceKs, topic, hello)]
+  evs = authenticEvents(evs, topic)
+  let notes = reduceVoice(evs)
+  let rows = threadRows(evs)
+  doAssert notes.len == 4 and notes.mapIt(it.state).sorted() == @[vsArriving, vsComplete, vsComplete, vsBroken].sorted(),
+           $notes.mapIt(it.state)
+  var r = initRand(5)
+  for _ in 0 ..< 40:
+    var shuffled = evs & evs[0 .. r.rand(evs.len - 1)]
+    r.shuffle(shuffled)
+    doAssert reduceVoice(shuffled) == notes
+    doAssert threadRows(shuffled) == rows
+  doAssert reduceVoice(evs.reversed() & evs) == notes
+  echo "9. any order, any duplication: the same notes and the same thread OK"
+
+# ── 10. thread rows ──────────────────────────────────────────────────────────────
+block:
+  let (_, m100) = newMessageEvent(alice, 100, "first", 1)
+  let (_, m300) = newMessageEvent(bob, 300, "later", 1)
+  let (nid200, n200) = signedNote(bobKs, synthClip(1_000, 40), 200)
+  let (nid100, n100) = signedNote(aliceKs, synthClip(1_000, 41), 100)
+  let evs = authenticEvents(@[signAuthored(aliceKs, topic, m100), signAuthored(bobKs, topic, m300)] &
+                            n200 & n100, topic)
+  let rows = threadRows(evs)
+  let m100id = m100.key["message/".len .. ^1]
+  let m300id = m300.key["message/".len .. ^1]
+  var want = @[(100'i64, m100id), (100'i64, nid100), (200'i64, nid200), (300'i64, m300id)]
+  want.sort(proc(x, y: (int64, string)): int = (if x[0] != y[0]: cmp(x[0], y[0]) else: cmp(x[1], y[1])))
+  doAssert rows.mapIt((it.ts, it.id)) == want, $rows.mapIt((it.ts, it.id))
+  doAssert rows.mapIt(it.isVoice).countIt(it) == 2
+  for row in rows:
+    let j = rowJson(row)
+    var keys: seq[string]
+    for k, _ in j: keys.add k
+    if row.isVoice:
+      doAssert row.body == "" and j["body"].getStr() == "", "a voice row's body is empty"
+      doAssert row.author == (if row.id == nid200: bob else: alice), "the fold's author"
+      doAssert keys.sorted() == @["author", "body", "id", "ts", "voice"], $keys
+      let v = j["voice"]
+      var vkeys: seq[string]
+      for k, _ in v: vkeys.add k
+      doAssert vkeys.sorted() == @["durationMs", "note", "state", "v"], $vkeys
+      doAssert v["v"].getInt() == 1 and v["note"].getStr() == row.id and v["durationMs"].getInt() == 1_000
+      doAssert v["state"].getStr() == "complete"
+      doAssert ($v).len < 300, "the voice field is metadata: " & $($v).len & " B"
+      doAssert ($j).len < 512 and "part" notin $j, "no clip rides the row: " & $($j).len & " B"
+    else:
+      doAssert keys.sorted() == @["author", "body", "id", "ts"], "a message row has no voice field: " & $keys
+  doAssert reduceMessages(evs)[^1].ts == 300 and threadLastTs(evs) == 300
+  let (_, n900) = signedNote(aliceKs, synthClip(1_000, 42), 900)
+  doAssert reduceMessages(evs & n900)[^1].ts == 300, "messages alone miss the note"
+  doAssert threadLastTs(evs & n900) == 900, "the newest row's ts counts a note"
+  doAssert threadLastTs(@[]) == 0
+  # a forged row (§7): Mallory, in her own name, posts a message whose body is a voice-note
+  # card naming Alice's note, and one whose value also carries a `voice` field. Each is her
+  # own plain row; the only voice rows are the fold's; nothing names her on Alice's note.
+  let body = $(%*{"kind": "voice-note", "v": 1, "note": nid100, "durationMs": 1_000, "state": "complete"})
+  let (_, f1) = newMessageEvent(mallory, 150, body, 1)
+  let (_, f2) = newMessageEvent(mallory, 151, body, 2)
+  let f2v = withField(f2, "voice", %*{"v": 1, "note": nid100, "durationMs": 1_000, "state": "complete"})
+  let (_, f3) = newMessageEvent(alice, 152, body, 3)            # in Alice's name, unsigned
+  let forged = authenticEvents(evs & @[signAuthored(malKs, topic, f1), signAuthored(malKs, topic, f2v), f3], topic)
+  let frows = threadRows(forged)
+  doAssert frows.filterIt(it.isVoice).mapIt((it.id, it.author)) == rows.filterIt(it.isVoice).mapIt((it.id, it.author)),
+           "the voice rows are the fold's, unchanged"
+  let hers = frows.filterIt(it.author == mallory)
+  doAssert hers.len == 2, $hers.len
+  for row in hers:
+    doAssert not row.isVoice and row.body == body, "her raw JSON, as text"
+    doAssert not rowJson(row).hasKey("voice"), "no message puts a voice field on a row"
+  doAssert frows.filterIt(it.ts == 152).len == 0, "a message in Alice's name she did not sign is dropped"
+  echo "10. threadRows: messages and notes by (ts, id), a metadata-only voice field, lastTs counts a note, ",
+       "a forged voice-note body stays its author's plain row OK"
+
+# ── 11. a later joiner cannot fold an earlier note (F-16) ────────────────────────
+block:
+  let earlier = reduceVoice(bobS.roomEvents())
+  doAssert earlier.len == 5 and earlier.allIt(it.state == vsComplete), $earlier.len
+  aliceCrypto.addMember(carolKs.encIdentity())
+  bobCrypto.ingestGrant(aliceCrypto.grantFor(1, bobKs.encIdentity()))
+  let carolCrypto = newEpochJoiner(carolKs)
+  carolCrypto.ingestGrant(aliceCrypto.grantFor(1, carolKs.encIdentity()))
+  let carolS = newCoordinationSession(newLocalTransport(net), carolCrypto, topic)
+  carolS.catchUp()
+  doAssert carolS.log.allEvents().len == 0, "nothing from before Carol's epoch opens"
+  doAssert reduceVoice(carolS.roomEvents()).len == 0 and threadRows(carolS.roomEvents()).len == 0
+  let clip = synthClip(1_200, 50)
+  let (nid, evs) = voiceEvents(alice, clip, 1_792_001_000)
+  for e in evs: aliceS.publishAuthored(aliceKs, e)
+  let n = only(reduceVoice(carolS.roomEvents()))
+  doAssert n.nid == nid and n.state == vsComplete and n.author == alice
+  let (ok, record) = voiceRecordOf(carolS.roomEvents(), nid)
+  doAssert ok and record == encodeRecord(clip)
+  doAssert reduceVoice(bobS.roomEvents()).len == earlier.len + 1, "Bob holds both epochs"
+  echo "11. a member admitted after a note cannot fold it; one sent in their epoch they hold OK"
+
+echo "voice_test: all OK"
