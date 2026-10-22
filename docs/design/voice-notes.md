@@ -2,8 +2,8 @@
 
 Status: **proposed 2026-10-21 by an outside contributor; slices S1–S10 are built on this
 branch. Of S11, the real-device test is built and has run in part (§17). S9's end-to-end
-self-test has not run yet; the module calls it makes have run once, between three headless
-hosts on the live fleet, with no UI (§15).** This document is
+self-test has not run yet; the module calls it makes have run twice, from one headless host
+to another in a room of three on the live fleet, with no UI (§15).** This document is
 the first commit of a draft PR. The wire format (§3–§5) is what S4–S10 are built on, so an
 objection to it now means reworking those slices (§18). There is no exo id yet
 (§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
@@ -917,8 +917,8 @@ and the PR says so (§18).
 
 S1–S10 are built (§17). Of S11, the real-device test is built: its speaker leg passed on this
 Mac, and its microphone leg stopped at a permission prompt nobody answered (§17 S11). A note
-has crossed the live fleet once, between three headless hosts outside Basecamp, with no UI
-(below). What is unverified, built or planned:
+has crossed the live fleet twice, from one headless host to another in a room of three,
+outside Basecamp and with no UI (below). What is unverified, built or planned:
 - **Some audio facts are still the prototype's** (a throwaway on an Apple M5): the cost of
   encoding and decoding 60 s (§3.1, §9), and the fixed-arity binding's wrong read-back
   (§3.1; in this build a fixed-arity mutant failed `OPUS_BAD_ARG` instead, labbook §1). The rest has run through the
@@ -1056,17 +1056,21 @@ has crossed the live fleet once, between three headless hosts outside Basecamp, 
     exactly one voice row.
   - A first attempt failed only because the harness sent `coordinate_request_join` once: no
     admission in 180 s. Sent again every 3 s, as the UI does, admission took about 7 s.
+  - **Run again on `bcc5bad`**, the same harness with `muster_module` rebuilt from that commit,
+    so it covers `2656f71`'s module changes too: a note's two parts published together and
+    sent back to back (`session.publishTogether`, `authorship.publishAuthoredTogether`,
+    `voice_live`'s `draftSend`), a retried Send sealing the author's own copy (`copyToSeal`,
+    `publish(asGiven)`), and `log.variantsOf`. A's draft was 4,809 ms, sent as note
+    `118285bbfbd549ecaf334107358d5cd4`; B's thread showed it complete about 1 s after the
+    Send, B played it to its end, and B's sink held exactly 230,832 samples, 4,809 × 48, with
+    the same 1 kHz figures. C's Send was refused `silent` with the same `detail`, and B's
+    thread still held one voice row.
 
   What it does not cover: no UI, so no QML, neither backend and no autopilot (it is not S9's
   self-test, next entry); no Basecamp window, since the screen was locked, so S11's checks in
   the window and whether `logos_host` survives `voice_record_start` under Basecamp 0.3.2 are
-  still open; and no real microphone or speaker (`FileAudioIo` on A and B, the null device on
-  C). Nor does it cover the module's code after `ff071e3`, which is `2656f71`'s: a note's two
-  parts published together and sent back to back (`session.publishTogether`,
-  `authorship.publishAuthoredTogether`, `voice_live`'s `draftSend`), a retried Send sealing
-  the author's own copy (`copyToSeal`, `publish(asGiven)`), and `log.variantsOf`. In
-  `module/src` since then, `2cc3c53` and `2828cc1` changed only comments and
-  `src/audio/CLAUDE.md`, and nothing has changed `module/nim-lib`.
+  still open; no real microphone or speaker (`FileAudioIo` on A and B, the null device on
+  C); and C's own copy of A's note was not checked, only B's.
 - **S9's self-test has not run.** `scripts/voice-self-test.sh` (§17) needs the standalone
   runner, and the runner does not build on this Mac. `BUILD_MEM= make build` on 2026-10-22
   (macOS 26.5, Apple Silicon, Command Line Tools and no Xcode; 1 h 28 min from cold) stopped
@@ -1076,7 +1080,7 @@ has crossed the live fleet once, between three headless hosts outside Basecamp, 
   `risc0-build-kernel` 2.0.1 panics "Could not build metal kernels". `libmuster_module`, the
   `muster_ui` plugin and `logos-standalone-app` had built by then. So no note has crossed two
   runners on either UI, on `MUSTER_FLEET=local` or a fleet, and the `voice` entry of
-  `ui-parity.sh` has not run. (A note did cross between three headless hosts, the entry
+  `ui-parity.sh` has not run. (A note did cross from one headless host to another, the entry
   above: no runner, no UI and no autopilot, so not this test.) What did run, on darwin:
   - the Nim autopilot, in `ui-nim/tests/autovoice/run.sh`, which compiles
     `ui-nim/app/backend.nim` whole against stubs made from the `.rep` and `muster.lidl` and
@@ -1220,8 +1224,8 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   room map, the regenerated gallery `FakeBackend.qml`, and the unknown-kind fallback. The
   gallery fixture `room-voice-forged` holds a forged `voice-note` body, and RoomThread draws
   it as plain text under its poster's name, with no voice card and no Play (§7).
-- **S9 — End to end (built; the self-test not run, its module calls run once between three
-  headless hosts on `logos.dev`: §15).** `scripts/voice-self-test.sh`, in
+- **S9 — End to end (built; the self-test not run, its module calls run twice from one
+  headless host to another on `logos.dev`: §15).** `scripts/voice-self-test.sh`, in
   `fileshare-self-test.sh`'s shape: two offscreen runners in one room, each with a scratch
   HOME. A records `VOICE_SECS` (3; a whole number from 1 to 60, as both autopilots read it)
   seconds from a 3 s 1 kHz WAV the script writes (`MUSTER_VOICE_SOURCE`) and sends; B plays
@@ -1258,7 +1262,7 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   does `logos_host` survive `voice_record_start`? If it does not, that goes back to the
   operator (§11). Not checked yet: on 2026-10-22 the screen was locked, so neither this nor
   any check in Basecamp's window ran. A headless run with three logosctl 0.3.2 hosts ran
-  instead (§15): one note from A's WAV to B's sink over `logos.dev`, and C's null device
+  instead (§15), twice: a note from A's WAV to B's sink over `logos.dev`, and C's null device
   refused `silent` with the macOS note, in logosctl's `logos_host`, not Basecamp's.
 
   **The device test (built): `voice_device_e2e`**, in run-suite's E2E list and gated behind
