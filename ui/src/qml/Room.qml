@@ -330,6 +330,9 @@ Item {
     property string voiceOp: ""
     property string voiceOpTopic: ""
     property string voiceOpAt: ""
+    // how many voice calls this room has made: a refusal the person dismissed shows again when
+    // the next call is refused in the same words (RoomVoiceNote's notice is keyed by it)
+    property int voiceCalls: 0
     onVoiceAtChanged: if (room.voiceAt !== room.voiceOpAt) room.voiceOpAt = ""
     readonly property var voiceResult: {
         if (room.voiceOpTopic !== room.topic || room.voiceOpAt !== room.voiceAt) return ({});
@@ -338,7 +341,7 @@ Item {
         try { var o = JSON.parse(r); return (o && typeof o === "object") ? o : ({}); }
         catch (e) { return ({}); }
     }
-    function voiceCall(op) { room.voiceOp = op; room.voiceOpTopic = room.topic; room.voiceOpAt = room.voiceAt; }
+    function voiceCall(op) { room.voiceOp = op; room.voiceOpTopic = room.topic; room.voiceOpAt = room.voiceAt; room.voiceCalls++; }
     function startVoice() { if (!room.backend) return; room.voiceCall("record"); room.backend.startVoiceRecording(); }
     function stopVoice() { if (!room.backend) return; room.voiceCall("stop"); room.backend.stopVoiceRecording(); }
     function sendVoice() { if (!room.backend) return; room.voiceCall("send"); room.backend.sendVoiceDraft(); }

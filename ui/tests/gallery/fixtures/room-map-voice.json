@@ -1,5 +1,5 @@
 {
-  "about": "The room map holding a voice note (docs/design/voice-notes.md §10): each of its two parts is an entry named \"voice note\", by its author, and the store node learns one fixed size besides timing and topic, which marks a voice note but not its length; a FileShare entry is a \"shared file\". The members, the store node and the admission are the recorded split-alice-map's; the voice parts and the share are typed in the shapes reduceRoomGraph gives them (voice_test §14 pins a part's, field by field), since no runner records a voice note until S9.",
+  "about": "The room map holding a voice note (docs/design/voice-notes.md §10): each of its two parts is an entry named \"voice note\", by its author, and the store node learns one fixed size besides timing and topic, which marks a voice note but not its length; a FileShare entry is a \"shared file\". The members, the store node and the admission are the recorded split-alice-map's; the voice parts and the share are typed in the shapes reduceRoomGraph gives them (voice_test §14 pins a part's, field by field), since no runner records a voice note until S9. Replayed to before the first voice entry, the store node has learned no fixed size yet.",
   "snapshot": "data/split-alice-map.json",
   "sizes": [
     "1440x900"
@@ -423,6 +423,54 @@
     },
     {
       "shot": "leaks"
+    },
+    {
+      "set": [
+        "roomMap",
+        "following",
+        false
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "k",
+        0
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "roomMap",
+        "k",
+        0
+      ]
+    },
+    {
+      "expectProp": [
+        "roomMapFields_o:store-node",
+        "text",
+        "timing, topic"
+      ]
+    },
+    {
+      "set": [
+        "roomMap",
+        "k",
+        1
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "roomMapFields_o:store-node",
+        "text",
+        "timing, topic, one fixed size"
+      ]
     }
   ]
 }

@@ -507,7 +507,8 @@ thread cannot emit. So:
 - `coordinate_intents` also calls it, from its pump list (`:2854-2861`);
 - the UI polls `voice_status` every 250 ms while not idle: a note recording, a draft held (for
   as long as it is held), or a note playing;
-- the room's 1 s timer reads it too, so a recording any caller started shows a banner (§13).
+- the room's 1 s timer reads it too, so a recording any caller started shows a banner (§13),
+  while a room's view is on screen: the banner is part of the room's composer.
 
 Elapsed time on screen comes from a QML clock. The module's cap is the one that counts.
 
@@ -515,7 +516,10 @@ Elapsed time on screen comes from a QML clock. The module's cap is the one that 
 call was made in and where `voice_status` stood then (the recording's state, the note playing).
 Once another room opens, or `voice_status` moves on (the other recording ended, the note
 stopped playing), the answer is no longer shown; a refusal such as `busy` or `room-changed`
-describes a state that has gone. The gallery fixture `room-voice-refused` holds both.
+describes a state that has gone. The gallery fixture `room-voice-refused` holds both. A
+refusal the person dismissed shows again when the next call is refused in the same words (the
+notice is keyed by the call), while a platform note, once dismissed, stays dismissed until its
+words change; the same fixture holds that too.
 
 ## 9. Devices, threads and the build
 
@@ -862,7 +866,11 @@ nothing here reaches that code (§10, "What still leaks", item 6).
 
 **The mitigations:**
 - **A banner.** The room's 1 s timer shows a recording banner from `voice_status`, whoever
-  started the recording. In headless `logoscore` nothing shows.
+  started the recording. The banner is part of a room's composer (`RoomVoiceNote.qml`), so it
+  shows only while a room's view is on screen: on Home, Settings, Contacts or the walkthrough,
+  or before the person has entered a room, nothing in Muster says the microphone is on (the
+  operating system's own microphone indicator still shows, where capture works). In headless
+  `logoscore` nothing shows. An indicator outside the room is open (§18).
 - **The real fix** is `--access-policy enforce` with `muster_module`'s allowed callers set to
   `muster_ui` (`docs/basecamp-access-policy.md`, `infra/access-policy.json`), or Basecamp's
   capability broker.
@@ -922,9 +930,11 @@ unverified, built or planned:
 - **A half-sent note looks whole to its sender.** `session.publish` logs a part before the
   transport sees it, so after a Send that fails between its parts the sender's own thread
   shows the note complete while the room may hold only its first part (`voice_live_test`
-  §15 pins both views). A retry closes it; Discard instead makes the split permanent. S8's
-  draft surface answers `too-large` by asking for Send again, which sends the same note; it
-  does not warn that the room may hold half of it, nor hide Discard then.
+  §15 pins both views). A retry closes it; Discard instead makes the split permanent. Only a
+  transport that raises shows that failure, and the hosted one never does (above), so S8's
+  draft surface has no answer for it: it does not warn that the room may hold half of it, nor
+  hide Discard then. `too-large`, which no draft under the cap can get, it answers with
+  "Discard it and record it again", promising nothing of a second Send.
 - **A UI from before S8 draws a note as an empty line** (§7). `coordinate_messages` returns a
   note's row with an empty `body`, which the RoomThread on `main` draws as an empty chat line
   under the author's name, as any older UI paired with this module would. S8 (built) draws it
@@ -1287,6 +1297,10 @@ Still open:
   room removes a member yet, the gap below"), or keep it. This PR leaves it as it is on
   `main`;
 - whether to coarsen `voice_status`'s peak for co-resident callers (§13);
+- **an indicator outside the room** (§13). The recording banner is part of a room's view, so a
+  recording a co-resident caller starts while the person is on Home, Settings or Contacts shows
+  nothing in Muster. `Main.qml` could show one from `voiceJson`, which Room's 1 s tick keeps
+  fresh while a room is joined; with no room joined nothing reads `voice_status`;
 - the exact disclosure wording on the draft surface (§8);
 - whether the gaps of §10 stay registry entries of their own, as S10 added them, or fold into
   existing ones.

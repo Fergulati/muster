@@ -9,7 +9,9 @@ import Logos.Controls
 // and each call's answer (Room.voice, Room.voiceResult). Three states:
 //   recording  a banner whenever voice_status says so, whoever started it (§13): the time on a
 //              clock of this view's own (the module's 60 s cap is the one that counts), the
-//              level, Stop and Discard;
+//              level, Stop and Discard. It is part of the room's composer, so it shows only
+//              while a room's view is on screen: on Home, Settings or Contacts nothing in
+//              Muster says the microphone is on;
 //   draft      Play, Send and Discard, and who will see what, before anything is sent;
 //   a notice   the module's refusal or note, in its own words where it has them.
 ColumnLayout {
@@ -215,23 +217,33 @@ ColumnLayout {
     readonly property string err: String(vn.result.error || "")
     readonly property string detail: String(vn.result.detail || "")
     function refusalWords(e, op) {
+        var play = op === "play" || op === "stopPlay";
         if (e === "not-joined") return qsTr("Join the room first.");
         if (e === "busy") return qsTr("Something is already recording or playing. Stop it first.");
-        if (e === "codec") return qsTr("The voice encoder could not start on this device.");
+        // Play decodes, Start encodes: the module says codec for either
+        if (e === "codec")
+            return play ? qsTr("The voice decoder could not start on this device.") : qsTr("The voice encoder could not start on this device.");
         if (e === "no-device")
-            return op === "play" ? qsTr("No speaker was found on this device.") : qsTr("No microphone was found on this device.");
+            return play ? qsTr("No speaker was found on this device.") : qsTr("No microphone was found on this device.");
+        if (e === "device-format")
+            return play ? qsTr("The speaker would not play sound in the form voice notes use.")
+                        : qsTr("The microphone would not record in the form voice notes use.");
         if (e === "not-recording") return qsTr("Nothing is recording.");
         if (e === "no-draft") return qsTr("There is no recording to send or play.");
         if (e === "too-short") return qsTr("Too short to send: record at least half a second.");
         if (e === "silent") return qsTr("The recording is silent: no sound reached the microphone.");
         if (e === "room-changed") return qsTr("This recording belongs to another room. Send it from there, or discard it.");
-        if (e === "too-large") return qsTr("It did not fit to send. Press Send again; the same voice note goes again.");
+        if (e === "too-large") return qsTr("It was too large to send. Discard it and record it again.");
         if (e === "unknown-note") return qsTr("That voice note is not in this room.");
         if (e === "incomplete") return qsTr("That voice note has not fully arrived yet.");
-        if (e === "broken") return qsTr("That voice note can't be played: its parts don't match.");
-        return op === "play" || op === "stopPlay" ? qsTr("The speaker refused: %1").arg(e)
-             : op === "record" ? qsTr("The microphone refused: %1").arg(e)
-             : qsTr("It did not work: %1").arg(e);
+        // the module says broken for parts that disagree, a record that fails its checks, and
+        // a clip the decoder refuses: words true of each
+        if (e === "broken") return qsTr("That voice note can't be played: it arrived damaged.");
+        // any other word is the device's or the encoder's: what failed, in words, and the
+        // module's own word after it, for a report
+        return play ? qsTr("The speaker did not work (%1).").arg(e)
+             : op === "record" ? qsTr("The microphone did not work (%1).").arg(e)
+             : qsTr("It did not work (%1).").arg(e);
     }
     readonly property string noticeTitle: vn.err.length === 0 ? ""
         : vn.room.voiceOp === "send" ? qsTr("Nothing was sent.")
@@ -244,7 +256,7 @@ ColumnLayout {
         // a recording the module dropped, or a note the platform gives (on macOS, why the
         // microphone gave nothing)
         var re = String(vn.rec.error || "");
-        if (re.length > 0) return qsTr("The recording stopped: %1").arg(re);
+        if (re.length > 0) return qsTr("The recording stopped: the voice encoder could not encode it (%1).").arg(re);
         return String(vn.ready.note || "");
     }
     InlineNotice {
@@ -252,6 +264,9 @@ ColumnLayout {
         objectName: "voiceNotice"
         visible: vn.noticeText.length > 0 && !dismissed
         dismissible: true
+        // a refusal answers one call: dismissed, it shows again when the next call is refused
+        // in the same words; a platform note is dismissed until its words change
+        occasion: vn.err.length > 0 ? String(vn.room.voiceCalls) : ""
         tone: vn.err.length > 0 || String(vn.rec.error || "").length > 0 ? "error" : "info"
         title: vn.noticeTitle
         text: vn.noticeText

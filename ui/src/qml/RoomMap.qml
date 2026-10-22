@@ -141,10 +141,13 @@ Rectangle {
         "file": qsTr("shared file"), "voice": qsTr("voice note")
     })
     // a voice note's two envelopes are each one fixed size, which the store node sees: it
-    // marks a voice note, never its length (docs/design/voice-notes.md §10)
+    // marks a voice note, never its length (docs/design/voice-notes.md §10). Up to the replay
+    // position, as what the store node learned is: before the first voice entry it has seen none
     readonly property bool holdsVoice: {
-        for (var i = 0; i < map.allNodes.length; i++)
-            if (map.allNodes[i].kind === "entry" && String((map.allNodes[i].attrs || {}).kind || "") === "voice") return true;
+        for (var i = 0; i < map.allNodes.length; i++) {
+            var n = map.allNodes[i];
+            if (n.kind === "entry" && String((n.attrs || {}).kind || "") === "voice" && map.rank(n.seq) <= map.k) return true;
+        }
         return false;
     }
     function kindWord(k) { return map.kindWords[k] || String(k || ""); }

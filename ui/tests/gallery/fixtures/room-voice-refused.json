@@ -1,5 +1,5 @@
 {
-  "about": "A voice refusal describes the state it was made in (docs/design/voice-notes.md §8): the module's busy, said when another caller started recording between two reads of voice_status, goes once voice_status moves on (that recording ended); a Send refused as room-changed goes once another room is open. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (no runner records one until S9).",
+  "about": "A voice refusal describes the state it was made in (docs/design/voice-notes.md §8): the module's busy, said when another caller started recording between two reads of voice_status, goes once voice_status moves on (that recording ended); a Send refused as room-changed goes once another room is open. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (no runner records one until S9). A refusal dismissed and then given again by the next call shows again, while a platform note once dismissed stays dismissed; a Play refused codec names the decoder, too-large asks for no second Send, and a word from the device or the encoder reads as plain words.",
   "snapshot": "data/statement-proposed.json",
   "sizes": [
     "1440x900"
@@ -223,6 +223,289 @@
     {
       "props": {
         "roomTopic": "/muster/1/proof-1791573223/proto"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "draft",
+            "elapsedMs": 4200,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": true,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "click": "voiceSendButton"
+    },
+    {
+      "expect": {
+        "slot": "sendVoiceDraft"
+      }
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "silent",
+          "detail": ""
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~The recording is silent"
+      ]
+    },
+    {
+      "click": "voiceNoticeDismiss"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "click": "voiceSendButton"
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "silent",
+          "detail": ""
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "click": "voiceDraftPlay"
+    },
+    {
+      "expect": {
+        "slot": "playVoiceNote",
+        "args": [
+          "draft"
+        ]
+      }
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "codec"
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        "Nothing played."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~decoder"
+      ]
+    },
+    {
+      "click": "voiceSendButton"
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "too-large"
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        "Nothing was sent."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "!Send again"
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        },
+        "voiceResultJson": ""
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "click": "voiceRecordButton"
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "device-format"
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        "Recording did not start."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~would not record"
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": "not-cbr"
+          },
+          "playing": null
+        },
+        "voiceResultJson": ""
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~encoder"
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": "Basecamp 0.3.2 can't use the microphone on macOS yet: it lacks the microphone permission."
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "Basecamp 0.3.2 can't use the microphone on macOS yet: it lacks the microphone permission."
+      ]
+    },
+    {
+      "click": "voiceNoticeDismiss"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "click": "voiceRecordButton"
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "ok": true
+        }
       }
     },
     {

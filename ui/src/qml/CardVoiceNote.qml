@@ -132,7 +132,7 @@ Item {
             text: card.noteState === "arriving"
                   ? qsTr("Still arriving: one of its two parts has reached you so far.")
                   : card.noteState === "broken"
-                  ? qsTr("This voice note can't be played: its two parts don't match.")
+                  ? qsTr("This voice note can't be played: it arrived damaged.")
                   : qsTr("This voice note can't be played here.")
             color: card.noteState === "broken" ? MusterStyle.warning : Theme.palette.textTertiary
             font.pixelSize: MusterStyle.caption
