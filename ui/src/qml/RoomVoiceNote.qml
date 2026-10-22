@@ -154,6 +154,10 @@ ColumnLayout {
                     objectName: "voiceDraftPlay"
                     label: vn.draftPlaying ? qsTr("Stop") : qsTr("Play it back")
                     icon: MusterStyle.icon(vn.draftPlaying ? "stop" : "play")
+                    // one stream at a time: while a note in the thread plays, the draft
+                    // waits, as the thread's cards and the mic do (the module would say busy)
+                    enabled: vn.draftPlaying || !vn.room.voicePlaying
+                    opacity: enabled ? 1 : 0.4
                     onClicked: vn.draftPlaying ? vn.room.stopVoicePlay() : vn.room.playVoice("draft")
                 }
                 LogosText {

@@ -1,5 +1,5 @@
 {
-  "about": "A voice note in the thread (docs/design/voice-notes.md §7): its author, its length, Play and Stop, its place while it plays; one still arriving and one whose parts disagree say so and do not play. The rows and voiceJson are copied from the shapes voice_live_test §22 and voice_status pin (no runner records one until S9).",
+  "about": "A voice note in the thread (docs/design/voice-notes.md §7): its author, its length, Play and Stop, its place while it plays; one still arriving and one whose parts disagree say so and do not play. The 250 ms read of voice_status runs while a note plays and stops once nothing does. The rows and voiceJson are copied from the shapes voice_live_test §22 and voice_status pin (no runner records one until S9).",
   "snapshot": "data/statement-proposed.json",
   "sizes": [
     "1440x900"
@@ -181,6 +181,13 @@
       ]
     },
     {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        true
+      ]
+    },
+    {
       "shot": "playing"
     },
     {
@@ -233,6 +240,13 @@
           "playing": null
         }
       }
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        false
+      ]
     },
     {
       "expectProp": [

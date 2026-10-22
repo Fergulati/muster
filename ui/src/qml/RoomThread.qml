@@ -766,6 +766,7 @@ Rectangle {
                         Layout.topMargin: msg.index > 0 && !msg.newDay ? Theme.spacing.small : 0
                         spacing: Theme.spacing.small
                         LogosText {
+                            objectName: "messageAuthor_" + String(modelData.id || "")
                             text: msg.authorName
                             color: modelData.self ? Theme.palette.textSecondary : Theme.palette.text
                             font.pixelSize: MusterStyle.caption

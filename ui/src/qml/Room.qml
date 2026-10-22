@@ -202,7 +202,10 @@ Item {
     property string openingTopic: ""
     readonly property bool opening: room.openingTopic.length > 0 && room.openingTopic !== room.topic
     function beginOpening(t) { room.openingTopic = String(t || ""); openingGiveUp.restart(); }
-    onTopicChanged: if (room.topic === room.openingTopic) room.openingTopic = ""
+    onTopicChanged: {
+        if (room.topic === room.openingTopic) room.openingTopic = "";
+        room.voiceOpTopic = "";     // a voice call's answer stays with the room it was made in
+    }
     Timer { id: openingGiveUp; interval: 45000; onTriggered: room.openingTopic = "" }
     property bool openingSlow: false
     onOpeningChanged: room.openingSlow = false
@@ -316,21 +319,32 @@ Item {
     }
     readonly property string voiceState: String(((room.voice && room.voice.recording) || {}).state || "idle")
     readonly property var voicePlaying: (room.voice && room.voice.playing) ? room.voice.playing : null
+    // where voice_status stands: the recording's state and the note playing, if any
+    readonly property string voiceAt: room.voiceState + "/" + (room.voicePlaying ? String(room.voicePlaying.note || "") : "")
+    // which voice call that answer is to (record, stop, send, discard, play, stopPlay), so
+    // a refusal can say what was refused: the module's words are the same for each; and
+    // the room it was made in and where voice_status stood then. A refusal describes that
+    // state, so it shows only while it holds: once another room opens, or voice_status moves
+    // on (the other recording ended, the note stopped playing), the answer is not shown
+    // again, even if voice_status comes back to where it was (an idle busy is still stale).
+    property string voiceOp: ""
+    property string voiceOpTopic: ""
+    property string voiceOpAt: ""
+    onVoiceAtChanged: if (room.voiceAt !== room.voiceOpAt) room.voiceOpAt = ""
     readonly property var voiceResult: {
+        if (room.voiceOpTopic !== room.topic || room.voiceOpAt !== room.voiceAt) return ({});
         var r = backend ? String(backend.voiceResultJson || "") : "";
         if (r.length === 0 || r === "ok") return ({});
         try { var o = JSON.parse(r); return (o && typeof o === "object") ? o : ({}); }
         catch (e) { return ({}); }
     }
-    // which voice call that answer is to (record, stop, send, discard, play, stopPlay), so
-    // a refusal can say what was refused: the module's words are the same for each
-    property string voiceOp: ""
-    function startVoice() { if (!room.backend) return; room.voiceOp = "record"; room.backend.startVoiceRecording(); }
-    function stopVoice() { if (!room.backend) return; room.voiceOp = "stop"; room.backend.stopVoiceRecording(); }
-    function sendVoice() { if (!room.backend) return; room.voiceOp = "send"; room.backend.sendVoiceDraft(); }
-    function discardVoice() { if (!room.backend) return; room.voiceOp = "discard"; room.backend.discardVoiceDraft(); }
-    function playVoice(note) { if (!room.backend) return; room.voiceOp = "play"; room.backend.playVoiceNote(String(note || "")); }
-    function stopVoicePlay() { if (!room.backend) return; room.voiceOp = "stopPlay"; room.backend.stopVoicePlayback(); }
+    function voiceCall(op) { room.voiceOp = op; room.voiceOpTopic = room.topic; room.voiceOpAt = room.voiceAt; }
+    function startVoice() { if (!room.backend) return; room.voiceCall("record"); room.backend.startVoiceRecording(); }
+    function stopVoice() { if (!room.backend) return; room.voiceCall("stop"); room.backend.stopVoiceRecording(); }
+    function sendVoice() { if (!room.backend) return; room.voiceCall("send"); room.backend.sendVoiceDraft(); }
+    function discardVoice() { if (!room.backend) return; room.voiceCall("discard"); room.backend.discardVoiceDraft(); }
+    function playVoice(note) { if (!room.backend) return; room.voiceCall("play"); room.backend.playVoiceNote(String(note || "")); }
+    function stopVoicePlay() { if (!room.backend) return; room.voiceCall("stopPlay"); room.backend.stopVoicePlayback(); }
     // This instance's own encryption identity (the roster row flagged self) — the id
     // a decline is keyed by, so the card knows "you declined".
     readonly property string myIdentity: {
@@ -1897,10 +1911,13 @@ Item {
         }
     }
 
-    // While a voice note records or plays, its time, level and place are read four times a
-    // second; idle, the tick above is enough. voice_status also drives the module's voice
-    // pump, as fileshare_files drives FileShare's.
+    // While not idle (a note recording, a draft held, or a note playing), voice_status is
+    // read four times a second, for the time, the level and the place; a draft can be held
+    // for hours, and it is read at that rate all the while (voice-notes.md §8). Idle, the
+    // tick above is enough. voice_status also drives the module's voice pump, as
+    // fileshare_files drives FileShare's.
     Timer {
+        objectName: "voicePoll"
         interval: 250
         running: room.joined && (room.voiceState !== "idle" || room.voicePlaying !== null)
         repeat: true

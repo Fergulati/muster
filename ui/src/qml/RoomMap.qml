@@ -834,6 +834,7 @@ Rectangle {
                             }
                             LogosText {
                                 id: fieldText
+                                objectName: "roomMapFields_" + node.modelData.id
                                 visible: parent.big
                                 x: -parent.w / 2 + 10; y: -parent.h / 2 + 42
                                 width: parent.w - 20
@@ -1233,6 +1234,7 @@ Rectangle {
                             font.pixelSize: MusterStyle.caption
                         }
                         LogosText {
+                            objectName: "roomMapRow_" + modelData[0]
                             Layout.fillWidth: true
                             text: modelData[1]
                             wrapMode: Text.WrapAtWordBoundaryOrAnywhere

@@ -352,7 +352,8 @@ voice to another, against invariant 9. Three rules close it:
   (`muster_module.nim:4590-4593`). So no `message/` event can put a `voice` field on a row.
 - **The card draws from `modelData.voice` alone.** RoomThread's `parsedCard` refuses
   `voice-note` from a body, so a `message/` that claims it falls through to plain text: the
-  forger's raw JSON, under the forger's name.
+  forger's raw JSON, under the forger's name, with no voice card and no Play for the note it
+  names (the gallery fixture `room-voice-forged` checks each).
 - **The card names the fold's author.** The row's `author` is `reduceVoice`'s: the key author
   that `roomEvents` verified (§3.3, §6 rule 1), never anything a message says.
 
@@ -485,10 +486,17 @@ thread cannot emit. So:
 - `voice_status` drives `voicePump`, as `fileshare_files` drives `fileSharePump`
   (`muster_module.nim:2778`);
 - `coordinate_intents` also calls it, from its pump list (`:2854-2861`);
-- the UI polls `voice_status` every 250 ms while not idle;
+- the UI polls `voice_status` every 250 ms while not idle: a note recording, a draft held (for
+  as long as it is held), or a note playing;
 - the room's 1 s timer reads it too, so a recording any caller started shows a banner (§13).
 
 Elapsed time on screen comes from a QML clock. The module's cap is the one that counts.
+
+**A refusal shows while it holds.** The UI keeps the last voice call's answer with the room the
+call was made in and where `voice_status` stood then (the recording's state, the note playing).
+Once another room opens, or `voice_status` moves on (the other recording ended, the note
+stopped playing), the answer is no longer shown; a refusal such as `busy` or `room-changed`
+describes a state that has gone. The gallery fixture `room-voice-refused` holds both.
 
 ## 9. Devices, threads and the build
 
@@ -882,11 +890,12 @@ planned:
   under the author's name, as any older UI paired with this module would. S8 (built) draws it
   as a card; S8 and S7 should land in one push.
 - **S8 is seen only through the gallery, on a Mac, with no module.** The S8 fixtures
-  (`room-voice-forged`, `-notes`, `-record`, `-flow`) pass against the real `Main.qml` and the
-  generated `FakeBackend.qml`, offscreen with Qt 6.9.2's software renderer (icons draw blank
-  there) and both design systems, Basecamp 0.3.2's and the runner's; their voice rows,
-  `voiceJson`, `voiceResultJson` and `flowJson` are typed from the shapes the module's tests
-  pin, not recorded, since no runner records them until S9. No click has reached a real
+  (`room-voice-forged`, `-notes`, `-record`, `-refused`, `-flow`, and `room-map-voice`) pass
+  against the real `Main.qml` and the generated `FakeBackend.qml`, offscreen with Qt 6.9.2's
+  software renderer (icons draw blank there) and both design systems, Basecamp 0.3.2's and
+  the runner's; their voice rows, `voiceJson`, `voiceResultJson`, `flowJson` and the room
+  map's voice entries are typed from the shapes the module's code and tests give, not
+  recorded, since no runner records them until S9. No click has reached a real
   `muster_module`: the C++ backend compiles into the `.lgx`, and the Nim backend is
   type-checked only against stubs made from the `.rep` and `muster.lidl` (ui-nim builds on
   Linux only). Neither UI has drawn a voice note from a real room, on a display or offscreen.
@@ -1018,15 +1027,17 @@ Each slice's test is written and run red before its code (worker.md), and every 
   poll while not idle and `voice_status` on its 1 s tick, the voice words in FlowView and the
   room map, the regenerated gallery `FakeBackend.qml`, and the unknown-kind fallback. The
   gallery fixture `room-voice-forged` holds a forged `voice-note` body, and RoomThread draws
-  it as plain text (§7).
+  it as plain text under its poster's name, with no voice card and no Play (§7).
 - **S9 — End to end.** `scripts/voice-self-test.sh`: two offscreen runners, A sending from a
   generated WAV and B playing into a PCM sink, with a 1 kHz Goertzel check. Plus the autopilots
   in both backends and a `ui-parity.sh` entry.
 - **S10 — The claim, docs, labbook and layout (built).** The protects claim and four gaps of
   §10 in `contracts/claims/registry.json`, with `ClaimsRegistry.qml` regenerated
   (`ui/tools/gen-claims-qml.py`). Also `docs/labbook/voice-notes-audio-stack.md`, the CLAUDE.md
-  layout, and `module/tests/README.md`'s real-device gate. Not done: the plan's optional mock
-  of the mic and the voice card in `ui/prototype/desktop-v3.html`, left for S8.
+  layout, and `module/tests/README.md`'s real-device gate. Not done, and not in S8 either: the
+  plan's optional mock of the mic and the voice card in `ui/prototype/desktop-v3.html`. It is
+  dropped from this PR as optional, as FileShare's card has no mock there; the gallery's
+  `room-voice-*` shots show what it would.
 - **S11 — Checks on a Mac display, the opt-in device test, and the draft PR.** First, before
   anything relies on the `silent` refusal: under Basecamp 0.3.2, with a throwaway profile,
   does `logos_host` survive `voice_record_start`? If it does not, that goes back to the
