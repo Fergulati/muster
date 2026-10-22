@@ -199,14 +199,15 @@ Why on the frame, not inside the value:
 
 Older clients read it unchanged. `decodeEvent` is `parseJson(toStr(b))` (`session.nim:82-83`).
 At the builder's Nim pin (2.2.4), the parser accepts trailing whitespace (5,000 spaces were
-tried, while planning) and refuses other trailing bytes, such as a letter or a `}`. It also
-takes a NUL as the end of its input and accepts anything after one. Nothing pads with NULs,
+tried, while planning) and trailing `//` or `/* */` comments, takes a NUL as the end of its
+input (accepting anything after one), and refuses other trailing text, such as a letter or a
+`}`. The pad is ASCII spaces, so only the first of those matters here. Nothing pads with NULs,
 and `session_pad_test` fails a NUL pad (`docs/labbook/voice-notes-audio-stack.md` §8). So:
 - no new frame kind;
 - no `room_journal` change: journal frames are opaque, with `MaxFrame` 16 MiB
   (`room_journal.nim:24`);
-- a 0.3.x peer reads a padded frame as an ordinary event, and its thread ignores the `voice/`
-  key (§7).
+- a peer on a Muster from before voice notes (0.3.2 or earlier) reads a padded frame as an
+  ordinary event, and its thread ignores the `voice/` key (§7).
 
 **What does not fit, raises.** An event whose JSON exceeds `padTo` raises `FrameTooLarge`
 before anything is ingested, journalled or sent. Today nothing guards size: an oversized frame
@@ -377,8 +378,9 @@ What this means for each kind of reader:
   (`RoomThread.qml:692-695`). `MusterCard.known` (`MusterCard.qml:712`) does not gain
   `voice-note`, because no body may carry it. `CardVoiceNote.qml` is pure render: it emits
   `play` and `stop`, and RoomThread owns the backend calls, as for every card.
-- **A 0.3.x peer** shows nothing for a note in its thread: it never synthesizes the row, and
-  `reduceMessages` skips the `voice/` events. That is better than its unknown-card render: an
+- **A peer from before voice notes** (0.3.2 or earlier) shows nothing for a note in its
+  thread: it never synthesizes the row, and `reduceMessages` skips the `voice/` events. That
+  is better than its unknown-card render: an
   unknown kind draws nothing, or a stray heading, never a text fallback
   (`RoomThread.qml:693, :722`). Its information-flow view and room map do show each part, as
   an unknown `voice` entry: envelope rows only (`flow.nim:121-124` on `main`), and an entry
@@ -567,7 +569,7 @@ seven `logos_module_*` entry points and a constructor). So S7 does two things (b
 | relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
 | mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
 | a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13) | the audio, through any method: no voice method returns it, S6 closed `coordinate_graph`, and `coordinate_proof` refuses a room holding a voice note (below) |
-| a module loaded beside an older Muster (0.3.x or earlier) of another member in the room (access policy off) | every note's clip, through that member's `coordinate_graph` and `coordinate_proof`, which return each part's value whole (§7; "What still leaks", item 6) | nothing of a note sealed in an epoch that member never held |
+| a module loaded beside another member's Muster from before voice notes (0.3.2 or earlier) (access policy off) | every note's clip, through that member's `coordinate_graph` and `coordinate_proof`, which return each part's value whole (§7; "What still leaks", item 6) | nothing of a note sealed in an epoch that member never held |
 
 **Two methods that returned raw log content.** No voice method returns audio. But a part's
 value holds its half of the clip as base64 Opus, and two existing methods handed event values
@@ -600,9 +602,9 @@ differ:
   other is a proof form that carries a voice part as a committed digest. Because today's id
   hashes the value itself, that means a new proof format, and perhaps a new id derivation,
   not a filter on today's.
-- **Neither on an older client.** A member on Muster 0.3.x or earlier holds the same parts and
-  returns them whole through both methods; nothing in this PR reaches their code ("What still
-  leaks", item 6).
+- **Neither on an older client.** A member on a Muster from before voice notes (0.3.2 or
+  earlier) holds the same parts and returns them whole through both methods; nothing in this
+  PR reaches their code ("What still leaks", item 6).
 
 **What the code adds** (built, S6). Every one of them takes a part to be what the fold
 stands: `voiceStanding` (`voice.nim:246` on this branch), the header pass's standing parts of
@@ -641,15 +643,23 @@ an equivocating later copy or a squatted note id, is no part in any of them.
 **The claim** (built, S10: `contracts/claims/registry.json`, step `open-room`, under FS-9 and
 worded narrowly; credibility imperative):
 
-> **A voice note's length does not show in its size.** Muster sends every voice note as two
-> frames of one fixed size, whatever its length, each sealed under the room's epoch key as text
-> is. So a store node can tell that a voice note was sent, to which room's topic and when, but
-> not how long it is. It still sees the conversation graph (the gap above).
+> **A voice note's length does not show in its size.** Muster sends each voice note as two
+> parts, each one frame of one fixed size whatever the note's length, and a re-send is the same
+> size. Each frame is sealed with the room's current key, as text is. So a store node can tell
+> that a voice note was sent, to which room's topic and when, but not how long it is. It still
+> sees the conversation graph (the gap above).
+
+The claim is worded per frame, not per note: what stays fixed is each frame's size, not how
+many frames a note takes, since a retried Send publishes both parts again. Its words keep to
+the walkthrough's plain language (`scripts/ui-lint.sh`: no spec id or module name on screen,
+and no developer term past `ui/tests/qmllint-baseline.json`), so the claim and the four gaps
+below say "the room's key" for the epoch key and "access checks" for Basecamp's access
+policy, and name no spec id.
 
 Its test is `module/tests/probes/probe_voice_fixed_size_stepper.nim` (S5), which covers
 durations from 0.5 s to 60 s, 0, 1 or 8 heads, and two epochs. It also publishes the same note
-twice, so the second goes out on the held path (§4), and asserts that both frames are
-90,153 B. It sits beside the existing gap
+twice, so the second pair goes out on the held path (§4), and asserts that the topic carried
+exactly four frames for the note, each 90,153 B. It sits beside the existing gap
 *The store node still sees the conversation graph* (`contracts/claims/registry.json:83`) and
 does not soften it.
 
@@ -682,9 +692,11 @@ sixth. Each stays true after this PR:
    - Today a send that fails is visible only under `MUSTER_LP_DEBUG`.
    - Voice notes make no mix claim, and the gap *The store node still sees the conversation
      graph* (`contracts/claims/registry.json:83`) stays partial.
-6. **An older client in the room returns the audio over IPC.** A member on Muster 0.3.x or
-   earlier (the published `muster-v0.3.0` among them) opens every voice frame sealed in an
-   epoch they hold, and serves each part's value whole, the base64 Opus included, to any
+6. **An older client in the room returns the audio over IPC.** A member on a Muster from
+   before voice notes (0.3.2 or earlier: every release so far, the published `muster-v0.3.0`
+   and `muster-v0.3.2` among them; §18 asks that the release with voice notes be numbered so
+   the line stays clear) opens every voice frame sealed in an epoch they hold, and serves
+   each part's value whole, the base64 Opus included, to any
    module loaded beside it with the access policy off. Nothing in this PR reaches their code:
    - its session reads a padded frame unchanged: the pad is ASCII spaces after the JSON,
      which `decodeEvent`'s `parseJson` skips (`session.nim:82-90` on `main`);
@@ -709,12 +721,15 @@ existing gap the claim names, and item 5 makes no claim:
   enforce` with `infra/access-policy.json` ships in the host, off by default, and voice has
   not run under it; the party is the co-resident modules);
 - "Leaving a room re-keys nothing" (`partial`: the key layer rotates on removal,
-  `EpochCrypto.removeMember`, and no room path calls it; the party is a former member). It
-  is a room-wide gap that no entry named before;
-- "An older Muster in the room hands voice notes to the modules beside it" (`partial`: a
-  member who runs this branch serves no audio, and nothing here reaches an older member's
-  code; the party is the modules loaded beside an older member's Muster, on that member's
-  machine).
+  `EpochCrypto.removeMember` (`epoch_crypto.nim:135`, exercised by
+  `epoch_crypto_test.nim:61`), and no room path calls it; the party is a former member). It
+  is a room-wide gap that no entry named before, and it leaves the F-16 protects claim at the
+  top of the same step half true (§18);
+- "A Muster from before voice notes hands them to the modules beside it" (`partial`: a
+  member who runs a Muster with voice notes serves no audio, and nothing here reaches an
+  older member's code; the line is drawn by the feature, with "0.3.2 or earlier" as today's
+  releases; the party is the modules loaded beside an older member's Muster, on that
+  member's machine).
 
 ## 11. macOS
 
@@ -801,8 +816,8 @@ room plaintext to any caller (`side-modules.md:104`). Two methods that returned 
 content, `coordinate_graph` and `coordinate_proof`, would have handed it the clip. S6 closed
 the first. The second refuses a room holding a voice note until the operator decides between
 an exception and a new proof form (§10, §18). On the machine of a member
-who runs an older Muster (0.3.x or earlier), both still return it, and nothing here reaches
-that code (§10, "What still leaks", item 6).
+who runs a Muster from before voice notes (0.3.2 or earlier), both still return it, and
+nothing here reaches that code (§10, "What still leaks", item 6).
 
 **The mitigations:**
 - **A banner.** The room's 1 s timer shows a recording banner from `voice_status`, whoever
@@ -880,11 +895,11 @@ planned:
   in the map `toJson` gives. So a leaked stretch of 71 characters or more is caught wherever
   it sits in a half; a shorter one, or the clip in another encoding than its base64, is not
   looked for.
-- **Audio over an older client's IPC** (§10, "What still leaks", item 6). A member on Muster
-  0.3.x or earlier returns every part whole through their `coordinate_graph` and
-  `coordinate_proof`, to any module loaded beside them. This PR cannot change that code, and
-  no test here runs a 0.3.x client against a voice note: what it does is read from `main`'s
-  source.
+- **Audio over an older client's IPC** (§10, "What still leaks", item 6). A member on a
+  Muster from before voice notes (0.3.2 or earlier) returns every part whole through their
+  `coordinate_graph` and `coordinate_proof`, to any module loaded beside them. This PR cannot
+  change that code, and no test here runs such a client against a voice note: what it does
+  is read from `main`'s source.
 - **The size budget** (§5) is measured in process only. The record's size is S1's arithmetic,
   and the worst case's JSON and frames are measured over `LocalTransport` (S4, S5). No
   90,153 B frame has crossed the fleet (above).
@@ -1049,11 +1064,27 @@ Still open:
 - **which room holds the draft** (§8). A draft is refused as `room-changed` in any room but its
   own, and `voice_status` does not yet name that room, which S8's draft surface needs;
 - **for the operator: an older client in the room** (§10, "What still leaks", item 6). A member
-  on Muster 0.3.x or earlier serves every note's Opus to the modules loaded beside them,
-  through `coordinate_graph` and `coordinate_proof`, and nothing in this PR can change that.
-  Accept it as a stated gap (S10's registry entry), or keep voice notes out of a room until
-  every member runs a version that strips them (nothing in the room says today which version
-  a member runs);
+  on a Muster from before voice notes (0.3.2 or earlier) serves every note's Opus to the
+  modules loaded beside them, through `coordinate_graph` and `coordinate_proof`, and nothing
+  in this PR can change that. Accept it as a stated gap (S10's registry entry), or keep voice
+  notes out of a room until every member runs a version that strips them (nothing in the room
+  says today which version a member runs);
+- **for the maintainer: the version that carries voice notes.** This PR bumps no version:
+  `module/metadata.json` and `ui/metadata.json` still read 0.3.2, the released
+  `muster-v0.3.2`, and `RELEASING.md` step 1 bumps at release time. The registry gap and this
+  doc draw the line by the feature, "a Muster from before voice notes", with "0.3.2 or
+  earlier" as the releases of today. So the release that first carries voice notes should be
+  numbered above every 0.3.x, 0.4.0 say, and a release cut from `main` before this PR merges
+  moves "0.3.2" in the gap's body and here;
+- **for the maintainer: the F-16 claim's last sentence.** The protects claim "A later joiner
+  cannot read earlier messages" (`open-room`, the registry's first claim) ends "Removal
+  rotates the epoch immediately." That is true of the key layer: `EpochCrypto.removeMember`
+  (`epoch_crypto.nim:135`) rotates it, as `epoch_crypto_test.nim:61` shows, and
+  `probe_epoch_removal_immediate` shows the same for the epoch model in `crypto/epochs.nim`.
+  But no room path removes a member, which is the S10 gap "Leaving a room re-keys nothing" in
+  the same step. Reword it (for example "The key layer rotates the epoch on removal; nothing in the
+  room removes a member yet, the gap below"), or keep it. This PR leaves it as it is on
+  `main`;
 - whether to coarsen `voice_status`'s peak for co-resident callers (§13);
 - the exact disclosure wording on the draft surface (§8);
 - whether the gaps of §10 stay registry entries of their own, as S10 added them, or fold into

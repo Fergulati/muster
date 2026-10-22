@@ -209,10 +209,16 @@ Every `voice/` frame is the event's JSON followed by ASCII spaces, up to `VoiceF
 (§4). An older client still reads it, because `decodeEvent` is `parseJson`, and at nim 2.2.4
 `parseJson` accepts trailing whitespace.
 
-It also treats a NUL as the end of its input, and accepts whatever follows one. Reproduced
-again for this entry:
-- `"{}     "`, `"{}\0\0"` and `"{}\0garbage"` are accepted;
-- `"{} x"` and `"{}}"` are refused, `JsonParsingError`.
+It also accepts trailing `//` and `/* */` comments, treats a NUL as the end of its input,
+accepting whatever follows one, and refuses any other trailing text. Reproduced again for
+this entry, at nim 2.2.4:
+- `"{}     "`, `"{}\n\t\r "`, `"{} // trailing comment"`, `"{} /* c */"`, `"{}\0\0"` and
+  `"{}\0garbage"` are accepted;
+- `"{} x"`, `"{}}"`, `"{} /"`, `"{} /* c */ x"` and `"{} // c\nx"` are refused,
+  `JsonParsingError` ("EOF expected").
+
+The pad is spaces, so only the first rule matters to a padded frame; the comments and the NUL
+are what "accepts trailing whitespace" does not say.
 
 Nothing pads with NULs. `session_pad_test` finds the JSON's end by re-serializing what
 `parseJson` read, so a NUL pad fails it (§1). It first got through, to §5, before that
