@@ -44,9 +44,11 @@
 ## so Send returns {note} and drops the draft, and a part the fleet lost leaves the note
 ## arriving for the others, with nothing that re-sends it (voice-notes.md §8, §15).
 ##
-## The thread's rows (`rows`, and `messagesJson` as coordinate_messages serves them) go
-## through `threadRows` with one `VoiceMemo` per room, so a clip is decoded and checked once
-## per pair of standing parts, not on every read (§6).
+## The thread's rows (`rows`, and `messagesJson` as coordinate_messages serves them), the
+## room's `lastTs` (coordinate_conversations) and Play go through one `VoiceMemo` per room, so
+## a part's value is parsed once, not on every poll, and a clip is decoded and checked once
+## per pair of standing parts (§6). Play reads the note from one header pass. A room's memo
+## goes when the member leaves it (`forgetRoom`).
 ##
 ## `roomProof` is coordinate_proof while voice notes are in the tree: a log proof carries every
 ## raw value whole, a voice part's half of the clip with it, so it refuses a room whose
@@ -330,8 +332,23 @@ proc draftDiscard*(v: VoiceRecorder): string =
   "ok"
 
 proc memoFor*(v: VoiceRecorder, s: CoordinationSession): VoiceMemo =
-  ## The room's memo of note verdicts, kept across reads (§6).
+  ## The room's memo of part headers and note verdicts, kept across reads (§6).
   v.memos.mgetOrPut(s.topic, newVoiceMemo())
+
+proc forgetRoom*(v: VoiceRecorder, topic: string) =
+  ## Drop the memo of a room this member left (coordinate_leave), so the memos grow with the
+  ## rooms joined, never with every room ever read; each one is bounded by its room's log
+  ## (voice.VoiceMemo). A room read again starts a fresh one.
+  v.memos.del topic
+
+proc memoRooms*(v: VoiceRecorder): int =
+  ## How many rooms' memos the recorder holds.
+  v.memos.len
+
+proc lastTs*(v: VoiceRecorder, s: CoordinationSession): int64 =
+  ## The room's newest row's ts (coordinate_conversations' lastTs): `threadLastTs` over its
+  ## authentic view, with the room's memo, so a poll parses no part it has read before.
+  threadLastTs(s.roomEvents(), v.memoFor(s))
 
 proc rows*(v: VoiceRecorder, s: CoordinationSession): seq[ThreadRow] =
   ## The room's thread (coordinate_messages): `threadRows` over its authentic view, with the
@@ -392,22 +409,17 @@ proc play*(v: VoiceRecorder, s: CoordinationSession, noteId: string): JsonNode =
       durMs = v.draft.durationMs
     else:
       if s == nil: return refusal("not-joined")
-      let events = s.roomEvents()
-      var found = false
-      var note: VoiceNote
-      for n in reduceVoice(events, v.memoFor(s)):
-        if n.nid == noteId: (note = n; found = true)
-      if not found: return refusal("unknown-note")
-      case note.state
+      # one header pass, through the room's memo: the note's state, and its record when complete
+      let n = voiceNoteOf(s.roomEvents(), noteId, v.memoFor(s))
+      if not n.found: return refusal("unknown-note")
+      case n.note.state
       of vsArriving: return refusal("incomplete")
       of vsBroken: return refusal("broken")
       of vsComplete: discard
-      let r = voiceRecordOf(events, noteId)
-      if not r.ok: return refusal("broken")
-      let d = decodeClip(r.record)
+      let d = decodeClip(n.record)
       if not d.ok: return refusal("broken")
       pcm = d.pcm
-      durMs = note.durMs
+      durMs = n.note.durMs
   except VoiceCodecError:
     return refusal("codec")
   let buf = newAudioBuffer(pcm.len)

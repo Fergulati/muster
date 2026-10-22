@@ -1079,6 +1079,8 @@ proc roomTitlesPath(): string =
   if dir.len == 0: dir = getEnv("MUSTER_DATA_DIR", getTempDir() / "muster")
   dir / "room_titles.json"
 
+proc voiceForgetRoom(topic: string)   ## forward — drop a left room's voice memo (the voice glue, below)
+
 proc musterCoordinateLeave(roomTopic: string): string =
   ## Leave a room (exo-dcc.28): stop following it here, forget it so a relaunch does not
   ## re-enter it, and drop its name. Its session takes no more of the room's traffic;
@@ -1091,6 +1093,7 @@ proc musterCoordinateLeave(roomTopic: string): string =
   gSessions.del ctopic
   discard forgetJoinedRoom(joinedRoomsPath(), ctopic)
   forget(roomJournalPath(ctopic))          # its own copy goes with it (exo-dcc.14)
+  voiceForgetRoom(ctopic)                  # and its memo of voice part headers and verdicts
   discard setRoomTitle(roomTitlesPath(), ctopic, "")
   if gTopic == ctopic:
     gSession = nil
@@ -2842,7 +2845,8 @@ proc musterFileshareRetract(fileId: string): string =
 # releases its device when it ends (the AudioIo closed: for miniaudio, the device and the
 # context), and the generated surface has no unload hook, so an exit proc closes whatever
 # still runs before the process, or this plugin's image, goes (§9). The recorder also holds
-# each room's memo of note verdicts, so a thread read decodes no clip twice (§6).
+# each joined room's memo of voice part headers and note verdicts, so a poll parses no part
+# and decodes no clip it has read before (§6); leaving a room drops its memo.
 
 var gVoice: VoiceRecorder = nil
 
@@ -2865,6 +2869,11 @@ proc voicePump() =
   ## Drain and encode a recording, end one the cap filled, end a playback heard to the end,
   ## and release their devices (voice_live.pump). Nothing to do before the first voice call.
   if gVoice != nil: discard gVoice.pump()
+
+proc voiceForgetRoom(topic: string) =
+  ## A room left takes its memo with it (voice_live.forgetRoom), so the recorder's memos are
+  ## the joined rooms' alone, each bounded by its room's log.
+  if gVoice != nil: gVoice.forgetRoom(topic)
 
 proc musterVoiceStatus(): string = $hostVoice().voiceStatus()
 
@@ -4678,7 +4687,9 @@ proc musterCoordinateConversations(): string =
     if topic in gInboxTopics: continue      # an inbox is a drop-box, not a room to list
     s.poll()
     let events = s.roomEvents()
-    let lastTs = threadLastTs(events)   # the newest row's, a voice note's included (§7)
+    # the newest row's, a voice note's included (§7), through the room's memo: a poll parses
+    # no voice part it has read before (voice-notes.md §6)
+    let lastTs = threadLastTs(events, hostVoice().memoFor(s))
     # each room's intents resolve under THAT room's roster and disclosed accounts, which
     # the resolver reads from the active session: swap it in for the fold
     var items: seq[HomeItem]

@@ -55,6 +55,11 @@
 ##      of 2)", in its author's name, accountable, on the guarantee a message carries, at
 ##      the epoch whose key opened it; an entry under voice/ that is no note's part (the
 ##      four above) is none
+##  16. the memo keeps each part's header fields by event id, never its half: every fold
+##      output (reduceVoice, threadRows, threadLastTs, voiceStanding, voiceRecordOf,
+##      voiceNoteOf) is the memo-less one, in any order, duplicated, and as the set grows;
+##      each part is parsed once (`voiceParses`), a warm memo parses none, a new part alone
+##      is parsed, and an equivocating later copy or a key of no part's shape never is
 ## Clips are synthetic CDE records of 40-byte packets: the fold checks structure and digest
 ## and never decodes audio, so this test links no codec. LocalTransport + epoch crypto;
 ## needs libsecp256k1 + libsodium.
@@ -806,5 +811,80 @@ block:
   doAssert listed == 14 and epochs.sorted() == @[0, 1], $listed & " " & $epochs
   echo "15. provenance: each part a peer message in its author's name, accountable as a message is, ",
        "at the epoch that opened it; an entry that is no note's part is none OK"
+
+# ── 16. the memo keeps each part's header: no output changes, no part is parsed twice ─
+# What a warm memo saved was the verdicts; the header pass still parsed every part's value
+# (about 84 KB of JSON for a 60 s note) on every read (PR 340's review). Now the memo keeps
+# each part's header fields by event id, never its half: every fold output is the one a
+# fold with no memo gives, in any order and as the set grows, and a part already read is
+# never parsed again (voiceParses, the header pass's count on this thread).
+block:
+  let ts = 1_792_004_000'i64
+  let (nidA, a) = signedNote(aliceKs, synthClip(1_500, 80), ts)
+  let (nidB, b) = signedNote(bobKs, synthClip(2_500, 81), ts + 1)
+  let (nidC, c) = signedNote(aliceKs, synthClip(700, 82), ts + 2)
+  let (nidD, d) = signedNote(aliceKs, synthClip(900, 83), ts + 3)
+  let (_, e) = signedNote(aliceKs, synthClip(800, 84), ts + 9)
+  let bad = signAuthored(aliceKs, topic, withField(stripped(d[1]), "part", parseJson(c[1].value)["part"]))
+  let notAPart = signAuthored(aliceKs, topic, withField(stripped(e[0]), "part", %"    AB"))
+  let squat = signAuthored(aliceKs, topic, Event(key: "voice/" & "0f".repeat(16) & "/" & alice & "/0/2",
+                                                 value: stripped(a[0]).value))
+  let wrongN = signAuthored(aliceKs, topic, Event(key: "voice/" & nidA & "/" & alice & "/0/3",
+                                                  value: stripped(a[0]).value))
+  # an equivocating part 1 of A's that sorts after hers: a later copy, never parsed
+  var later: Event
+  for salt in 90'u8 .. 220'u8:
+    let other = parseJson(signedNote(aliceKs, synthClip(1_500, salt), ts)[1][1].value)["part"]
+    let x = signAuthored(aliceKs, topic, withField(stripped(a[1]), "part", other))
+    if eventId(x) > eventId(a[1]): (later = x; break)
+  doAssert later.key == a[1].key
+  let (_, hello) = newMessageEvent(alice, ts + 4, "hello", 8)
+  # A and B complete, C arriving, D broken, E's only part no part, a squat, a wrong n, a later copy
+  let all = authenticEvents(a & b & @[c[0], d[0], bad, notAPart, squat, wrongN, later,
+                                      signAuthored(aliceKs, topic, hello)], topic)
+  doAssert all.len == 12, $all.len
+  let reached = 9          # the parts the header pass reads: not wrongN (no part's key), not `later`
+  let nids = @[nidA, nidB, nidC, nidD, "00".repeat(16)]
+  proc outputs(evs: seq[Event], memo: VoiceMemo): string =
+    ## every fold output, as text
+    var j = %*{"notes": $reduceVoice(evs, memo), "rows": $threadRows(evs, memo),
+               "lastTs": threadLastTs(evs, memo)}
+    var st: seq[string]
+    for id, p in voiceStanding(evs, memo): st.add id & " " & $p
+    j["standing"] = %st.sorted()
+    for n in nids:
+      j["record " & n] = %($voiceRecordOf(evs, n, memo))
+      j["note " & n] = %($voiceNoteOf(evs, n, memo))
+    $j
+  let want = outputs(all, nil)
+  doAssert reduceVoice(all).mapIt(it.state) == @[vsComplete, vsComplete, vsArriving, vsBroken]
+  # cold: each part read once, whatever the folds; then nothing again
+  let memo = newVoiceMemo()
+  var p0 = voiceParses()
+  doAssert outputs(all, memo) == want
+  doAssert voiceParses() - p0 == reached and memo.headers == reached,
+           "each part parsed once: " & $(voiceParses() - p0) & ", headers " & $memo.headers
+  p0 = voiceParses()
+  doAssert outputs(all, memo) == want and voiceParses() == p0, "warm: no part parsed"
+  # any order, any duplication, through the warm memo: the same outputs, nothing parsed
+  var r = initRand(16)
+  for _ in 0 ..< 20:
+    var shuffled = all & all[0 .. r.rand(all.len - 1)]
+    r.shuffle(shuffled)
+    doAssert outputs(shuffled, memo) == want
+  doAssert voiceParses() == p0, "a warm memo parses no part in any order: " & $(voiceParses() - p0)
+  # as the set grows, one event at a time with one memo throughout: always the memo-less outputs
+  let grow = newVoiceMemo()
+  for k in 1 .. all.len:
+    doAssert outputs(all[0 ..< k], grow) == outputs(all[0 ..< k], nil), "after " & $k & " events"
+  doAssert grow.headers == reached
+  # a new part: exactly that one is parsed
+  let (_, f) = signedNote(bobKs, synthClip(600, 85), ts + 20)
+  p0 = voiceParses()
+  let grown = outputs(all & f[0 .. 0], memo)
+  doAssert voiceParses() - p0 == 1, "the new part alone: " & $(voiceParses() - p0)
+  doAssert grown == outputs(all & f[0 .. 0], nil) and memo.headers == reached + 1
+  echo "16. a memo of part headers changes no fold output, in any order or as the set grows; ",
+       "a part is parsed once, and a new part alone is OK"
 
 echo "voice_test: all OK"

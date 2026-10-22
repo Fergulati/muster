@@ -306,28 +306,50 @@ The result is `{nid, author, ts, durMs, state, parts}` per note, ordered by (ts,
 - **The verdict pass** judges a note of two parts by rules 5 and 6. It decodes the halves,
   then checks their agreement, the digest and the record.
 
-**The memo.** A verdict is a pure function of the two standing parts' event ids, because an
-id is a content address. So `reduceVoice` and `threadRows` take an optional `VoiceMemo`,
-keyed by those two ids, which holds complete and broken verdicts alike:
-- the hosted layer keeps one per room (S7, built: `VoiceRecorder.memoFor`), so a clip is not
-  decoded and checked on every read;
-- a part that comes to stand in another's place, such as an equivocating copy that sorts
-  first, makes a new key, so its note is judged afresh;
-- it grows by one entry, about 140 B, per pair of parts that ever stood, against their two
-  90 KB frames in the log.
+**The memo.** A part's header fields are a pure function of its event id, and a verdict of
+the two standing parts' ids, because an id is a content address. So every fold takes an
+optional `VoiceMemo` (`reduceVoice`, `threadRows`, `threadLastTs`, `voiceStanding`,
+`voiceNoteOf`, `voiceRecordOf`), which holds both:
+- **Headers**, by event id: `v`, `ts`, `durMs` and `digest`, and whether the value is a
+  part's at all, never the half. A part read once is not parsed again, and a part a pass
+  parses keeps its half for that pass alone. A verdict or a decode reads a half back from its
+  event: once per pair judged, and once per Play. The headers came with PR 340's review,
+  which found the header pass parsing every part's 84 KB value on every poll.
+- **Verdicts**, keyed by the two ids, complete and broken alike, so a clip is not decoded and
+  checked on every read. A part that comes to stand in another's place, such as an
+  equivocating copy that sorts first, makes a new key, so its note is judged afresh.
+- **Where it lives.** The hosted layer keeps one per room (S7, built:
+  `VoiceRecorder.memoFor`), and every hosted read that polls goes through it:
+  `coordinate_messages`' rows, the `lastTs` of `coordinate_conversations` for every joined
+  room, and `voice_play`, which reads its note from one header pass (`voiceNoteOf`). The
+  flow, provenance and the room map, read on demand, take none.
+- **Memory.** A part's id and four fields, a few hundred bytes, and a verdict, about 140 B,
+  per pair of parts that ever stood, against their 90 KB frames in the log (not measured).
+  The log is append-only, so a room's memo is bounded by its log,
+  and `coordinate_leave` drops it (`VoiceRecorder.forgetRoom`), so the memos are those of the
+  rooms joined, never of every room ever read.
 
-Measured on darwin-arm64 (`-d:release`, 20 notes of 60 s in the authentic view, outside the
-repo), per call:
-- with no memo, about 44 ms, or 2.2 ms a note;
-- with a warm memo, about 12 ms;
-- `threadLastTs`, about 13 ms.
+`voice_test` §16 holds every fold output byte-identical with a memo and without one, in any
+order, duplicated, and as the set grows. `voice_live_test` §27 counts the parses
+(`voiceParses`, `voiceHalfReads`): over an unchanged log a second read parses 0 parts, a new
+part alone is parsed, and Play goes through one pass.
 
-What a warm memo still pays is the header pass: parsing each 84 KB value and hashing its
-event id. `coordinate_messages` polls each second and `coordinate_conversations` folds every
-room, all on the module thread, so a few such rooms still cost tens of ms a second.
+Measured on darwin-arm64 (Apple M5, `-d:release`, 20 notes of 60 s and 20 messages, outside
+the repo), per call, before the header memo and after it:
+- with no memo, about 44 ms, or 2.2 ms a note, either way;
+- `threadRows` with a warm memo, about 13 ms before, 3.5 ms after;
+- `threadLastTs`, about 13 ms with no memo, 3.5 ms with a warm one;
+- Play's lookup, about 26 ms before (two header passes, the second with no memo, and the
+  verdict again), 3 ms after (one pass, and the two halves read back).
 
-S7 measured the hosted reads the same way (20 notes of 60 s, a member's session over
-`LocalTransport`, `-d:release`, darwin-arm64, outside the repo), per call:
+What a warm memo still pays is the pass itself: each voice event's id, whose memo key copies
+the whole value (`log.nim:71-75`), the canonical order, and the copies a pass makes.
+`coordinate_messages` polls each second and `coordinate_conversations` folds every room, all
+on the module thread, so a room of 20 full notes now costs a few ms a second, not tens.
+
+S7 measured the hosted reads the same way, before the header memo (20 notes of 60 s, a
+member's session over `LocalTransport`, `-d:release`, darwin-arm64, outside the repo), per
+call:
 - `roomEvents`, the authentic view: about 37 ms the first time, while it checks and caches
   every part's signature, then about 3 ms;
 - the thread's rows as `coordinate_messages` reads them (`roomEvents`, then `threadRows` with
@@ -1005,8 +1027,9 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   short-circuit only if it matters.
 - **The cost of the fold.** `eventId`'s memo key concatenates the whole value (`log.nim:71-75`),
   and every hosted read re-runs `roomEvents` with no fold cache (the cache is
-  `side-modules.md` S4, `exo-ff5.4`, not built). `voice.nim`'s own cost is measured (§6), but
-  `roomEvents`' authorship checks over 84 KB values are not, and nor is the whole hosted read.
+  `side-modules.md` S4, `exo-ff5.4`, not built). `voice.nim`'s own cost is measured, with the
+  room's memo of part headers and verdicts and without it (§6), but `roomEvents`' authorship
+  checks over 84 KB values are not, and nor is the whole hosted read since the header memo.
 - **Audio over `coordinate_proof`** (§10). It refuses `voice-notes-present` for a room whose
   authentic view holds a part the fold stands, so no proof of a room with a voice note leaves
   the module until the operator decides; `voice_live_test` §23 and §26 hold the refusal on
@@ -1226,7 +1249,9 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
 - **S7 — The hosted surface and its state machine (built).** `voice_live.nim`, the six
   remaining methods, `voicePump`, and `threadRows` in `coordinate_messages`, and `close` before
   the module unloads (§9). The recorder keeps a `VoiceMemo` per room and passes it to every
-  `threadRows`; `coordinate_conversations`' `lastTs` reads `threadLastTs` (§6).
+  `threadRows`; `coordinate_conversations`' `lastTs` reads `threadLastTs` (§6). Since PR 340's
+  review the memo keeps each part's header as well, `threadLastTs` and Play read through it,
+  and leaving a room drops its memo.
   Until the operator decides (§10), `coordinate_proof` refuses a room holding a voice note.
   Test: `voice_live_test` on `SyntheticAudioIo` and `LocalTransport`, which holds §8's type
   rule (no float) in every state, and the marshalling probe's not-joined replies.

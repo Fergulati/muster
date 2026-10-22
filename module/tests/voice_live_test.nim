@@ -73,6 +73,13 @@
 ##      that accounts for every raw entry (exo-f76) and verifies, a copied half of a note's
 ##      clip with it (voice-notes.md §10's residual); beside the same junk, a note arriving,
 ##      complete or broken refuses with the same error and detail as before
+##  27. the room's memo keeps each part's header fields by event id (PR 340's review: the
+##      header pass parsed every part's value on every poll): over an unchanged log the
+##      rows coordinate_messages serves and coordinate_conversations' lastTs parse 0 parts
+##      (`voiceParses`); a new part alone is parsed, and the part that completes a note reads
+##      its other half back once for the verdict (`voiceHalfReads`); Play gathers once and
+##      reads back the two halves it decodes; the memo holds one header per part in the
+##      room's view, and `forgetRoom` (coordinate_leave) drops a room's memo
 ## Needs libopus, libsecp256k1, libsodium and the miniaudio pin (run-suite.sh links them all).
 
 import std/[algorithm, json, math, os, strutils, sequtils, tables]
@@ -858,6 +865,63 @@ block:
   echo "26. a room whose raw log holds only junk under voice/ (unsigned, a forged author, a malformed ",
        "value, a squatted note id, wrong-shape keys) exports a proof that accounts for every entry; ",
        "a note arriving, complete or broken refuses voice-notes-present as before OK"
+
+# ── 27. a poll parses no part twice: the room's memo keeps each part's header ────────
+block:
+  let b = newVoiceRecorder(newSyntheticAudioIo(@[], VirtualClock().clock))
+  let memo = b.memoFor(bobS)
+  let inView = bobS.roomEvents().countIt(isVoiceKey(it.key))
+  doAssert inView >= 12, $inView
+  proc counts(): (int, int) = (voiceParses(), voiceHalfReads())
+  proc since(c: (int, int)): (int, int) = (voiceParses() - c[0], voiceHalfReads() - c[1])
+  var c = counts()
+  let rows0 = b.rows(bobS)
+  doAssert since(c) == (inView, 0), "a cold read parses each part once and reads no half back: " & $since(c)
+  c = counts()
+  let last0 = b.lastTs(bobS)
+  doAssert b.rows(bobS) == rows0 and b.lastTs(bobS) == last0
+  doAssert since(c) == (0, 0), "over an unchanged log coordinate_messages' rows and threadLastTs parse 0 parts: " & $since(c)
+  doAssert memo.headers == inView, "one header per part in the room's view: " & $memo.headers
+  # a new part arrives: that one alone is parsed
+  let clip = decodeRecord(voiceRecordOf(bobS.roomEvents(), nid1).record).clip
+  let tsN = nextTs()
+  let (nidN, partsN) = voiceEvents(alice, clip, tsN)
+  aliceS.publishAuthored(aliceKs, partsN[0])
+  c = counts()
+  var rows = b.rows(bobS)
+  doAssert since(c) == (1, 0), "the new part alone: " & $since(c)
+  doAssert noteRow(rows, nidN).note.state == vsArriving
+  c = counts()
+  doAssert b.lastTs(bobS) == tsN and since(c) == (0, 0), $since(c)
+  aliceS.publishAuthored(aliceKs, partsN[1])
+  c = counts()
+  rows = b.rows(bobS)
+  doAssert since(c) == (1, 1), "the other part alone, and part 0's half read back once for the verdict: " & $since(c)
+  doAssert noteRow(rows, nidN).note.state == vsComplete
+  c = counts()
+  doAssert b.rows(bobS) == rows and since(c) == (0, 0), "nothing again on the next poll: " & $since(c)
+  doAssert rows == threadRows(bobS.roomEvents()) and b.lastTs(bobS) == threadLastTs(bobS.roomEvents()),
+           "the rows and lastTs a read with no memo gives"
+  # Play gathers once, through the memo: no part parsed, the two halves it decodes read back
+  c = counts()
+  doAssert b.play(bobS, nidN).ck.ok
+  doAssert since(c) == (0, 2), "Play: " & $since(c)
+  doAssert b.playStop() == "ok"
+  # bounded by the room's log: one header per part; a room left takes its memo with it
+  doAssert memo.headers == inView + 2
+  const t7 = "/muster/1/room-voice-memo/proto"
+  let other = newCoordinationSession(newLocalTransport(net), newEpochCrypto(bobKs, t7, @[]), t7)
+  doAssert b.rows(other).len == 0 and b.memoRooms == 2
+  b.forgetRoom(t7)
+  doAssert b.memoRooms == 1 and b.memoFor(bobS) == memo
+  b.forgetRoom(topic)
+  doAssert b.memoRooms == 0
+  c = counts()
+  doAssert b.rows(bobS) == rows and since(c)[0] == inView + 2 and b.memoFor(bobS) != memo,
+           "the room read again starts a fresh memo: " & $since(c)
+  echo "27. the room's memo keeps each part's header: an unchanged log parses 0 parts, a new part ",
+       "alone is parsed, Play gathers once and reads back the two halves it decodes; a room left ",
+       "drops its memo OK"
 
 # ── 8. no JSON carries audio or a float ─────────────────────────────────────────────
 block:
