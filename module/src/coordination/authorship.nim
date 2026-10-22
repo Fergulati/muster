@@ -311,7 +311,8 @@ proc copyToSeal(s: CoordinationSession, ks: Keystore, e: Event): Event =
 proc publishAuthored*(s: CoordinationSession, ks: Keystore, e: Event) =
   ## Sign an author-bearing event as this member, for this room, and publish it: a new one
   ## with the heads this member had seen in `after`, signed too (C5); one it already holds
-  ## as this member first sealed it (`copyToSeal`).
+  ## as this member first sealed it (`copyToSeal`). That holds for every author-signed
+  ## kind: a re-announced account disclosure as a retried voice part (authorship_test §12).
   s.publish(s.copyToSeal(ks, e), asGiven = true)
 
 proc publishAuthoredTogether*(s: CoordinationSession, ks: Keystore, events: seq[Event]) =

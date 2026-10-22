@@ -12,6 +12,10 @@
 ## §11 (voice-notes.md §3.3): a voice note's part names its author in its key, so its
 ## author is read off the key and every `voice` shape is author-bearing.
 ##
+## §12 (voice-notes.md §4): a re-announce of an author-signed event re-seals the copy whose
+## `after` its author signed, never a copy another member planted that the log keeps, for an
+## account disclosure as for a voice part; every member, a later joiner included, converges.
+##
 ## Needs $SECP + $STINT + libsodium (tests/README.md; run-suite.sh supplies them).
 
 import std/[json, strutils, algorithm, sequtils]
@@ -220,5 +224,70 @@ block:
   doAssertRaises(CatchableError):
     discard signAuthored(malloryKs, roomA, claim)
   echo "11. a voice/ part names its author in its key: every shape is author-bearing, only that member's signature counts OK"
+
+# ── 12. a re-announce re-seals the author's own copy, for every author-signed kind ────
+# publishAuthored for an event the log already holds seals the copy whose `after` its author
+# signed (authorship.copyToSeal), not the copy the log keeps (the smallest afterDigest),
+# which any member who received the event can plant. Voice notes needed it (voice-notes.md
+# §4; voice_live_test §24); it holds for every kind publishAuthored signs, an account
+# disclosure here, re-announced for a member admitted later.
+block:
+  const roomC = "/muster/1/room-c/proto"
+  let carolKs = newInMemoryKeystore(seed(0x14), seed(0x24))
+  let carol = carolKs.encIdentity()
+  let net = newLocalNetwork()
+  let (vMem, mMem) = (victorKs.encIdentity(), malloryKs.encIdentity())
+  let aliceCrypto = newEpochCrypto(aliceKs, roomC, @[vMem, mMem])
+  let victorCrypto = newEpochJoiner(victorKs)
+  let malloryCrypto = newEpochJoiner(malloryKs)
+  victorCrypto.ingestGrant(aliceCrypto.grantFor(0, vMem))
+  malloryCrypto.ingestGrant(aliceCrypto.grantFor(0, mMem))
+  let a = newCoordinationSession(newLocalTransport(net), aliceCrypto, roomC)
+  let v = newCoordinationSession(newLocalTransport(net), victorCrypto, roomC)
+  let m = newCoordinationSession(newLocalTransport(net), malloryCrypto, roomC)
+  a.publish(propose)
+  let disclose = accountDiscloseEvent(account(), victor)
+  v.publishAuthored(victorKs, disclose)
+  let id = eventId(signAuthored(victorKs, roomC, disclose))
+  let own = v.log.find(id).event
+  doAssert own.after.len > 0 and afterVerified(roomC, own), "Victor's copy names what he had seen, signed"
+  # Mallory, who received it, sends a copy of her own: the same event, an `after` of ids she
+  # made up and nobody signed, ground until it sorts first, so every log keeps her copy
+  var planted = m.log.find(id).event
+  var n = 0
+  while true:
+    inc n
+    planted.after = @["ab".repeat(31) & ($n).align(2, '0'), "cd".repeat(32)]
+    planted.afterSig = ""
+    if afterDigest(planted) < afterDigest(own): break
+  var j = %*{"parents": planted.parents, "key": planted.key, "value": planted.value}
+  j["after"] = %planted.after
+  var plain: seq[byte]
+  for c in $j: plain.add byte(c)
+  discard newLocalTransport(net).publish(roomC, @[0x00'u8] & malloryCrypto.seal(plain))
+  doAssert v.log.find(id).event.after == planted.after, "Victor's log keeps Mallory's copy"
+  doAssert a.log.find(id).event.after == planted.after
+  # Carol is admitted: a new epoch she alone opens from here on, and Victor discloses the
+  # account again for her, as a re-announce does
+  aliceCrypto.addMember(carol)
+  victorCrypto.ingestGrant(aliceCrypto.grantFor(1, vMem))
+  malloryCrypto.ingestGrant(aliceCrypto.grantFor(1, mMem))
+  let carolCrypto = newEpochJoiner(carolKs)
+  carolCrypto.ingestGrant(aliceCrypto.grantFor(1, carol))
+  let c = newCoordinationSession(newLocalTransport(net), carolCrypto, roomC)
+  doAssert not c.log.find(id).found, "nothing from before Carol's epoch opens"
+  v.publishAuthored(victorKs, disclose)
+  let got = c.log.find(id)
+  doAssert got.found, "Carol receives the re-announce"
+  doAssert got.event.after == own.after and got.event.afterSig == own.afterSig,
+           "the author's own copy, not the one the log keeps: " & $got.event.after
+  # and the members converge: each reads Victor's disclosure, with Victor's own order
+  for (who, s) in {"Alice": a, "Victor": v, "Mallory": m, "Carol": c}:
+    var seen: seq[Event]
+    for e in s.roomEvents(): (if eventId(e) == id: seen.add e)
+    doAssert seen.len == 1 and seen[0].after == own.after and seen[0].afterSig == own.afterSig, who & ": " & $seen
+    doAssert reduceAccounts(s.roomEvents()).mapIt(it.disclosedBy) == @[@[victor]], who
+  echo "12. a re-announced account disclosure re-seals the author's own copy, not a member's planted ",
+       "one the log keeps; every member, a later joiner included, reads it with the author's order OK"
 
 echo "authorship_test: all OK"

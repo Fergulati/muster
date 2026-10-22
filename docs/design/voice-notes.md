@@ -203,7 +203,12 @@ the smallest by `afterDigest` if there are several, as the room's view picks; wi
 event with no ordering claim, which is what the room's view makes of any copy whose `after`
 its author did not sign (`authorship.copyToSeal`). That copy's `after` came from `heads()`, at
 most 8 ids, so it fits the pad (§5). `voice_live_test` §24 plants such a copy with 1,400 ids
-and retries.
+and retries. **This changes every author-signed kind, not voice alone:** a re-announce or a
+retried publish of a message, a decline, a share, an account disclosure or any other kind
+`publishAuthored` signs now re-seals the author's own `after`-signed copy, where `main`
+re-sealed the log's kept copy, which may be another member's (`authorship_test` §12: an
+account disclosure re-announced for a later joiner, and every member converges on the
+author's order).
 
 Why on the frame, not inside the value:
 - `publishAuthored` signs the value first. Only then does it set `after = heads()` (0 to 8 ids,
