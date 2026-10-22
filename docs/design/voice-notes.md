@@ -20,7 +20,8 @@ presses Send on a surface that has already said who will see what. Send splits t
 exactly two author-signed `voice/…` events, sealed under the epoch key as text is, each padded
 to one fixed size. So every note costs the same two frames on the wire, whatever its length.
 Members fold the parts into notes, and the thread shows a card. Play decodes in the module and
-hands PCM to the speaker. The audio never crosses IPC in either direction.
+hands PCM to the speaker. No voice method returns audio, in either direction. Two existing
+methods that return raw log content would carry it, and §10 says how each is closed.
 
 ## 1. Goal and non-goals
 
@@ -243,8 +244,17 @@ it never links libopus. It imports only the clip record's structural checks. Its
 
 1. **Authentic only.** `roomEvents` has already dropped a part that is forged, unsigned,
    replayed from another room, or edited (`authorship.nim:262-277`).
-2. **Key shape.** Exactly `voice/<nid>/<author>/<i>/<n>`, with `n == 2`, `i` in {0, 1} and a
-   128-hex author. Anything else is dropped without raising.
+2. **Shape.** The key is exactly `voice/<nid>/<author>/<i>/<n>`, with `n == 2`, `i` in
+   {0, 1}, a 32-hex nid and a 128-hex author, all lowercase. The value holds the fields of
+   §3.3 and no others: `v` 1, `ts` an integer, `durMs` an integer in 0..`VoiceMaxMs`,
+   `digest` 64 lowercase hex, and `part` in canonical base64, the one spelling `encode` gives
+   its bytes. Anything else is dropped without raising.
+   - **Base64 is checked before it is decoded.** std/base64's `decode` (Nim 2.2.4,
+     `lib/pure/base64.nim:252-262`) skips whitespace inside its 4-character loop and then
+     reads past the end of the string. `"    AB"` and `"AAAA     AAA"` each raise an
+     IndexDefect, which no `except CatchableError` catches, and any member can sign such a
+     part. So the fold first requires a length that is a multiple of 4, the standard
+     alphabet, `=` only as final padding and zero spare bits, and only then decodes.
 3. **The first copy stands.** In `canonicalOrder`, the first copy of each (nid, author, i)
    stands, and an equivocating later copy is ignored, as in `readBlob`
    (`xmr_msig_spend.nim:60-78`).
@@ -262,9 +272,34 @@ it never links libopus. It imports only the clip record's structural checks. Its
 7. **Epochs.** A part sealed in an epoch this member never held never opens, so the fold never
    sees it (F-16).
 
-The result is `{nid, author, ts, durMs, state}` per note, ordered by (ts, nid). The hosted
-layer keeps a memo of complete-note verdicts, keyed by the parts' event ids, so a clip is not
-reassembled and checked on every read.
+The result is `{nid, author, ts, durMs, state, parts}` per note, ordered by (ts, nid), where
+`parts` names the standing parts' event ids. The fold runs in two passes:
+- **The header pass** reads each part's key and value and checks rules 2 to 4, base64
+  spelling included, but decodes nothing. It decides which parts stand and which notes exist.
+  `threadLastTs` needs nothing more, because a note's row is there whatever its state.
+- **The verdict pass** judges a note of two parts by rules 5 and 6. It decodes the halves,
+  then checks their agreement, the digest and the record.
+
+**The memo.** A verdict is a pure function of the two standing parts' event ids, because an
+id is a content address. So `reduceVoice` and `threadRows` take an optional `VoiceMemo`,
+keyed by those two ids, which holds complete and broken verdicts alike:
+- the hosted layer keeps one per session (S7), so a clip is not decoded and checked on every
+  read;
+- a part that comes to stand in another's place, such as an equivocating copy that sorts
+  first, makes a new key, so its note is judged afresh;
+- it grows by one entry, about 140 B, per pair of parts that ever stood, against their two
+  90 KB frames in the log.
+
+Measured on darwin-arm64 (`-d:release`, 20 notes of 60 s in the authentic view, outside the
+repo), per call:
+- with no memo, about 44 ms, or 2.2 ms a note;
+- with a warm memo, about 12 ms;
+- `threadLastTs`, about 13 ms.
+
+What a warm memo still pays is the header pass: parsing each 84 KB value and hashing its
+event id. `coordinate_messages` polls each second and `coordinate_conversations` folds every
+room, all on the module thread, so a few such rooms still cost tens of ms a second. S7
+measures again with the hosted reads (§15).
 
 ## 7. Thread rows
 
@@ -311,7 +346,8 @@ and names nobody (§13).
 `threadRows` is used in exactly two places:
 - `musterCoordinateMessages`, in place of `reduceMessages` (`:4590`);
 - the `lastTs` of `coordinate_conversations` (`:4640-4641`), so a note moves its room up the
-  list.
+  list. That one reads `threadLastTs`, the newest row's ts from the fold's header pass (§6),
+  which judges no clip.
 
 `reduceMessages` itself is unchanged. Three things read address shares from it:
 - `settle_up.nim:81`;
@@ -464,7 +500,29 @@ when the host unloads the plugin is a crash risk.
 | store node (delivery) | that the room's topic carried two frames of 90,153 B each, and when; the publishing node, unless `mix` is on; a frame that size marks a voice note | its length, which member sent it (FS-7), the audio |
 | relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
 | mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
-| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13) | the audio: no method returns it |
+| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13); until S6 and the operator's decision close them (below), the clip itself, through two methods that return raw log content | the audio through any voice method: none returns it |
+
+**Two methods that return raw log content.** No voice method returns audio. But a part's value
+holds its half of the clip as base64 Opus, and two existing methods hand event values to any
+caller:
+- **`coordinate_graph`**, the room map, copies every field of a JSON-object value into the
+  entry's `content` (`room_graph.nim:198`), and does so for every entry (`:348`). A voice
+  part's `part` would go with it.
+- **`coordinate_proof`** returns every raw log event, value and all (`proof.nim:79`,
+  `muster_module.nim:3230`). A proof must carry each value whole: the verifier recomputes
+  every event's id from it, and the id hashes the value's text itself (`muster.event.v1`,
+  `log.nim:48-58`). So the field cannot simply be left out.
+
+Left as they are, both methods give any caller the Opus of every note in the room. That
+contradicts the decision that audio plaintext never crosses IPC (§18), and §13. The two cases
+differ:
+- **`coordinate_graph`: S6 strips it.** A `voice/` entry's `content` carries no `part`: at
+  most `v`, `ts`, `durMs` and `digest`. `voice_test` pins that field by field.
+- **`coordinate_proof`: the operator decides** (§18). One option keeps raw values, since a
+  proof accounts for every entry, and says here that a proof export carries the audio. That
+  amends the IPC decision for this one explicit export. The other is a proof form that
+  carries a voice part as a committed digest. Because today's id hashes the value itself,
+  that means a new proof format, and perhaps a new id derivation, not a filter on today's.
 
 **What the code adds** (planned, S6):
 - **A `voice/` branch in `flow.nim`.** Today an unknown prefix falls through to envelope-only
@@ -473,7 +531,7 @@ when the host unloads the plugin is a crash risk.
   - room-member: `voice-note`, `voice-note-length`;
   - store-node: `timing`, `topic`, `fixed-size`.
 - **The room map.** A `room_graph` entry, with basis author-signed and kind `voice`
-  (`room_graph.nim:69`, `:327`).
+  (`room_graph.nim:69`, `:327`). Its `content` carries no `part` (above).
 - **Provenance.** A `logProvenance` entry as a peer message (`intents.nim:829`).
 
 `voice_test` pins those rows field for field, the way `swarm_test` §8 pins FileShare's.
@@ -608,9 +666,11 @@ caller. So any module loaded beside Muster can:
   envelope of a recording or playback in progress. Whether to coarsen it (one value per 100
   ms, a few levels) is open for S7.
 
-What it cannot do is read audio: no method returns it, and `voice_status` carries state,
-position and peak only. That is unlike `coordinate_messages`, which serves room plaintext to
-any caller (`side-modules.md:104`).
+What it cannot do is read audio through a voice method: none returns it, and `voice_status`
+carries state, position and peak only. That is unlike `coordinate_messages`, which serves
+room plaintext to any caller (`side-modules.md:104`). Two methods that return raw log content,
+`coordinate_graph` and `coordinate_proof`, would hand it the clip. S6 closes the first, and
+the second is the operator's decision (§10, §18).
 
 **The mitigations:**
 - **A banner.** The room's 1 s timer shows a recording banner from `voice_status`, whoever
@@ -660,7 +720,10 @@ Nothing in this document is built. What is unverified even as a plan:
   short-circuit only if it matters.
 - **The cost of the fold.** `eventId`'s memo key concatenates the whole value (`log.nim:71-75`),
   and every hosted read re-runs `roomEvents` with no fold cache (the cache is
-  `side-modules.md` S4, `exo-ff5.4`, not built).
+  `side-modules.md` S4, `exo-ff5.4`, not built). `voice.nim`'s own cost is measured (§6), but
+  `roomEvents`' authorship checks over 84 KB values are not, and nor is the whole hosted read.
+- **Audio over `coordinate_graph` and `coordinate_proof`** (§10). Neither method strips a voice
+  part's `part` today. S6 strips it from the room map; the proof waits on the operator.
 - **The size budget** (§5) is arithmetic until S4 and S5 measure the worst case.
 - **Checks that are Linux-only or the maintainer's:**
   - the runner self-tests and `ui-parity.sh` for both UIs;
@@ -710,11 +773,14 @@ Each slice's test is written and run red before its code (worker.md), and every 
   it no `voice` field, so it neither renders as a voice card nor plays under the forger's name
   (§7); S8 pins the render side.
 - **S6 — Disclosure.** The `flow.nim` branch, the room map and provenance, with the rows pinned
-  in `voice_test`.
+  in `voice_test`. A `voice/` entry's room-map `content` carries no `part` (§10), pinned field
+  by field.
 - **S7 — The hosted surface and its state machine.** `voice_live.nim`, the six remaining
   methods, `voicePump`, and `threadRows` in `coordinate_messages`, and `close` before the
-  module unloads (§9). Test: `voice_live_test` on `SyntheticAudioIo` and `LocalTransport`,
-  which holds §8's type rule (no float) in every state.
+  module unloads (§9). The session keeps a `VoiceMemo` and passes it to every `threadRows`;
+  `coordinate_conversations`' `lastTs` reads `threadLastTs` (§6). `coordinate_proof` follows
+  the operator's decision (§10). Test: `voice_live_test` on `SyntheticAudioIo` and
+  `LocalTransport`, which holds §8's type rule (no float) in every state.
 - **S8 — The UI.** The `.rep` (both backends, ADR-019), `CardVoiceNote.qml`, the mic in the
   composer, observer and kind labels, the regenerated gallery `FakeBackend.qml`, and the
   unknown-kind fallback. A gallery fixture holds a forged `voice-note` body, and RoomThread
@@ -763,6 +829,10 @@ Asked of the maintainer (corpetty):
   FileShare autopilot and FileShare's absence from `ui-parity.sh` are left for a separate PR.
 
 Still open:
+- **for the operator: `coordinate_proof` and the audio** (§10). A log proof carries every
+  event's value whole, so a proof of a room with a note carries its Opus to the caller. Either
+  the proof export is named as an exception to "audio plaintext never crosses IPC", or a new
+  proof form carries voice parts as committed digests. S7 needs the answer;
 - whether to coarsen `voice_status`'s peak for co-resident callers (§13);
 - the exact disclosure wording on the draft surface (§8);
 - whether the gaps of §10 become new registry entries.

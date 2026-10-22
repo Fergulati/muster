@@ -17,6 +17,13 @@
 ## room's authentic view (`roomEvents(s)`): it trusts that every part's author signed it
 ## (§6 rule 1) and checks the rest itself. A malformed part is dropped, never raised on.
 ##
+## It runs in two passes. The header pass reads each part's key and value and checks its
+## shape, the half's base64 spelling included, but decodes nothing; it decides which parts
+## stand and which notes are kept, and is all `threadLastTs` needs. The verdict pass judges
+## a note of two parts: it decodes the halves, checks their agreement, the digest and the
+## record. A verdict is a pure function of the two standing parts' event ids, so a
+## `VoiceMemo` the hosted layer keeps can hold it across reads (§6).
+##
 ## Only `threadRows` makes a voice row, and the row carries the note in a field of its own,
 ## `voice`, never in `body` (§7): `reduceMessages` builds a row from a message's author, ts
 ## and body alone, so no `message/` event can put a `voice` field on a row, whatever its body
@@ -116,11 +123,25 @@ type
     ts: int64
     durMs: int
     digest: string
-    bytes: seq[byte]
+    half: string                ## the half as its canonical base64, decoded by the verdict pass only
   Group = object
     nid, author: string
     have: array[VoiceParts, bool]
     part: array[VoiceParts, Part]
+  VoiceMemo* = ref object
+    ## Verdicts on notes of two parts, each keyed by the two standing parts' event ids: what
+    ## the hosted layer keeps (§6) so a clip is not decoded and checked on every read. An id
+    ## is a content address, so a verdict is a pure function of its key, and a part that
+    ## comes to stand in another's place makes another key. It grows by one entry (about
+    ## 140 B) per pair of parts that ever stood, against their two 90 KB frames in the log.
+    verdicts: Table[string, VoiceState]
+    hits: int
+
+proc newVoiceMemo*(): VoiceMemo = VoiceMemo()
+proc len*(m: VoiceMemo): int = m.verdicts.len
+proc hits*(m: VoiceMemo): int =
+  ## How many verdicts the memo has served.
+  m.hits
 
 proc partKey(key: string): tuple[ok: bool, nid, author: string, i: int] =
   ## Rule 2: exactly voice/<nid>/<author>/<i>/2, a 32-hex nid and a 128-hex author, both
@@ -132,11 +153,40 @@ proc partKey(key: string): tuple[ok: bool, nid, author: string, i: int] =
   if i < 0: return
   (true, p[1], p[2], i)
 
+const Sextets = block:   # each standard base64 character's value, -1 for every other character
+  var t: array[char, int8]
+  for c in char.low .. char.high:
+    t[c] = (case c
+            of 'A' .. 'Z': int8(ord(c) - ord('A'))
+            of 'a' .. 'z': int8(ord(c) - ord('a') + 26)
+            of '0' .. '9': int8(ord(c) - ord('0') + 52)
+            of '+': 62'i8
+            of '/': 63'i8
+            else: -1'i8)
+  t
+
+proc isCanonicalBase64(s: string): bool =
+  ## Whether `s` is the one spelling `encode` gives some bytes, decided without decoding: a
+  ## length that is a multiple of 4, the standard alphabet only, `=` only as the last one or
+  ## two characters, and the bits a padded last group leaves over all zero. std/base64's
+  ## `decode` (Nim 2.2.4) skips whitespace inside its loop and then reads past the end of
+  ## the string, an IndexDefect that no `except` catches, so nothing that fails this reaches
+  ## it.
+  if s.len mod 4 != 0: return false
+  let pad = (if s.len == 0 or s[^1] != '=': 0 elif s[^2] != '=': 1 else: 2)
+  for k in 0 ..< s.len - pad:
+    if Sextets[s[k]] < 0: return false
+  if pad > 0:
+    # the last data character carries 2 (one `=`) or 4 (two) bits beyond the bytes
+    let spare = (if pad == 1: 0b11 else: 0b1111)
+    if (int(Sextets[s[s.len - pad - 1]]) and spare) != 0: return false
+  true
+
 proc parsePart(e: Event): tuple[ok: bool, part: Part] =
-  ## A part's value: a JSON object of the six fields (authorSig optional here, the room's
-  ## view having verified it), v this version, ts an integer, durMs an integer no clip
-  ## exceeds (0..VoiceMaxMs), the digest 64 lowercase hex, the half canonical base64.
-  ## Anything else is not a part.
+  ## The header pass, for one part: a JSON object of the six fields (authorSig optional
+  ## here, the room's view having verified it), v this version, ts an integer, durMs an
+  ## integer no clip exceeds (0..VoiceMaxMs), the digest 64 lowercase hex, the half
+  ## canonical base64. Anything else is not a part. Decodes nothing.
   try:
     let j = parseJson(e.value)
     if j.kind != JObject: return
@@ -151,13 +201,9 @@ proc parsePart(e: Event): tuple[ok: bool, part: Part] =
     if ts == nil or ts.kind != JInt: return
     if dur == nil or dur.kind != JInt or dur.getBiggestInt() notin 0'i64 .. int64(VoiceMaxMs): return
     if dg == nil or dg.kind != JString or not isLowerHex(dg.getStr(), 64): return
-    if pt == nil or pt.kind != JString: return
-    let raw = decode(pt.getStr())
-    if encode(raw) != pt.getStr(): return             # one spelling of the bytes only
-    var b = newSeq[byte](raw.len)
-    for i, c in raw: b[i] = byte(c)
+    if pt == nil or pt.kind != JString or not isCanonicalBase64(pt.getStr()): return
     (true, Part(id: eventId(e), ts: ts.getBiggestInt(), durMs: int(dur.getBiggestInt()),
-                digest: dg.getStr(), bytes: b))
+                digest: dg.getStr(), half: pt.getStr()))
   except CatchableError:
     (false, Part())
 
@@ -179,43 +225,60 @@ proc gather(events: seq[Event]): OrderedTable[(string, string), Group] =
     result[at].have[k.i] = true
     result[at].part[k.i] = part
 
-proc judge(g: Group): tuple[kept: bool, note: VoiceNote, record: seq[byte]] =
-  ## Rules 4 to 6 for one (nid, author). The note id must derive from the author and a
-  ## part's own (digest, ts), else nothing here is a note (squatting); the note is read off
-  ## that part. Both parts must agree on ts, length and digest, and the record they make
-  ## must match the digest, pass the structural checks (§3.2) and be the length it claims.
-  var lead = -1
+proc header(g: Group): tuple[kept: bool, note: VoiceNote] =
+  ## Rule 4 for one (nid, author): the note id must derive from the author and a part's own
+  ## (digest, ts), else nothing here is a note (squatting); the note is read off that part.
+  ## Its state is arriving here; the verdict pass judges a note of two parts.
   for i in 0 ..< VoiceParts:
     if g.have[i] and noteIdOf(g.author, g.part[i].digest, g.part[i].ts) == g.nid:
-      lead = i
-      break
-  if lead < 0: return
-  result.kept = true
-  let p = g.part[lead]
-  result.note = VoiceNote(nid: g.nid, author: g.author, ts: p.ts, durMs: p.durMs)
-  for i in 0 ..< VoiceParts:
-    if g.have[i]: result.note.parts[i] = g.part[i].id
-  if not (g.have[0] and g.have[1]):
-    result.note.state = vsArriving
-    return
-  result.note.state = vsBroken
-  let (a, b) = (g.part[0], g.part[1])
-  if a.ts != b.ts or a.durMs != b.durMs or a.digest != b.digest: return
-  let record = a.bytes & b.bytes
-  if hexOf(clipDigest(record)) != a.digest: return
+      let p = g.part[i]
+      result = (true, VoiceNote(nid: g.nid, author: g.author, ts: p.ts, durMs: p.durMs,
+                                state: vsArriving))
+      for k in 0 ..< VoiceParts:
+        if g.have[k]: result.note.parts[k] = g.part[k].id
+      return
+
+proc bytesOf(s: string): seq[byte] =
+  result = newSeq[byte](s.len)
+  for i, c in s: result[i] = byte(c)
+
+proc verdict(a, b: Part): tuple[state: VoiceState, record: seq[byte]] =
+  ## Rules 5 and 6 for a note's two parts: they agree on ts, length and digest, and the
+  ## record they make matches the digest, passes the structural checks (§3.2) and is the
+  ## length it claims. The header pass let through canonical base64 only, which `decode`
+  ## reads whole.
+  if a.ts != b.ts or a.durMs != b.durMs or a.digest != b.digest: return (vsBroken, @[])
+  let record = bytesOf(decode(a.half)) & bytesOf(decode(b.half))
+  if hexOf(clipDigest(record)) != a.digest: return (vsBroken, @[])
   let (ok, clip, _) = decodeRecord(record)
-  if not ok or clip.durationMs != a.durMs: return
-  result.note.state = vsComplete
-  result.record = record
+  if not ok or clip.durationMs != a.durMs: return (vsBroken, @[])
+  (vsComplete, record)
+
+proc judged(g: Group, memo: VoiceMemo): tuple[kept: bool, note: VoiceNote] =
+  ## A kept note with its state: arriving on one part, else the verdict on its two, the
+  ## memo's when it holds one for these parts' ids.
+  result = header(g)
+  if not result.kept or not (g.have[0] and g.have[1]): return
+  if memo == nil:
+    result.note.state = verdict(g.part[0], g.part[1]).state
+    return
+  let key = g.part[0].id & g.part[1].id
+  if key in memo.verdicts:
+    inc memo.hits
+    result.note.state = memo.verdicts[key]
+  else:
+    result.note.state = verdict(g.part[0], g.part[1]).state
+    memo.verdicts[key] = result.note.state
 
 proc byTsNid(x, y: VoiceNote): int =
   if x.ts != y.ts: cmp(x.ts, y.ts) else: cmp(x.nid, y.nid)
 
-proc reduceVoice*(events: seq[Event]): seq[VoiceNote] =
+proc reduceVoice*(events: seq[Event], memo: VoiceMemo = nil): seq[VoiceNote] =
   ## The room's voice notes, each complete, arriving or broken, ordered by (ts, nid). A pure
-  ## function of the event set (invariant 4). Pass the room's authentic view (`roomEvents`).
+  ## function of the event set (invariant 4), with a memo or without. Pass the room's
+  ## authentic view (`roomEvents`).
   for _, g in gather(events):
-    let j = judge(g)
+    let j = judged(g, memo)
     if j.kept: result.add j.note
   result.sort(byTsNid)
 
@@ -223,21 +286,21 @@ proc voiceRecordOf*(events: seq[Event], nid: string): tuple[ok: bool, record: se
   ## The clip record of the complete note `nid`, exactly the bytes its digest names, as the
   ## fold checked them; not ok for a note that is not complete, or not in the room.
   for _, g in gather(events):
-    if g.nid != nid: continue
-    let j = judge(g)
-    if j.kept and j.note.state == vsComplete: return (true, j.record)
+    if g.nid != nid or not header(g).kept or not (g.have[0] and g.have[1]): continue
+    let v = verdict(g.part[0], g.part[1])
+    if v.state == vsComplete: return (true, v.record)
   (false, @[])
 
 # ── thread rows (§7) ─────────────────────────────────────────────────────────────
 
-proc threadRows*(events: seq[Event]): seq[ThreadRow] =
+proc threadRows*(events: seq[Event], memo: VoiceMemo = nil): seq[ThreadRow] =
   ## The room's thread: every message (`reduceMessages`, unchanged) and one row per note
   ## (`reduceVoice`), ordered by (ts, id); a message sorts before a note of the same (ts,
   ## id). A note's row names the fold's author, has an empty body, and carries the note in
   ## `note` alone, which no message can set. Pass the room's authentic view.
   for m in reduceMessages(events):
     result.add ThreadRow(id: m.id, author: m.author, ts: m.ts, body: m.body)
-  for n in reduceVoice(events):
+  for n in reduceVoice(events, memo):
     result.add ThreadRow(id: n.nid, author: n.author, ts: n.ts, body: "", isVoice: true, note: n)
   result.sort(proc(x, y: ThreadRow): int =
     if x.ts != y.ts: cmp(x.ts, y.ts)
@@ -246,9 +309,16 @@ proc threadRows*(events: seq[Event]): seq[ThreadRow] =
 
 proc threadLastTs*(events: seq[Event]): int64 =
   ## The newest row's ts, a note's included (0 when the thread is empty): what moves a room
-  ## up the list (coordinate_conversations' lastTs).
-  let rows = threadRows(events)
-  if rows.len > 0: rows[^1].ts else: 0'i64
+  ## up the list (coordinate_conversations' lastTs). A note's row is there whatever its
+  ## state, so this needs the header pass alone and judges no clip.
+  var seen = false
+  for m in reduceMessages(events):
+    if not seen or m.ts > result: result = m.ts
+    seen = true
+  for _, g in gather(events):
+    let h = header(g)
+    if h.kept and (not seen or h.note.ts > result): (result = h.note.ts; seen = true)
+  if not seen: result = 0
 
 proc voiceJson*(n: VoiceNote): JsonNode =
   ## A voice row's `voice` field: the note's metadata, never its audio (§7).
