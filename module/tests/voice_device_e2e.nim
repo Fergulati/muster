@@ -23,7 +23,9 @@
 ## a short buffer `done` only after the device's own tail of silence (audio_io_null_test §3).
 ##
 ## A device call that never returns (a permission prompt nobody answers can hold one) is
-## caught by a watchdog thread, which prints what it was waiting on and exits 1.
+## caught by a watchdog thread, which prints what it was waiting on and exits 1: that ends the
+## whole test, so the legs after it do not run (run them alone). A leg that fails a check is
+## recorded, and the next leg still runs.
 
 import std/[atomics, math, monotimes, os, strutils, times]
 import ../src/audio/[audio_io, miniaudio, voice_clip, voice_codec]
@@ -41,22 +43,31 @@ const
 
 when defined(macosx):
   const
-    WhoAsks = "the app macOS holds responsible for this process (run from the Claude " &
-              "desktop app, that is Claude Code, com.anthropic.claude-code, not Claude " &
-              "itself; from a terminal, the terminal app)"
-    WhoWasAsked = " To see which app macOS asked: log show --last 5m --predicate " &
-                  "'subsystem == \"com.apple.TCC\"' | grep AUTHREQ_PROMPTING"
+    WhoAsks = "the app macOS holds responsible for this process (the terminal app, or the " &
+              "app that started the shell this runs in)"
+    # an hour, not minutes: a prompt an earlier run raised and nobody answered is still the
+    # one waiting, and a later run's request logs a preflight, not a new prompt
+    WhoWasAsked = " To see which app macOS asked: log show --last 1h --predicate " &
+                  "'subsystem == \"com.apple.TCC\"' | grep -E 'AUTHREQ_(PROMPTING|ATTRIBUTION)'"
     Grant = "grant it in System Settings > Privacy & Security > Microphone and run again"
-    MicHint = "On macOS that is what capture gives when " & WhoAsks & " has been " &
-              "denied the microphone (a prompt nobody answers holds the start instead, and " &
-              "the watchdog says so): " & Grant & ". Otherwise there is no input device, or " &
-              "it is muted (System Settings > Sound > Input)."
+    QuietInput = "the default input hears nothing: it is muted or its input volume is zero, " &
+                 "or it is a virtual or aggregate device (BlackHole, a Zoom or Teams device) " &
+                 "with nothing playing into it (System Settings > Sound > Input)"
+    ZeroHint = "On macOS that is what capture gives when " & WhoAsks & " has been " &
+               "denied the microphone (a prompt nobody answers holds the start instead, and " &
+               "the watchdog says so): " & Grant & ". Otherwise " & QuietInput & "."
+    NoFramesHint = "The device started but delivered nothing: on macOS, most likely a default " &
+                   "input whose clock does not run, a virtual or aggregate device (BlackHole, " &
+                   "a Zoom or Teams device) with nothing driving it; pick another input in " &
+                   "System Settings > Sound > Input."
     NoDeviceHint = "There is no input device, or macOS refused to open one: the microphone " &
                    "permission belongs to " & WhoAsks & "; " & Grant & "."
 else:
   const
-    MicHint = "There is no input device, or it is muted, or the default source hears " &
-              "nothing (check pactl info, or arecord -l)."
+    ZeroHint = "The input is muted, or its volume is zero, or the default source hears " &
+               "nothing (check pactl info, or arecord -l)."
+    NoFramesHint = "The audio server opened a source that delivers nothing (check pactl " &
+                   "info, or arecord -l)."
     NoDeviceHint = "There is no input device, or the audio server (PulseAudio, PipeWire or " &
                    "ALSA) refused to open one, or this process could not load its library."
 
@@ -78,6 +89,10 @@ for w in gate.toLowerAscii.split({',', ' '}):
     echo "FAIL voice_device_e2e: MUSTER_VOICE_REAL=", gate, ": say 1 (both legs), mic, " &
          "speaker, or mic,speaker"
     quit 1
+if not (wantMic or wantSpeaker):     # separators alone: no leg named, so nothing would run
+  echo "FAIL voice_device_e2e: MUSTER_VOICE_REAL=", gate, " names no leg: say 1 (both legs), " &
+       "mic, speaker, or mic,speaker"
+  quit 1
 let audible = getEnv("MUSTER_VOICE_REAL_AUDIBLE") == "1"
 
 # ── A watchdog for device calls that do not return ─────────────────────────────────────────
@@ -174,7 +189,7 @@ proc micLeg() =
       if stopWhenCapped and buf.capped: break
       sleep(5)
   let firstMs = waitUntil(proc (): bool = buf.written > 0, 5_000)
-  check buf.written > 0, "mic: no frames within 5 s of the start. " & MicHint
+  check buf.written > 0, "mic: no frames within 5 s of the start. " & NoFramesHint
   follow(200)
   let w1 = buf.written
   let t1 = getMonoTime()
@@ -234,7 +249,7 @@ proc micLeg() =
     " B), decoded back to ", dec.pcm.len, " samples"
   # Last: a capture of nothing but zeros is not a recording.
   check peak > 0, "mic: every one of the " & $pcm.len & " samples is zero (peak 0): the " &
-    "microphone delivered silence. " & MicHint
+    "microphone delivered silence. " & ZeroHint
 
 # ── 2. The speaker ─────────────────────────────────────────────────────────────────────────
 
@@ -292,7 +307,10 @@ proc speakerLeg() =
     firstMs, " ms; ", r2 - r1, " frames in ", us div 1_000, " ms = ", perMs(rate), " frames/ms"
   # A short buffer: `done` only once the device's own tail of silence followed its last
   # sample (the tail read back at start: miniaudio's intermediary buffer and the device's
-  # periods). Always silence.
+  # periods, the same on the null device, not the output's own latency, which miniaudio does
+  # not report here). audio_io sets `done` only past that tail, so the check below guards
+  # that rule against a regression; it measures nothing of when the sound is heard. Always
+  # silence.
   check short.loadPlayback(newSeq[int16](short.cap)) == 4_800, "speaker: short load"
   arm(3, 20_000)
   let again = io.startPlayback(short)

@@ -813,10 +813,11 @@ Basecamp adds `com.apple.security.device.audio-input` to `logos_host`'s entitlem
 app's), adds `NSMicrophoneUsageDescription` to `Info.plist`, and re-signs.
 
 **Outside Basecamp.** An unbundled, nix-built binary is charged to the app macOS holds
-responsible for it: the terminal app, or, run from the Claude desktop app, Claude Code
-(`com.anthropic.claude-code`), not Claude itself. macOS asks the person to grant that app the
-microphone, and Core Audio holds the device's start until they answer (both seen in S11, §17).
-S11's opt-in microphone test runs only with that consent.
+responsible for it: the terminal app, or the app that started the shell (S11's run, §17,
+names the one it was there). macOS asks the person to grant that app the microphone, and
+Core Audio holds the device's start while it asks: in S11 the start had not returned after
+20 s, with the prompt unanswered. That the start returns once the person answers is inferred,
+since nobody answered. S11's opt-in microphone test runs only with that consent.
 
 ## 12. Linux
 
@@ -1166,13 +1167,18 @@ Each slice's test is written and run red before its code (worker.md), and every 
     96,000 frames with `capped` set. Then the capture goes through the module's libopus path
     at §3.1's settings and back, its length kept. It prints only the capture's peak and RMS,
     and writes nothing. An all-zero capture fails, naming the likely cause: the microphone
-    permission, or no input device.
+    permission, or a default input that hears nothing (muted, or a virtual device with
+    nothing playing into it). `MUSTER_VOICE_REAL` must name a leg: any other value fails,
+    separators alone (`,`) included, which before the review passed with nothing run.
   - **The speaker leg** (`speaker`, or `1`) plays digital silence by default, so nothing can
     be heard; only `MUSTER_VOICE_REAL_AUDIBLE=1` plays 0.5 s of 440 Hz at about -30 dBFS. It
     must run at 48,000 frames a second (±5%), and a short buffer must be `done` only after the
-    device's own tail of silence, as on the null device.
+    device's own tail of silence, as on the null device. `audio_io` sets `done` only past that
+    tail, so this guards the rule rather than measuring when the sound is heard.
   - **A watchdog thread** ends the test, with a message, when a device call has not returned
-    after 20 s.
+    after 20 s. It ends the whole test, so a leg after the one that stalled does not run (the
+    speaker leg below was run alone for that reason); a leg that fails a check is recorded,
+    and the next leg still runs.
 
   **Run on this Mac, 2026-10-22** (macOS 26.5.2, Apple Silicon, outside Basecamp, run from Claude
   Code in the Claude desktop app, with the person's consent; `MUSTER_VOICE_REAL=1`, then
@@ -1180,8 +1186,9 @@ Each slice's test is written and run red before its code (worker.md), and every 
   - **The speaker leg passed** on Core Audio, playing silence. It read back as 48 kHz mono s16,
     took 48,480 frames in 1,010 ms (48.00 a millisecond), and a 100 ms buffer was `done` after
     130 ms, once 1,920 frames of silence had followed it. That is the tail the device read
-    back (40 ms), the same as the null device's. A second run, on the committed text, gave the
-    same numbers but 127 ms.
+    back (40 ms), the same as the null device's: miniaudio's buffer and periods, not Core
+    Audio's output latency, which is not measured. A second run, on the committed text, gave
+    the same numbers but 127 ms.
   - **The microphone leg got no frame.** macOS asked for the microphone and nobody answered:
     it was the middle of the night. Core Audio held the device's start while it asked, so
     `startCapture` had not returned after 20 s, and the watchdog ended the test. So there is
@@ -1192,7 +1199,9 @@ Each slice's test is written and run red before its code (worker.md), and every 
     preflight for the speaker run still read the permission as not decided (`authValue=1`).
     The microphone leg was not run again. After that run its messages were reworded to name
     Claude Code, and the cap's pace is now timed from the start's return; neither touches the
-    step where it stopped.
+    step where it stopped. Since the review the messages name the responsible app in general
+    terms, not one tool; a review re-run while that prompt still waited stalled the same way,
+    and tccd logged only a preflight for it, so the watchdog's log hint now reads the last hour.
   - **Before it, the same test on the null device** (a scratch mutant, not committed: the
     system backend swapped for null): with the backend checks in, both legs FAIL "backend
     Null not in @["Core Audio"]"; with them out, the microphone leg FAILs on its all-zero capture with

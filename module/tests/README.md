@@ -173,8 +173,13 @@ MUSTER_VOICE_REAL=speaker module/tests/run-suite.sh e2e voice_device_e2e   # the
   and back, and its length must be kept. Audio never leaves the process: nothing is written
   to a file, and the only numbers printed from it are its peak and RMS. A capture of nothing
   but zeros fails, with a message naming the likely cause: on macOS, the microphone
-  permission of the app macOS holds responsible (run from the Claude desktop app, that is
-  Claude Code, `com.anthropic.claude-code`, not Claude itself), or no input device.
+  permission of the app macOS holds responsible (the terminal app, or the app that started
+  the shell), or a default input that hears nothing (muted, or a virtual or aggregate device
+  such as BlackHole with nothing playing into it). A start that delivers no frame within 5 s
+  fails apart from that, naming an input whose clock does not run.
+- `MUSTER_VOICE_REAL` must name a leg: `1`, `all`, `mic`, `speaker`, or a comma list of
+  those. Any other value fails, and so does one of separators alone (`,`), which used to pass
+  with nothing run.
 - **The speaker leg** (`speaker`, or `1`) plays through the real output device: 48,000
   frames a second, ±5%, and `done` only after the device's own tail of silence, as
   `audio_io_null_test` §3 does. By default it plays digital silence (zeros), so nothing can be
@@ -182,8 +187,15 @@ MUSTER_VOICE_REAL=speaker module/tests/run-suite.sh e2e voice_device_e2e   # the
   about -30 dBFS.
 - A device call that never returns is caught by a watchdog thread, which prints what it
   waited on and exits 1. A microphone permission prompt nobody answers does this on macOS.
+  That ends the whole test, so a leg after the one that stalled does not run: run it alone
+  (`MUSTER_VOICE_REAL=speaker`). A leg that fails a check is recorded, and the next leg
+  still runs.
+- The speaker leg's "`done` only after the device's own tail" holds by `audio_io`'s rule,
+  which sets `done` only past that tail: it guards the rule, and measures nothing of when the
+  sound is heard. The tail it reads back is miniaudio's buffer and periods (1,920 frames on
+  Core Audio, as on the null device), not the output's own latency.
 
-What it found on this Mac (2026-10-22): see `docs/design/voice-notes.md` §17 S11. The traps
+What its first run found (2026-10-22, on a Mac): see `docs/design/voice-notes.md` §17 S11. The traps
 the audio tests guard are in
 [`docs/labbook/voice-notes-audio-stack.md`](../../docs/labbook/voice-notes-audio-stack.md).
 

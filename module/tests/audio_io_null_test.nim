@@ -103,13 +103,14 @@ block:
   let doneMs = waitUntil(proc (): bool = short.done, 1_000)
   doAssert short.done, "not done within " & $doneMs & " ms"
   doAssert short.readIndex == 4_800
-  doAssert short.silenceAfter >= short.tail, $short.silenceAfter & " frames of silence"
+  let silence = short.silenceAfter     # read before the free below: nothing reads a freed buffer
+  doAssert silence >= short.tail, $silence & " frames of silence"
   doAssert io.stopPlayback() == "" and io.stopPlayback() == ""
   doAssert io.close() == ""
   freeAudioBuffer(buf)
   freeAudioBuffer(short)
   echo "   ", r2 - r1, " frames in ", us div 1_000, " ms (", rate, "/s); 100 ms done after ",
-    doneMs, " ms, ", short.silenceAfter, " frames of silence after it"
+    doneMs, " ms, ", silence, " frames of silence after it"
 echo "3. null playback: 48 kHz mono s16 read back, 48k frames/s ±5%; done after the tail OK"
 
 # 4. One stream at a time: a second start while one runs is `busy`, capture or playback, and

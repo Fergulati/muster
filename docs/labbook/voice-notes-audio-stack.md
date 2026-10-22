@@ -242,8 +242,10 @@ after 20 s, so no frame arrived and nothing was measured. Its speaker leg, run a
   night. No `AUTHREQ_RESULT` followed.
 - coreaudiod made that request for the test's process, and the device's start waited on it.
 
-So an undecided permission gives neither zeros nor a refusal: it gives a start that waits for
-the person. The all-zero check never runs.
+So an undecided permission gave neither zeros nor a refusal: it gave a start that had not
+returned 20 s later, while the prompt stood unanswered. That the start returns once the
+person answers is inferred: nobody answered, so it was not seen. The all-zero check never
+ran.
 
 **What it means for the module (inferred).** `MiniaudioIo` starts a device on the module
 thread, with no timeout. Under an app that has a usage string and an undecided permission, a
@@ -253,8 +255,11 @@ at all is design §11's check, not this one.
 
 **The test's answer.** A watchdog thread in `voice_device_e2e` arms before each device call
 and, past its limit, prints what it waited on (for the microphone: the prompt, which app it
-was for, and how to see that in tccd's log) and exits 1. A test that hangs until run-suite's
-900 s timeout says nothing.
+was for, and how to see that in tccd's log) and exits 1, which ends the whole test, the legs
+after it unrun. A test that hangs until run-suite's 900 s timeout says nothing. The log it
+points to covers the last hour, not minutes: on a second run while the first prompt still
+waits, tccd logs only a preflight for the new request (seen on a re-run, 2026-10-22), so the
+prompt to look for is the earlier one.
 
 ## Not found out yet
 
