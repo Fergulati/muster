@@ -43,8 +43,9 @@ import "../../src/audio/opus"          # the libopus this program links: what vo
 # ── the lp_* inter-module ABI (logos_sdk/ffi.nim) ───────────────────────────────
 # The shipped plugin statically links its own logos-protocol, which defines these; this
 # harness is a host with NO protocol stack: every client/subscription is null, every
-# call fails. None of the calls this probe makes (health, propose, status) should
-# reach another module, so each stub counts its calls and the harness reports the
+# call fails. None of the calls this probe makes (health, propose, status, and the voice
+# methods, coordinate_messages and coordinate_proof with no room joined) should reach
+# another module, so each stub counts its calls and the harness reports the
 # count; a non-zero count is visible in the probe's output rather than hidden behind a
 # silent success.
 var lpCalls = 0
@@ -154,6 +155,14 @@ proc emit(call, expect: string, cr: ClientReturn) =
   echo $(%*{"call": call, "expect": expect, "client_type": $cr.kind,
             "client_value": cr.value, "client_return_typed": typed})
 
+proc emitExact(call, want: string, cr: ClientReturn) =
+  ## One observation of a call whose reply in this state is known to the byte (the voice
+  ## methods with no room joined): typed iff the client observed exactly `want` as a STRING,
+  ## and the method table lists `call` returning QString.
+  let typed = cr.kind == ctString and cr.value == want and listedAsQString(call)
+  echo $(%*{"call": call, "expect": "exact", "want": want, "client_type": $cr.kind,
+            "client_value": cr.value, "client_return_typed": typed})
+
 proc quoteArg(s: string): string = $(%*[s])   ## the JSON args array ["<s>"]
 
 proc harnessMain() =
@@ -179,6 +188,23 @@ proc harnessMain() =
     emit("status", "state_token", callClient("status", quoteArg(pr.value)))
   # voice_status() (voice notes, docs/design/voice-notes.md §8): the module links libopus and
   # miniaudio, and says which libopus, with no device opened.
+  emit("voice_status", "voice_status", callClient("voice_status", "[]"))
+  # The six other voice methods through the generated dispatch, with no room joined (§8):
+  # each reply is the typed string that state gives, and none opens a device, so voice_status
+  # still reads both devices "unknown" after them. coordinate_messages, now voice.threadRows'
+  # rows, and coordinate_proof, which refuses a room holding a voice note, answer as before.
+  let noRoom = [
+    ("voice_record_start", "[]", """{"error":"not-joined"}"""),
+    ("voice_record_stop", "[]", """{"error":"not-recording"}"""),
+    ("voice_draft_send", "[]", """{"error":"no-draft"}"""),
+    ("voice_draft_discard", "[]", "ok"),
+    ("voice_play", quoteArg("draft"), """{"error":"no-draft"}"""),
+    ("voice_play", quoteArg("0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"), """{"error":"not-joined"}"""),
+    ("voice_play_stop", "[]", "ok"),
+    ("coordinate_messages", "[]", "[]"),
+    ("coordinate_proof", "[]", """{"error":"not-joined"}""")]
+  for (meth, args, want) in noRoom:
+    emitExact(meth, want, callClient(meth, args))
   emit("voice_status", "voice_status", callClient("voice_status", "[]"))
   # Not an observation (no client_return_typed key): the probe ignores it; a reader of
   # the log sees whether any of the above reached the lp_* stubs.

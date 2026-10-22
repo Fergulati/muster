@@ -87,4 +87,5 @@ Rules:
   `probes/probe_return_marshalling_host.nim` (exo-526) builds the whole module into a host,
   so it links libopus (`opusTokens`, `MUSTER_OPUS_LIB`) and compiles miniaudio from the
   closure's checkout; its `voice_status` call must name the libopus linked, with both
-  devices still "unknown".
+  devices still "unknown", and the six other voice methods, called with no room joined,
+  must each reply exactly what that state gives, opening no device.

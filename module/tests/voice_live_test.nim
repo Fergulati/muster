@@ -34,21 +34,50 @@
 ##      the context is released when the stream ends
 ##  14. close stops what runs and releases the device; it is idempotent
 ##  15. a Send that fails between its two parts (the delivery raising on the second) keeps the
-##      draft, and its retry, at a later clock, sends the same note: the first part again on
-##      the held path and the second, so the other member holds one complete note, not a
-##      stranded part beside a second note
+##      draft, and its retry, at a later clock, sends the same note. The log took both parts
+##      before the delivery raised, so the sender's own fold already calls the note complete
+##      while the other member holds part 0 alone; the retry re-sends both parts on the held
+##      path, and the other member then holds one complete note, not a stranded part beside a
+##      second note. Only a transport that raises shows the failure: DeliveryTransport's send
+##      is fire-and-forget (voice-notes.md §8, §15)
+##  16. a recording of no samples, or of under 500 ms of zeros, is `too-short`, never `silent`,
+##      and raises no microphone note: `silent` is a draft long enough to send whose samples
+##      are all zero
+##  17. every call decides on the device side's state now, as Stop does: a playback heard to
+##      its end with no status read since is not `busy` to Play or Start, and Send finds the
+##      draft the cap made
+##  18. a draft belongs to the room it was recorded in: Send through another room's session is
+##      `room-changed`, publishes nothing to either room and keeps the draft, which then sends
+##      in its own room
+##  19. Send and Discard while the draft plays stop that playback and release the device
+##  20. a sink that refuses a write (FileAudioIo past a file-size limit) ends the playback:
+##      `ready.playback` is `sink-write` and the stream is released
+##  21. the recorder owns its AudioIo: a start the io refuses, and close, release whatever it
+##      holds open, miniaudio's context included
+##  22. coordinate_messages' rows (`messagesJson`): a message's row is exactly {id, author, ts,
+##      body, alias, self}, a note's the same plus `voice`, with an empty body
+##  23. coordinate_proof (`roomProof`) refuses `voice-notes-present` for a room whose raw log
+##      holds any `voice/` entry, an unsigned or malformed one too, and exports no event; a
+##      room with none exports the proof as before, and it verifies
 ## Needs libopus, libsecp256k1, libsodium and the miniaudio pin (run-suite.sh links them all).
 
-import std/[json, math, os, strutils, sequtils, tables]
+import std/[algorithm, json, math, os, strutils, sequtils, tables]
+from std/posix import RLimit, getrlimit, setrlimit, signal, SIGXFSZ, SIG_IGN, SIG_DFL
 import ../src/transport/transport
 import ../src/crypto/epoch_crypto
 import ../src/crypto/keystore
 import ../src/crypto/curve25519
 import ../src/audio/[audio_io, voice_clip, voice_codec, miniaudio]
+import ../src/log/[log, proof]
 import ../src/coordination/session
 import ../src/coordination/authorship
+import ../src/coordination/intent_events
+import ../src/coordination/contacts
 import ../src/coordination/voice
 import ../src/coordination/voice_live
+
+var RLIMIT_FSIZE {.importc: "RLIMIT_FSIZE", header: "<sys/resource.h>".}: cint
+  ## the largest file this process may write (§20); posix.nim declares no constant for it
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hex(b: openArray[byte]): string =
@@ -483,13 +512,185 @@ block:
   let first = reduceVoice(b2.roomEvents())
   doAssert first.len == 1 and first[0].state == vsArriving, "Bob holds part 0 alone: " & $first
   doAssert a.status()["recording"]["state"].getStr() == "draft", "the draft is kept"
+  # session.publish logs a part before the transport sees it, so Alice's log took part 1 too:
+  # her own fold calls the note complete while the room holds half of it, and her retry
+  # finds both parts held and re-sends both on the held path (voice-notes.md §4, §8)
+  let mine = reduceVoice(a2.roomEvents())
+  doAssert mine.len == 1 and mine[0].nid == first[0].nid and mine[0].state == vsComplete, $mine
+  doAssert mine[0].parts.allIt(a2.log.find(it).found), "both parts are in the sender's log"
   let sent = a.draftSend(a2, aliceKs, nextTs()).ck
   doAssert sent{"note"}.getStr() == first[0].nid, "the retry sends the same note: " & $sent
   let after = reduceVoice(b2.roomEvents())
   doAssert after.len == 1 and after[0].state == vsComplete and after[0].nid == first[0].nid, $after
   doAssert a.status()["recording"]["state"].getStr() == "idle"
-  echo "15. a Send refused between its parts keeps the draft; the retry sends the same note, ",
-       "complete, nothing stranded OK"
+  echo "15. a Send refused between its parts keeps the draft; the sender's fold already calls it ",
+       "complete; the retry re-sends both parts held, the same note, complete, nothing stranded OK"
+
+# ── 16. no audio at all is too short, not silent ─────────────────────────────────────
+block:
+  let vc = VirtualClock()
+  let a = newVoiceRecorder(newSyntheticAudioIo(sine(1000.0, Second), vc.clock))
+  doAssert a.recordStart(aliceS).ck.ok
+  let stop = a.recordStop().ck                    # at once: not one sample captured
+  doAssert stop["draft"]["durationMs"].getInt() == 0 and not stop["draft"]["silent"].getBool(), $stop
+  let r = a.draftSend(aliceS, aliceKs, nextTs()).ck
+  doAssert r.err == "too-short" and r{"detail"} == nil, "nothing recorded is too short, not silent: " & $r
+  doAssert a.status()["ready"]["note"].getStr() == "", "and says nothing about the microphone"
+  doAssert a.draftDiscard() == "ok"
+  let z = newVoiceRecorder(newSyntheticAudioIo(newSeq[int16](Second), vc.clock))
+  let zs = z.recordFor(vc, aliceS, 300)            # 300 ms of zeros
+  doAssert zs["draft"]["durationMs"].getInt() == 300 and zs["draft"]["silent"].getBool(), $zs
+  doAssert z.draftSend(aliceS, aliceKs, nextTs()).ck.err == "too-short", "under 500 ms is too short first"
+  doAssert z.status()["ready"]["note"].getStr() == ""
+  doAssert z.draftDiscard() == "ok"
+  echo "16. a recording of nothing, or 300 ms of zeros, is too-short, with no microphone note OK"
+
+# ── 17. each call reads the device side first ────────────────────────────────────────
+block:
+  let vc = VirtualClock()
+  let io = newSyntheticAudioIo(sine(1000.0, 70 * Second), vc.clock)
+  let a = newVoiceRecorder(io)
+  doAssert a.play(aliceS, nid1).ck.ok
+  vc.advance(3_100)                               # nid1 (3 s) heard to its end; no status read
+  doAssert a.play(aliceS, nid1).ck.ok, "a playback heard to its end is not busy to Play"
+  vc.advance(3_100)
+  doAssert a.recordStart(aliceS).ck.ok, "nor to Start"
+  doAssert io.stream == asCapture
+  vc.advance(61_000)                              # the cap passes; no status read since
+  let sent = a.draftSend(aliceS, aliceKs, nextTs()).ck
+  doAssert sent{"note"}.getStr().len == 32, "Send finds the draft the cap made: " & $sent
+  doAssert noteRow(threadRows(bobS.roomEvents()), sent["note"].getStr()).note.durMs == 60_000
+  doAssert io.stream == asIdle and a.status()["recording"]["state"].getStr() == "idle"
+  echo "17. Play and Start after a playback ended unread, and Send after the cap, each see it OK"
+
+# ── 18. a draft belongs to its room ─────────────────────────────────────────────────
+block:
+  const topic3 = "/muster/1/room-voice-elsewhere/proto"
+  let elsewhere = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs, topic3, @[]), topic3)
+  let w3 = tap(net, topic3)
+  let vc = VirtualClock()
+  let a = newVoiceRecorder(newSyntheticAudioIo(sine(1000.0, 2 * Second), vc.clock))
+  discard a.recordFor(vc, aliceS, 1_000)          # recorded in aliceS's room
+  let frames = wire.frames.len
+  let digest = aliceS.digest()
+  let r = a.draftSend(elsewhere, aliceKs, nextTs()).ck
+  doAssert r.err == "room-changed", "Send in another room: " & $r
+  doAssert w3.frames.len == 0 and elsewhere.log.allEvents().len == 0, "nothing reached the other room"
+  doAssert wire.frames.len == frames and aliceS.digest() == digest, "nor its own"
+  doAssert a.status()["recording"]["state"].getStr() == "draft", "the draft is kept"
+  let sent = a.draftSend(aliceS, aliceKs, nextTs()).ck
+  doAssert sent{"note"}.getStr().len == 32 and wire.frames.len == frames + 2, "it sends in its own room: " & $sent
+  echo "18. a draft sent through another room's session is room-changed, nothing published, kept; ",
+       "it sends in its own room OK"
+
+# ── 19. Send and Discard stop the draft's playback ───────────────────────────────────
+block:
+  let vc = VirtualClock()
+  let io = newSyntheticAudioIo(sine(1000.0, 5 * Second), vc.clock)
+  let a = newVoiceRecorder(io)
+  discard a.recordFor(vc, aliceS, 1_000)
+  doAssert a.play(aliceS, "draft").ck.ok
+  vc.advance(300)
+  doAssert a.draftSend(aliceS, aliceKs, nextTs()).ck{"note"}.getStr().len == 32
+  doAssert io.stream == asIdle, "Send released the draft's playback"
+  doAssert a.status()["playing"].kind == JNull
+  discard a.recordFor(vc, aliceS, 1_000)
+  doAssert a.play(aliceS, "draft").ck.ok
+  vc.advance(300)
+  doAssert a.draftDiscard() == "ok"
+  doAssert io.stream == asIdle, "Discard released it"
+  doAssert a.status()["playing"].kind == JNull
+  echo "19. Send and Discard while the draft plays stop it and release the device OK"
+
+# ── 20. a sink that refuses a write ─────────────────────────────────────────────────
+block:
+  let dir = getTempDir() / ("muster_voice_live_sink_" & $getCurrentProcessId())
+  createDir(dir)
+  defer: removeDir(dir)
+  let vc = VirtualClock()
+  let io = newFileAudioIo("", dir / "sink.pcm", vc.clock)
+  let b = newVoiceRecorder(io)
+  doAssert b.play(bobS, nid1).ck.ok
+  # The process may write files of 1 KB at most, so the sink's next write fails (EFBIG; the
+  # signal it would raise is ignored for the while). Nothing else writes in this window.
+  var was, lim: RLimit
+  doAssert getrlimit(RLIMIT_FSIZE, was) == 0
+  lim = was
+  lim.rlim_cur = 1024
+  signal(SIGXFSZ, SIG_IGN)
+  doAssert setrlimit(RLIMIT_FSIZE, lim) == 0
+  vc.advance(1_000)                               # 96,000 B due to the sink
+  let st = b.status()
+  doAssert setrlimit(RLIMIT_FSIZE, was) == 0
+  signal(SIGXFSZ, SIG_DFL)
+  doAssert st["ready"]["playback"].getStr() == "sink-write", $st
+  doAssert st["playing"].kind == JNull and io.stream == asIdle, "the refused sink's stream is released: " & $st
+  echo "20. a sink write refused past a file-size limit ends the playback: sink-write, released OK"
+
+# ── 21. the recorder owns its AudioIo ────────────────────────────────────────────────
+block:
+  # A stream opened on the io behind the recorder's back stands in for a start that failed
+  # once miniaudio's context was made: whatever the io holds, a refused start and close end.
+  let io = newMiniaudioIo(abNull)
+  let a = newVoiceRecorder(io)
+  let held = newAudioBuffer(Second)
+  doAssert io.startPlayback(held) == "" and io.backendName() == "Null"
+  let r = a.recordStart(aliceS).ck
+  doAssert r.err == "busy" and a.status()["ready"]["capture"].getStr() == "busy", $r
+  doAssert io.backendName() == "" and io.stream == asIdle, "a refused start released the context"
+  doAssert io.startPlayback(held) == "" and io.backendName() == "Null"
+  doAssert a.close() == "ok"
+  doAssert io.backendName() == "" and io.stream == asIdle, "close released the device and the context"
+  freeAudioBuffer(held)
+  echo "21. a refused start and close release what the io holds, miniaudio's context included OK"
+
+# ── 22. the rows coordinate_messages serves ──────────────────────────────────────────
+block:
+  let bob = hex(bobKs.encIdentity().toBytes())
+  let tsA = nextTs()
+  let (mA, evA) = newMessageEvent(alice, tsA, "a line of text", 1)
+  aliceS.publishAuthored(aliceKs, evA)
+  let tsB = nextTs()
+  let (mB, evB) = newMessageEvent(bob, tsB, "a reply", 1)
+  bobS.publishAuthored(bobKs, evB)
+  let b = newVoiceRecorder(newSyntheticAudioIo(@[], VirtualClock().clock))
+  let rows = b.messagesJson(bobS, proc (who: string): string =
+    if normId(who) == alice: "Alice" elif normId(who) == bob: "Bob" else: "")
+  var byId: Table[string, JsonNode]
+  for r in rows: byId[r["id"].getStr()] = r
+  doAssert byId[mA] == %*{"id": mA, "author": alice, "ts": tsA, "body": "a line of text",
+                          "alias": "Alice", "self": false}, $byId[mA]
+  doAssert byId[mB] == %*{"id": mB, "author": bob, "ts": tsB, "body": "a reply",
+                          "alias": "Bob", "self": true}, $byId[mB]
+  let n = byId[nid1]
+  doAssert toSeq(n.keys).sorted() == @["alias", "author", "body", "id", "self", "ts", "voice"], $n
+  doAssert n["author"].getStr() == alice and n["body"].getStr() == "" and n["alias"].getStr() == "Alice" and
+           not n["self"].getBool(), $n
+  doAssert n["voice"] == %*{"v": 1, "note": nid1, "durationMs": 3_000, "state": "complete"}, $n
+  var last = 0'i64
+  for r in rows:
+    doAssert r["ts"].getInt() >= last, "oldest first"
+    last = r["ts"].getInt()
+  echo "22. coordinate_messages' rows: {id, author, ts, body, alias, self}, a note's with voice OK"
+
+# ── 23. no proof of a room that holds a voice note ───────────────────────────────────
+block:
+  let refused = roomProof(aliceS).ck
+  doAssert refused{"error"}.getStr() == "voice-notes-present" and refused{"events"} == nil,
+           "no proof of a room holding a voice note; got the keys " & $toSeq(refused.keys)
+  const topic4 = "/muster/1/room-voice-proof/proto"
+  let s4 = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs, topic4, @[]), topic4)
+  let (_, ev) = newMessageEvent(alice, nextTs(), "no voice here", 2)
+  s4.publishAuthored(aliceKs, ev)
+  let p = roomProof(s4)
+  doAssert p{"error"} == nil and p["events"].len == 1, $p
+  let (okP, why) = verifyProof(proofFromJson(p))
+  doAssert okP, why
+  s4.publish(Event(key: "voice/not-a-note", value: "{}"))   # unsigned, no note's shape
+  doAssert reduceVoice(s4.roomEvents()).len == 0, "no fold stands it"
+  doAssert roomProof(s4){"error"}.getStr() == "voice-notes-present", "any voice/ entry in the raw log refuses"
+  echo "23. coordinate_proof refuses voice-notes-present for a room with any voice/ entry; ",
+       "a room with none exports a proof that verifies OK"
 
 # ── 8. no JSON carries audio or a float ─────────────────────────────────────────────
 block:

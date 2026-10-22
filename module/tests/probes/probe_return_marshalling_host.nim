@@ -19,10 +19,14 @@
 ##
 ## Emits ONE trace (the grader's envelope, oracle_emit) whose every state is one observed
 ## call's {"client_return_typed": ...}. `always` requires every call — health, propose
-## across a valid/edge family, status of each resulting id, and voice_status — to be
-## observed as its typed string. voice_status (voice notes, docs/design/voice-notes.md §8)
-## must also be listed in the method table, and name the libopus the module links, with no
-## audio device opened: so the module's libopus and miniaudio are linked into this host.
+## across a valid/edge family, status of each resulting id, voice_status, and the six other
+## voice methods with coordinate_messages and coordinate_proof — to be observed as its typed
+## string. voice_status (voice notes, docs/design/voice-notes.md §8) must also be listed in
+## the method table, and name the libopus the module links, with no audio device opened: so
+## the module's libopus and miniaudio are linked into this host. With no room joined, each
+## of the other eight replies exactly as that state gives (not-joined, not-recording,
+## no-draft, "ok", "[]"), listed as QString, and voice_status after them still reads both
+## devices "unknown".
 
 import std/[json, os, osproc, strutils]
 import ./oracle_emit

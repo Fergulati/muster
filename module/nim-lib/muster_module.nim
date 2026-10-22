@@ -3279,13 +3279,13 @@ proc musterCoordinateProvenance(): string =
 
 proc musterCoordinateProof(): string =
   ## An exportable, self-verifying proof of the room's log (M4). Epoch-scoped: the
-  ## range is the founding epoch to the current one; only holders can read it.
+  ## range is the founding epoch to the current one; only holders can read it. A proof
+  ## carries every raw value whole, so a room whose log holds a voice note's part exports
+  ## none (`voice-notes-present`): audio never leaves the module (voice_live.roomProof,
+  ## docs/design/voice-notes.md §10, §18).
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()
-  var epochTo = 0
-  try: epochTo = gSession.epoch()
-  except CatchableError: discard
-  $buildProof(gSession.log.allEvents(), 0, epochTo).toJson()   # the raw log: a proof accounts for every entry, forgeries included (exo-f76)
+  $roomProof(gSession)
 
 proc musterCoordinateVerifyProof(proofJson: string): string =
   ## Refuse-on-mismatch verification of a log proof — pure, reads only the proof.
@@ -4630,14 +4630,7 @@ proc musterCoordinateMessages(): string =
   ## can set (docs/design/voice-notes.md §7).
   if gSession == nil: return "[]"
   gSession.poll()
-  let meHex = toHex(gSession.selfIdentity().toBytes())
-  var arr = newJArray()
-  for r in hostVoice().rows(gSession):
-    var row = rowJson(r)
-    row["alias"] = %contactBook().aliasOf(r.author)
-    row["self"] = %(normId(r.author) == normId(meHex))
-    arr.add row
-  $arr
+  $hostVoice().messagesJson(gSession, proc (author: string): string = contactBook().aliasOf(author))
 
 proc musterCoordinateMembers(): string =
   ## The ADMITTED members of the joined room (the current roster), each flagged

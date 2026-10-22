@@ -17,19 +17,34 @@
 ## done since the last call, drains the capture buffer into the incremental Opus encoder (so
 ## Stop finds at most what arrived since the last pump to encode), notices the device side's
 ## `capped` (the 60 s cap, which only that side holds) and playback's `done`, and releases the
-## device. A device is opened only by recordStart or play, and with the access policy off any
-## caller can make those calls (§13). Every stream is released when it ends: the AudioIo is
-## closed (for miniaudio, the device and the context), so between streams nothing is open.
-## `close` stops whatever runs; the hosted module calls it at exit (§9).
+## device. Start, Stop, Send and Play each pump first, so each decides on what the device side
+## has done by now, not on what the last read left. A device is opened only by recordStart or
+## play, and with the access policy off any caller can make those calls (§13). Every stream is
+## released when it ends: the AudioIo is closed (for miniaudio, the device and the context),
+## so between streams nothing is open. `close` stops whatever runs; the hosted module calls it
+## at exit (§9).
 ##
 ## The draft lives in this object's memory only: never on disk, never over IPC, lost with the
-## process. Send refuses an all-zero recording as `silent` with the platform note (§11: on
-## macOS, Basecamp 0.3.2's logos_host lacks the microphone permission) and one under 500 ms
-## as `too-short`, and publishes nothing then. A note's ts is fixed at its first Send, so a
-## Send retried after a part failed (FrameTooLarge, `too-large`) re-sends the same note id.
+## process. It belongs to the room it was recorded in (its topic, taken at recordStart): Send
+## through another room's session is `room-changed`. Send refuses a draft under 500 ms as
+## `too-short` (a recording of nothing included), then an all-zero one as `silent` with the
+## platform note (§11: on macOS, Basecamp 0.3.2's logos_host lacks the microphone
+## permission), and publishes nothing then. A note's ts is fixed at its first Send, so a Send
+## retried after it failed between its parts re-sends the same note id: after `too-large`
+## (FrameTooLarge), or a transport that raised. The log takes each part before the transport
+## does, so such a retry re-sends both on the held path, and until it does the sender's own
+## fold calls the note complete while the room may hold half of it. On the hosted
+## DeliveryTransport a failed send is not seen at all: its publish is fire-and-forget, so Send
+## returns {note} and drops the draft, and a part the fleet lost leaves the note arriving for
+## the others, with nothing that re-sends it (voice-notes.md §8, §15).
 ##
-## The thread's rows (`rows`) go through `threadRows` with one `VoiceMemo` per room, so a
-## clip is decoded and checked once per pair of standing parts, not on every read (§6).
+## The thread's rows (`rows`, and `messagesJson` as coordinate_messages serves them) go
+## through `threadRows` with one `VoiceMemo` per room, so a clip is decoded and checked once
+## per pair of standing parts, not on every read (§6).
+##
+## `roomProof` is coordinate_proof while voice notes are in the tree: a log proof carries every
+## raw value whole, a voice part's half of the clip with it, so it refuses a room whose raw
+## log holds any `voice/` entry (§10, §18).
 ##
 ## This module codes against AudioIo, never against miniaudio, so voice_live_test runs it on
 ## SyntheticAudioIo. Which AudioIo the module makes is `voiceIoChoice`'s: MUSTER_VOICE_SOURCE
@@ -39,11 +54,18 @@
 import std/[json, tables]
 import ../audio/[audio_io, voice_clip, voice_codec]
 import ../crypto/[keystore, curve25519]
+import ../log/[log, proof]
 import ./session
 import ./authorship
 import ./voice
+from ./contacts import normId
 
 const
+  ProofRefusal* = "voice-notes-present"
+    ## coordinate_proof's refusal for a room whose raw log holds a `voice/` entry (§10).
+  ProofRefusalDetail* = "A log proof carries every event's value whole, and a voice note's " &
+                        "value holds its audio, which never leaves the module. Until that is " &
+                        "decided, a room with a voice note exports no proof."
   DeviceUnknown* = "unknown"
     ## A device's readiness before anything opened one.
   DeviceOk* = "ok"
@@ -73,6 +95,7 @@ type
     capBuf: AudioBuffer         ## the capture buffer while recording (60 s, allocShared0); else nil
     enc: ClipEncoder            ## the recording's incremental encoder while recording
     draft: VoiceClip            ## the draft, in state rsDraft
+    room: string                ## the topic of the room the recording or draft belongs to
     draftTs: int64              ## the ts its parts carry, fixed at its first Send
     draftTsSet: bool
     recPeak: int                ## the largest |sample| of the recording, or of the draft
@@ -137,6 +160,7 @@ proc drain(v: VoiceRecorder): string =
 proc dropRecording(v: VoiceRecorder, why: string) =
   v.releaseCapture()
   v.enc = nil
+  v.room = ""
   v.state = rsIdle
   v.error = why
 
@@ -153,10 +177,16 @@ proc finishRecording(v: VoiceRecorder) =
   v.enc = nil
   v.draftTsSet = false
   v.state = rsDraft
-  v.note = (if v.recPeak == 0: platformNote() else: "")
+  # the microphone note only for a draft Send refuses as silent, never for one too short
+  v.note = (if v.recPeak == 0 and v.draft.durationMs >= VoiceMinMs: platformNote() else: "")
+
+proc silentDraft(v: VoiceRecorder): bool =
+  ## The draft has samples and every one is exactly zero.
+  v.draft.samples > 0 and v.recPeak == 0
 
 proc dropDraft(v: VoiceRecorder) =
   v.draft = VoiceClip()
+  v.room = ""
   v.draftTsSet = false
   v.state = rsIdle
   v.capped = false
@@ -193,7 +223,7 @@ proc voiceStatus*(v: VoiceRecorder): JsonNode =
     of rsIdle: 0
   let silent = case v.state
     of rsRecording: v.capBuf.written > 0 and v.recPeak == 0
-    of rsDraft: v.recPeak == 0
+    of rsDraft: v.silentDraft()
     of rsIdle: false
   let peak = v.peakSince
   v.peakSince = 0
@@ -211,7 +241,8 @@ proc voiceStatus*(v: VoiceRecorder): JsonNode =
 proc recordStart*(v: VoiceRecorder, s: CoordinationSession): JsonNode =
   ## voice_record_start: {ok}, or {error}: not-joined (no room: nothing opens), busy (a
   ## recording, a playback or a draft held), codec, or the device seam's word (no-device, …),
-  ## which ready.capture then says.
+  ## which ready.capture then says. The recording, and its draft, belong to `s`'s room.
+  discard v.pump()                    # a playback heard to its end is not busy
   if s == nil: return refusal("not-joined")
   if v.state != rsIdle or v.playNote.len > 0: return refusal("busy")
   var enc: ClipEncoder
@@ -227,6 +258,7 @@ proc recordStart*(v: VoiceRecorder, s: CoordinationSession): JsonNode =
   v.capture = DeviceOk
   v.capBuf = buf
   v.enc = enc
+  v.room = s.topic
   v.state = rsRecording
   v.recPeak = 0
   v.peakSince = 0
@@ -236,7 +268,7 @@ proc recordStart*(v: VoiceRecorder, s: CoordinationSession): JsonNode =
   %*{"ok": true}
 
 proc draftJson(v: VoiceRecorder): JsonNode =
-  %*{"draft": {"durationMs": v.draft.durationMs, "silent": v.recPeak == 0, "peak": v.recPeak}}
+  %*{"draft": {"durationMs": v.draft.durationMs, "silent": v.silentDraft(), "peak": v.recPeak}}
 
 proc recordStop*(v: VoiceRecorder): JsonNode =
   ## voice_record_stop: {draft: {durationMs, silent, peak}}, the draft the 60 s cap already
@@ -252,13 +284,18 @@ proc recordStop*(v: VoiceRecorder): JsonNode =
 proc draftSend*(v: VoiceRecorder, s: CoordinationSession, ks: Keystore, ts: int64): JsonNode =
   ## voice_draft_send: publish the draft as its two author-signed parts at `ts` (fixed at the
   ## first Send of this draft), each padded to one fixed frame by the session (§4). {note},
-  ## or {error}: no-draft; silent (every sample exactly zero; with `detail`, the platform
-  ## note), the draft kept; too-short (under 500 ms); not-joined; too-large (a part did not
-  ## fit its frame, FrameTooLarge; the draft is kept, and a retry sends the same note).
+  ## or {error}, the draft kept on each: no-draft; too-short (under 500 ms, a recording of
+  ## nothing included); silent (every sample exactly zero; with `detail`, the platform note);
+  ## not-joined; room-changed (`s` is another room than the one the draft was recorded in);
+  ## too-large (a part did not fit its frame, FrameTooLarge; a retry sends the same note).
+  ## A transport that raises between the parts raises out of here with the draft kept, and a
+  ## retry sends the same note; DeliveryTransport never raises (the module header).
+  discard v.pump()                    # a draft the cap made since the last read is a draft
   if v.state != rsDraft: return refusal("no-draft")
-  if v.recPeak == 0: return %*{"error": "silent", "detail": platformNote()}
   if v.draft.durationMs < VoiceMinMs: return refusal("too-short")
+  if v.silentDraft(): return %*{"error": "silent", "detail": platformNote()}
   if s == nil: return refusal("not-joined")
+  if s.topic != v.room: return refusal("room-changed")
   if not v.draftTsSet:
     v.draftTs = ts
     v.draftTsSet = true
@@ -292,12 +329,43 @@ proc rows*(v: VoiceRecorder, s: CoordinationSession): seq[ThreadRow] =
   ## room's memo.
   threadRows(s.roomEvents(), v.memoFor(s))
 
+proc messagesJson*(v: VoiceRecorder, s: CoordinationSession,
+                   aliasOf: proc (author: string): string): JsonNode =
+  ## coordinate_messages (§7): the room's rows, oldest first, each `rowJson` ({id, author, ts,
+  ## body}, and `voice` on a note's row only) with the author's `alias` (`aliasOf`, the
+  ## address book's) and `self` for this member's own rows.
+  let me = normId(hexOf(s.selfIdentity().toBytes()))
+  result = newJArray()
+  for r in v.rows(s):
+    var row = rowJson(r)
+    row["alias"] = %aliasOf(r.author)
+    row["self"] = %(normId(r.author) == me)
+    result.add row
+
+proc roomProof*(s: CoordinationSession): JsonNode =
+  ## coordinate_proof (M4) while voice notes are in the tree (§10, §18). A log proof carries
+  ## every raw event's value whole, because its verifier recomputes each id from it, and a
+  ## voice part's value holds its half of the clip. So a room whose raw log holds any `voice/`
+  ## entry (by the key's first segment, as the session pads one), an unsigned or malformed one
+  ## too, exports no proof: {error: "voice-notes-present", detail}. Audio never leaves the
+  ## module; the operator decides between naming the export an exception and a proof form
+  ## that commits a part by digest. Any other room: buildProof's JSON over the raw log, from
+  ## epoch 0 to the current one.
+  let events = s.log.allEvents()
+  for e in events:
+    if isVoiceKey(e.key): return %*{"error": ProofRefusal, "detail": ProofRefusalDetail}
+  var epochTo = 0
+  try: epochTo = s.epoch()
+  except CatchableError: discard
+  buildProof(events, 0, epochTo).toJson()   # the raw log: a proof accounts for every entry, forgeries included (exo-f76)
+
 proc play*(v: VoiceRecorder, s: CoordinationSession, noteId: string): JsonNode =
   ## voice_play: play the draft (`noteId` "draft") or a complete note of the joined room,
   ## decoded whole in the module. {ok}, or {error}: busy (recording or playing), no-draft,
   ## not-joined (a note with no room), unknown-note, incomplete (one part so far), broken (the
   ## fold's verdict, or a clip libopus refuses), codec, or the device seam's word, which
   ## ready.playback then says.
+  discard v.pump()                    # a playback heard to its end is not busy
   if v.state == rsRecording or v.playNote.len > 0: return refusal("busy")
   var pcm: seq[int16]
   var durMs: int

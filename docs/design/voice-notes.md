@@ -324,7 +324,9 @@ never in `body`. That field is metadata only, under 300 B:
   "voice": { "v": 1, "note": "<nid>", "durationMs": N, "state": "complete|arriving|broken" } }
 ```
 
-`musterCoordinateMessages` adds `alias` and `self` to it, as to every row.
+The hosted layer adds `alias` and `self` to it, as to every row (`voice_live.messagesJson`
+on this branch, which `musterCoordinateMessages` calls; `voice_live_test` §22 pins both row
+shapes).
 
 **Only `threadRows` can make a voice row, and `voice-note` is a reserved kind.** Without
 that, a member could forge a note row:
@@ -379,6 +381,12 @@ What this means for each kind of reader:
   it among what still leaks.
 - **Older clients in general.** S8 fixes that fallback for the next unknown kind, but clients
   already released keep it.
+- **This branch's UIs before S8.** `coordinate_messages` now returns a note's row, with an
+  empty `body`. Today's RoomThread parses the body as a card in a `try`, gets null from `""`,
+  and falls through to plain chat text (`RoomThread.qml:75-79`), and the Nim UI passes the
+  same JSON through (`ui-nim/app/backend.nim:129`). So until S8 lands, both draw a voice note
+  as an empty chat line under its author's name, as would any older UI paired with this
+  module (§15).
 
 ## 8. Record → draft → send
 
@@ -411,7 +419,7 @@ declares a return type.
 | `voice_status()` | the JSON below; it also drives the voice pump |
 | `voice_record_start()` | `{ok}`, or `{error}`: `not-joined` · `busy` (recording, playing, or a draft held) · `codec` · `no-device`, or another word the device seam gives (`FileAudioIo`'s `no-source`, …), which `ready.capture` then says |
 | `voice_record_stop()` | `{draft: {durationMs, silent, peak}}` (a draft the 60 s cap already made included), or `{error}`: `not-recording`, or why the encoder refused |
-| `voice_draft_send()` | `{note}`, or `{error}`: `no-draft` · `silent` (with `detail`, the platform note of §11) · `too-short` · `not-joined` · `too-large`. The draft is kept on every refusal |
+| `voice_draft_send()` | `{note}`, or `{error}`: `no-draft` · `too-short` · `silent` (with `detail`, the platform note of §11) · `not-joined` · `room-changed` (the joined room is not the one the draft was recorded in) · `too-large`. The draft is kept on every refusal |
 | `voice_draft_discard()` | `"ok"`; it also drops a recording in progress |
 | `voice_play(note_id)` | `"draft"` or a note id; `{ok}`, or `{error}`: `unknown-note` · `incomplete` · `broken` (the fold's verdict, or a clip libopus refuses) · `busy` · `no-draft` · `not-joined` (a note with no room) · `codec`, or the device seam's word, which `ready.playback` then says |
 | `voice_play_stop()` | `"ok"` |
@@ -425,18 +433,38 @@ declares a return type.
   playing:   { note, positionMs, durationMs } | null }
 ```
 
-**Refusals at Send:**
-- **Silent.** A recording whose samples are all exactly zero is refused as `silent`, and the
-  platform note says why (§11): it is the refusal's `detail`, and `ready.note` once a
-  recording came back silent. A low but non-zero peak is only a warning.
-- **Too short.** Under 500 ms is refused as `too-short`.
-- **A retried Send sends the same note.** The note's ts is fixed at the draft's first Send, so
-  after a Send that failed between its two parts (a delivery that raised, `too-large`), a
-  retry re-sends the part the log holds on the held path (§4) and sends the other, under the
-  same note id, and nothing is stranded (`voice_live_test` §15).
+**Refusals at Send**, in this order:
+- **Too short.** Under 500 ms is refused as `too-short`. That includes a recording of no
+  samples at all (Start, then Stop at once), which is too short, not silent, and raises no
+  microphone note (`voice_live_test` §16).
+- **Silent.** A draft long enough to send whose samples are all exactly zero is refused as
+  `silent`, and the platform note says why (§11): it is the refusal's `detail`, and
+  `ready.note` once such a recording came back. A low but non-zero peak is only a warning.
+- **Another room.** A draft belongs to the room it was recorded in: `voice_record_start`
+  takes the room's topic, and a Send while another room is joined is refused as
+  `room-changed`, with nothing published to either room (`voice_live_test` §18). So a draft
+  is never posted to a room other than the one its draft surface named, and a retry never
+  sends a note's second part to another room than its first. `voice_status` does not say
+  which room holds the draft yet; S8's draft surface needs that (§18).
+- **A retried Send sends the same note, where the failure is seen.** The note's ts is fixed at
+  the draft's first Send. `session.publish` puts each part into the log and the journal
+  before the transport sees it (`session.nim` `publish`), so after a Send that failed between
+  its two parts, the log holds both, and a retry re-sends both on the held path (§4), under
+  the same note id. That covers `too-large` and a transport that raises (`voice_live_test`
+  §15 makes one raise through a `LocalTransport` subscriber). Until the retry, the sender's
+  own thread shows the note complete while the room may hold only its first part.
+- **The live transport raises nothing.** `DeliveryTransport.publish` is fire-and-forget: it
+  hands the frame to `lp_invoke_async` and returns, and a failed send is logged only under
+  `MUSTER_LP_DEBUG` (`delivery.nim:118-123`, `:202-212`). So if either 90 KB frame fails on
+  the fleet, Send still returns `{note}` and drops the draft, and every other member can hold
+  the note `arriving` for good: nothing re-sends it (`coordinate_reannounce` re-publishes
+  intents only). §15 and §18 carry it.
 
 **Built (S7).** `coordination/voice_live.nim`'s `VoiceRecorder` runs the state machine above
-for the seven methods. `voice_status`'s `peak` is the largest |sample| captured since the
+for the seven methods. Start, Stop, Send and Play each run the voice pump first, so each
+decides on what the device side has done by now: a playback heard to its end is not `busy`,
+and a recording the cap ended is a draft Send can send, whether or not anything read
+`voice_status` since (`voice_live_test` §17). `voice_status`'s `peak` is the largest |sample| captured since the
 last read, and reading it resets it, raw (its coarsening is still open, §13). `elapsedMs` is
 what the device side has captured, at 48 samples a millisecond.
 
@@ -495,7 +523,9 @@ seven `logos_module_*` entry points and a constructor). So S7 does two things (b
   `done`, at `voice_play_stop` and at Discard, the recorder stops the stream and closes the
   `AudioIo`: for `MiniaudioIo` that uninitialises the device and the context, so between
   streams nothing is open (`voice_live_test` §13 reads the null device's context back as
-  gone). `MiniaudioIo` makes a new context at the next start.
+  gone; §19 holds Send and Discard while the draft plays, §20 a sink that refuses a write,
+  §21 a start the device refuses and `close`). `MiniaudioIo` makes a new context at the next
+  start.
 - **An exit proc closes what still runs.** `muster_module` registers one (`std/exitprocs`)
   when it makes the recorder, and it calls `VoiceRecorder.close`. It runs at process exit,
   and when the plugin's image is unloaded, since `atexit` ties a handler to the image that
@@ -528,7 +558,7 @@ seven `logos_module_*` entry points and a constructor). So S7 does two things (b
 | store node (delivery) | that the room's topic carried two frames of 90,153 B each, and when; the publishing node, unless `mix` is on; a frame that size marks a voice note | its length, which member sent it (FS-7), the audio |
 | relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
 | mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
-| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13); until the operator decides (below), the clip itself, through `coordinate_proof`, which returns raw log content (S6 closed `coordinate_graph`) | the audio through any voice method: none returns it |
+| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13) | the audio, through any method: no voice method returns it, S6 closed `coordinate_graph`, and `coordinate_proof` refuses a room holding a voice note (below) |
 | a module loaded beside an older Muster (0.3.x or earlier) of another member in the room (access policy off) | every note's clip, through that member's `coordinate_graph` and `coordinate_proof`, which return each part's value whole (§7; "What still leaks", item 6) | nothing of a note sealed in an epoch that member never held |
 
 **Two methods that returned raw log content.** No voice method returns audio. But a part's
@@ -551,11 +581,17 @@ differ:
   `room_graph.nim:208-229` on this branch). `voice_test` §14 pins that field by field, and
   finds no 48-character stretch of any half, taken at every 24-character step and at its end,
   in the map `toJson` gives.
-- **`coordinate_proof`: the operator decides** (§18). One option keeps raw values, since a
-  proof accounts for every entry, and says here that a proof export carries the audio. That
-  amends the IPC decision for this one explicit export. The other is a proof form that
-  carries a voice part as a committed digest. Because today's id hashes the value itself,
-  that means a new proof format, and perhaps a new id derivation, not a filter on today's.
+- **`coordinate_proof`: refused until the operator decides** (§18). A room whose raw log
+  holds any `voice/` entry, by the key's first segment as the session pads one, and an
+  unsigned or malformed one too, exports no proof: `{error: "voice-notes-present", detail}`
+  (`voice_live.roomProof`, `voice_live_test` §23). A room with none exports its proof as
+  before. That keeps the fixed decision that no hosted method returns audio, at the cost of
+  no proof export for a room with a voice note. The operator then picks one of two. One
+  option keeps raw values, since a proof accounts for every entry, and says here that a proof
+  export carries the audio. That amends the IPC decision for this one explicit export. The
+  other is a proof form that carries a voice part as a committed digest. Because today's id
+  hashes the value itself, that means a new proof format, and perhaps a new id derivation,
+  not a filter on today's.
 - **Neither on an older client.** A member on Muster 0.3.x or earlier holds the same parts and
   returns them whole through both methods; nothing in this PR reaches their code ("What still
   leaks", item 6).
@@ -748,7 +784,8 @@ What it cannot do is read audio through a voice method: none returns it, and `vo
 carries state, position and peak only. That is unlike `coordinate_messages`, which serves
 room plaintext to any caller (`side-modules.md:104`). Two methods that returned raw log
 content, `coordinate_graph` and `coordinate_proof`, would have handed it the clip. S6 closed
-the first, and the second is the operator's decision (§10, §18). On the machine of a member
+the first. The second refuses a room holding a voice note until the operator decides between
+an exception and a new proof form (§10, §18). On the machine of a member
 who runs an older Muster (0.3.x or earlier), both still return it, and nothing here reaches
 that code (§10, "What still leaks", item 6).
 
@@ -794,6 +831,22 @@ S1–S7 are built (§17) and S8–S11 are not. What is unverified, built or plan
   - over the live fleet;
   - with RLN on `logos.test`, where each note spends two sends;
   - under `mix = preferred | required`.
+
+  And a failed delivery is not seen. `DeliveryTransport.publish` is fire-and-forget (§8), so
+  if either frame fails on the fleet, `voice_draft_send` returns `{note}` and drops the
+  draft, and the note can stay `arriving` for every other member: no path re-sends it
+  (§18). The retry of §8 covers only `too-large` and a transport that raises, and
+  `voice_live_test` §15 raises through a `LocalTransport` subscriber, a failure the hosted
+  module never sees.
+- **A half-sent note looks whole to its sender.** `session.publish` logs a part before the
+  transport sees it, so after a Send that fails between its parts the sender's own thread
+  shows the note complete while the room may hold only its first part (`voice_live_test`
+  §15 pins both views). A retry closes it; Discard instead makes the split permanent. S8's
+  draft surface can hide or warn about a draft whose note the sender's log already holds.
+- **This branch's UIs before S8 draw a note as an empty line** (§7). `coordinate_messages`
+  returns a note's row with an empty `body`, which today's RoomThread and the Nim UI draw as
+  an empty chat line under the author's name, as any older UI paired with this module would.
+  S8 and S7 should land in one push.
 - **The cost of store catch-up.** It returns each payload as a JSON byte array
   (`delivery.nim:309-315`), so a voice frame inside the 60 s lookback is re-fetched as several
   hundred KB of JSON per query. That should be measured before anything is added; a seen-frame
@@ -802,12 +855,15 @@ S1–S7 are built (§17) and S8–S11 are not. What is unverified, built or plan
   and every hosted read re-runs `roomEvents` with no fold cache (the cache is
   `side-modules.md` S4, `exo-ff5.4`, not built). `voice.nim`'s own cost is measured (§6), but
   `roomEvents`' authorship checks over 84 KB values are not, and nor is the whole hosted read.
-- **Audio over `coordinate_proof`** (§10). It still returns a voice part's `part`, and waits on
-  the operator. S6 stripped it from the room map: an entry's content is `v`, `ts`, `durMs` and
-  `digest` at most, and `voice_test` §14 finds no 48-character stretch of any half, taken at
-  every 24-character step and at its end, in the map `toJson` gives. So a leaked stretch of
-  71 characters or more is caught wherever it sits in a half; a shorter one, or the clip in
-  another encoding than its base64, is not looked for.
+- **Audio over `coordinate_proof`** (§10). It refuses `voice-notes-present` for a room whose
+  raw log holds any `voice/` entry, so no proof of such a room leaves the module until the
+  operator decides; `voice_live_test` §23 holds the refusal on `roomProof`, which the hosted
+  method calls after its `not-joined` check and a poll. S6 stripped the audio from the room
+  map: an entry's content is `v`, `ts`, `durMs` and `digest` at most, and `voice_test` §14
+  finds no 48-character stretch of any half, taken at every 24-character step and at its end,
+  in the map `toJson` gives. So a leaked stretch of 71 characters or more is caught wherever
+  it sits in a half; a shorter one, or the clip in another encoding than its base64, is not
+  looked for.
 - **Audio over an older client's IPC** (§10, "What still leaks", item 6). A member on Muster
   0.3.x or earlier returns every part whole through their `coordinate_graph` and
   `coordinate_proof`, to any module loaded beside them. This PR cannot change that code, and
@@ -816,8 +872,15 @@ S1–S7 are built (§17) and S8–S11 are not. What is unverified, built or plan
 - **The size budget** (§5) is arithmetic until S4 and S5 measure the worst case.
 - **The voice methods through a host** (S7). `voice_live_test` runs `VoiceRecorder` in
   process, on `SyntheticAudioIo`, `FileAudioIo` and miniaudio's null device, with two members
-  over `LocalTransport`. The hosted glue in `muster_module.nim` is compiled by the
-  marshalling probe, and was driven once by hand, headless, in logosctl 0.3.2's `logos_host`
+  over `LocalTransport`, and holds the rows `coordinate_messages` serves (`messagesJson`, §22)
+  and `coordinate_proof`'s refusal (`roomProof`, §23), the two procs those hosted methods
+  call. The marshalling probe compiles the hosted glue in `muster_module.nim` and calls the
+  six methods through the generated dispatch with no room joined, each reply checked to the
+  byte (`not-joined`, `not-recording`, `no-draft`, `ok`), and `coordinate_messages` and
+  `coordinate_proof` beside them; no device opens. With a room joined, the glue's remaining
+  lines (the `not-joined` check, a poll, the session and keystore it passes) are not run
+  through a host by any test: no harness here joins a room. It was driven once by hand,
+  headless, in logosctl 0.3.2's `logos_host`
   on darwin-arm64 (2026-10-21, the S7 `.lgx`, a throwaway room joined on `logos.dev`): with
   `MUSTER_VOICE_SOURCE` a 3 s 1 kHz WAV and `MUSTER_VOICE_SINK` a scratch file,
   `voice_record_start` refused `not-joined` before the join and gave `{ok}` after it, Stop
@@ -832,8 +895,9 @@ S1–S7 are built (§17) and S8–S11 are not. What is unverified, built or plan
   recording open on the null device took `logos_host` down with no crash report, and a
   reload answered idle; whether the exit proc ran then, rather than the process being ended
   without it, is not observed. (The daemon's stop afterwards crashed `delivery_module`'s own
-  `logos_host`, in `DeliveryModuleCdylibProvider::emitTrampoline` on its event thread, which
-  is not this code.)
+  `logos_host`, in `DeliveryModuleCdylibProvider::emitTrampoline` on its event thread. That
+  was not investigated, and no run of `origin/main` was made to compare, so whether this
+  branch has any part in it is not known.)
 - **A Send that a member's variant blocks.** The held path re-seals the copy the log keeps,
   the one with the smallest `afterDigest`, and nothing caps the length of `after` on ingest
   (`session.nim` `publish`, `log.nim` `keep` and `ingest`). So a member who saw a part can
@@ -897,9 +961,9 @@ Each slice's test is written and run red before its code (worker.md), and every 
   remaining methods, `voicePump`, and `threadRows` in `coordinate_messages`, and `close` before
   the module unloads (§9). The recorder keeps a `VoiceMemo` per room and passes it to every
   `threadRows`; `coordinate_conversations`' `lastTs` reads `threadLastTs` (§6).
-  `coordinate_proof` follows the operator's decision (§10), which is still open, so it is
-  unchanged. Test: `voice_live_test` on `SyntheticAudioIo` and `LocalTransport`, which holds
-  §8's type rule (no float) in every state.
+  Until the operator decides (§10), `coordinate_proof` refuses a room holding a voice note.
+  Test: `voice_live_test` on `SyntheticAudioIo` and `LocalTransport`, which holds §8's type
+  rule (no float) in every state, and the marshalling probe's not-joined replies.
 - **S8 — The UI.** The `.rep` (both backends, ADR-019), `CardVoiceNote.qml`, the mic in the
   composer, observer and kind labels, the regenerated gallery `FakeBackend.qml`, and the
   unknown-kind fallback. A gallery fixture holds a forged `voice-note` body, and RoomThread
@@ -938,7 +1002,9 @@ Asked of the maintainer (corpetty):
   frame. Changing the format later strands notes already sent.
 - **F-13** (§14): is a voice note a message in another medium, or a core vocabulary addition?
 - **`derived-exo-526`'s oracle.** S3 added `voice_status` to its host probe: the method listed
-  as `QString`, `ready.codec` the libopus linked, both devices `"unknown"`. The spec's
+  as `QString`, `ready.codec` the libopus linked, both devices `"unknown"`. S7 added the six
+  other voice methods, `coordinate_messages` and `coordinate_proof`, each with no room joined
+  and checked to the byte. The spec's
   acceptance criterion still names only `health()`, `propose()` and `status()`, so a voice
   regression now turns exo-526 red. Sign off on the wider oracle, or a voice spec's own probe
   takes these checks over once the epic has an exo id.
@@ -951,8 +1017,16 @@ Still open:
 - **for the operator: `coordinate_proof` and the audio** (§10). A log proof carries every
   event's value whole, so a proof of a room with a note carries its Opus to the caller. Either
   the proof export is named as an exception to "audio plaintext never crosses IPC", or a new
-  proof form carries voice parts as committed digests. S7 was built without the answer, so
-  `coordinate_proof` is unchanged and still returns a voice part's `part`;
+  proof form carries voice parts as committed digests. Until then `coordinate_proof` refuses
+  `voice-notes-present` for a room whose raw log holds any `voice/` entry, so such a room
+  exports no proof at all;
+- **a re-send path for a note the fleet half-delivered** (§8, §15). Delivery's send is
+  fire-and-forget, so a part it lost is never seen, and nothing re-publishes a voice part:
+  `coordinate_reannounce` re-sends intents only. Options: a voice part joins what
+  `coordinate_reannounce` re-sends, or the module keeps a sent note's parts and re-sends a
+  part no store query has returned;
+- **which room holds the draft** (§8). A draft is refused as `room-changed` in any room but its
+  own, and `voice_status` does not yet name that room, which S8's draft surface needs;
 - **for the operator: an older client in the room** (§10, "What still leaks", item 6). A member
   on Muster 0.3.x or earlier serves every note's Opus to the modules loaded beside them,
   through `coordinate_graph` and `coordinate_proof`, and nothing in this PR can change that.
