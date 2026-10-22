@@ -143,10 +143,11 @@ proc hits*(m: VoiceMemo): int =
   ## How many verdicts the memo has served.
   m.hits
 
-proc voicePartKey*(key: string): tuple[ok: bool, nid, author: string, i: int] =
-  ## Rule 2: exactly voice/<nid>/<author>/<i>/2, a 32-hex nid and a 128-hex author, both
-  ## lowercase (as voiceEvents writes them), i "0" or "1". Read from the key alone, so the
-  ## room's other folds (provenance) class a part as the fold does without parsing its value.
+proc voicePartKey(key: string): tuple[ok: bool, nid, author: string, i: int] =
+  ## Rule 2's key half: exactly voice/<nid>/<author>/<i>/2, a 32-hex nid and a 128-hex
+  ## author, both lowercase (as voiceEvents writes them), i "0" or "1". The value's half is
+  ## parsePart's; the room's other folds ask `voiceStanding`, which applies both and rules
+  ## 3 and 4.
   let p = key.split('/')
   if p.len != 5 or p[0] != "voice" or p[4] != $VoiceParts: return
   if not (isLowerHex(p[1], 32) and isLowerHex(p[2], 128)): return
@@ -238,6 +239,22 @@ proc header(g: Group): tuple[kept: bool, note: VoiceNote] =
       for k in 0 ..< VoiceParts:
         if g.have[k]: result.note.parts[k] = g.part[k].id
       return
+
+type VoicePartOf* = tuple[nid, author: string, i: int]
+  ## A standing part: its note's id, the author its key names, and which half it is.
+
+proc voiceStanding*(events: seq[Event]): Table[EventId, VoicePartOf] =
+  ## Every standing part of a note the fold keeps, by event id: exactly the ids reduceVoice's
+  ## notes name in `parts`, whatever each note's state (complete, arriving or broken). The
+  ## header pass alone decides it (rules 2 to 4), so it decodes no clip and costs what
+  ## threadLastTs does. An entry under voice/ that is not here is no note's part: a key or a
+  ## value of the wrong shape, an equivocating later copy, or a squatted note id. This is
+  ## what the room's other folds (the flow, provenance and so the room map) take a part to
+  ## be, so all of them agree with the fold. Pass the room's authentic view.
+  for _, g in gather(events):
+    if not header(g).kept: continue
+    for i in 0 ..< VoiceParts:
+      if g.have[i]: result[g.part[i].id] = (g.nid, g.author, i)
 
 proc bytesOf(s: string): seq[byte] =
   result = newSeq[byte](s.len)

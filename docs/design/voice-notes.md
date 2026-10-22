@@ -1,11 +1,11 @@
 # Voice notes: a short recorded clip in the room, sealed like text, one fixed size on the wire
 
-Status: **proposed 2026-10-21 by an outside contributor; nothing below is built yet.** This
-document is the first commit of a draft PR, so the maintainer can object to the wire format
-(§3–§5) before any code depends on it. There is no exo id yet (§18): the slices are S0–S11
-in the order of §17, and the commit scope is `voice-notes` until an id is assigned. Every
-code path named below as new is **planned**. Every file:line reference is to `main` at
-`67701f8`.
+Status: **proposed 2026-10-21 by an outside contributor; slices S1–S6 are built on this
+branch, S7–S11 are not.** This document is the first commit of a draft PR, so the maintainer
+can object to the wire format (§3–§5) before any code depends on it. There is no exo id yet
+(§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
+an id is assigned. A code path named below as new is **planned** unless its slice is built.
+Every file:line reference is to `main` at `67701f8`, except one marked "on this branch".
 
 Where it comes from: the design note *Voice in Muster* (2026-10-21, desk research against
 `67701f8`) compared four designs for voice against the invariants. It recommended
@@ -364,8 +364,11 @@ What this means for each kind of reader:
   `reduceMessages` skips the `voice/` events. That is better than its unknown-card render: an
   unknown kind draws nothing, or a stray heading, never a text fallback
   (`RoomThread.qml:693, :722`). Its information-flow view and room map do show each part, as
-  an unknown `voice` entry: envelope rows only (`flow.nim:121-124`), and an entry node of kind
-  `voice` with basis `sealed` (`room_graph.nim:299-331`).
+  an unknown `voice` entry: envelope rows only (`flow.nim:121-124` on `main`), and an entry
+  node of kind `voice` with basis `sealed` (`room_graph.nim:299-331` on `main`). That entry's
+  `content` is the whole value, `part` included (`room_graph.nim:198`, `:348` on `main`), so
+  that peer's `coordinate_graph` returns the audio, as its `coordinate_proof` does: §10 lists
+  it among what still leaks.
 - **Older clients in general.** S8 fixes that fallback for the next unknown kind, but clients
   already released keep it.
 
@@ -501,38 +504,68 @@ when the host unloads the plugin is a crash risk.
 | relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
 | mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
 | a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13); until the operator decides (below), the clip itself, through `coordinate_proof`, which returns raw log content (S6 closed `coordinate_graph`) | the audio through any voice method: none returns it |
+| a module loaded beside an older Muster (0.3.x or earlier) of another member in the room (access policy off) | every note's clip, through that member's `coordinate_graph` and `coordinate_proof`, which return each part's value whole (§7; "What still leaks", item 6) | nothing of a note sealed in an epoch that member never held |
 
-**Two methods that return raw log content.** No voice method returns audio. But a part's value
-holds its half of the clip as base64 Opus, and two existing methods hand event values to any
-caller:
-- **`coordinate_graph`**, the room map, copies every field of a JSON-object value into the
-  entry's `content` (`room_graph.nim:198`), and does so for every entry (`:348`). A voice
-  part's `part` would go with it.
+**Two methods that returned raw log content.** No voice method returns audio. But a part's
+value holds its half of the clip as base64 Opus, and two existing methods handed event values
+to any caller:
+- **`coordinate_graph`**, the room map, copied every field of a JSON-object value into the
+  entry's `content` (`room_graph.nim:198` on `main`), and did so for every entry (`:348` on
+  `main`), so a voice part's `part` went with it until S6.
 - **`coordinate_proof`** returns every raw log event, value and all (`proof.nim:79`,
   `muster_module.nim:3230`). A proof must carry each value whole: the verifier recomputes
   every event's id from it, and the id hashes the value's text itself (`muster.event.v1`,
   `log.nim:48-58`). So the field cannot simply be left out.
 
-Left as they are, both methods give any caller the Opus of every note in the room. That
+Left as they were, both methods gave any caller the Opus of every note in the room. That
 contradicts the decision that audio plaintext never crosses IPC (§18), and §13. The two cases
 differ:
-- **`coordinate_graph`: S6 strips it.** A `voice/` entry's `content` carries no `part`: at
-  most `v`, `ts`, `durMs` and `digest`. `voice_test` pins that field by field.
+- **`coordinate_graph`: S6 strips it.** An entry under `voice/` has as `content` its value's
+  `v`, `ts` and `durMs` where each is an integer and its `digest` where that is 64 lowercase
+  hex, and nothing else: no `part`, whatever a part holds (`voiceContentOf`,
+  `room_graph.nim:208-229` on this branch). `voice_test` §14 pins that field by field, and
+  finds no 48-character stretch of any half, taken at every 24-character step and at its end,
+  in the map `toJson` gives.
 - **`coordinate_proof`: the operator decides** (§18). One option keeps raw values, since a
   proof accounts for every entry, and says here that a proof export carries the audio. That
   amends the IPC decision for this one explicit export. The other is a proof form that
   carries a voice part as a committed digest. Because today's id hashes the value itself,
   that means a new proof format, and perhaps a new id derivation, not a filter on today's.
+- **Neither on an older client.** A member on Muster 0.3.x or earlier holds the same parts and
+  returns them whole through both methods; nothing in this PR reaches their code ("What still
+  leaks", item 6).
 
-**What the code adds** (planned, S6):
-- **A `voice/` branch in `flow.nim`.** Today an unknown prefix falls through to envelope-only
-  rows (`flow.nim:121-124`), which would show the room nothing about its own content. With the
-  branch, each part shows:
+**What the code adds** (built, S6). Every one of them takes a part to be what the fold
+stands: `voiceStanding` (`voice.nim:246` on this branch), the header pass's standing parts of
+the notes it keeps (§6 rules 2 to 4), by event id: exactly the ids `reduceVoice`'s notes name
+in `parts`, whatever each note's state. So the flow, provenance and the room map agree with
+the fold on what is a part, and an entry under `voice/` that is none, by its key, its value,
+an equivocating later copy or a squatted note id, is no part in any of them.
+- **A `voice/` branch in `flow.nim`** (`:123-135` on this branch). On `main` an unknown
+  prefix falls through to envelope-only rows (`flow.nim:121-124`), which would show the room
+  nothing about its own content. With the branch, each part shows:
   - room-member: `voice-note`, `voice-note-length`;
   - store-node: `timing`, `topic`, `fixed-size`.
-- **The room map.** A `room_graph` entry, with basis author-signed and kind `voice`
-  (`room_graph.nim:69`, `:327`). Its `content` carries no `part` (above).
-- **Provenance.** A `logProvenance` entry as a peer message (`intents.nim:829`).
+
+  An entry under `voice/` that is no note's part shows the store node's three rows alone: the
+  sending client's `session.publish` pads every `voice/` frame (§4), whatever its shape.
+  Ingest does not check the size of a frame another member sent, so `fixed-size` on another
+  member's entry is what an honest client sends. Pinned by `voice_test` §13.
+- **The room map.** An entry of kind `voice`, its basis author-signed and its account the
+  member its key names (`AuthorSigned`, `room_graph.nim:69`, `:76-77` on this branch). It is
+  counted exactly when provenance lists it, so exactly when the fold stands it. An entry under
+  `voice/` that is no note's part is still its signer's, since authorship proved who signed
+  it, but uncounted (`room_graph.nim:383-388` on this branch), and its facet says so: "the
+  fold counts it for nothing; its author signed it, bound to this room". The map's `file/`
+  entries, account disclosures and ceremony joins, which provenance never lists and the map
+  has always named by their signer, now say the same. The store node's facet
+  names the one fixed size, which marks a voice note but not its length
+  (`room_graph.nim:110-114` on this branch). Its `content` carries no `part` (above). Pinned
+  by `voice_test` §14, the `file/` facet by `swarm_test` §8.
+- **Provenance.** A `logProvenance` item (`intents.nim:829`, `:830` on this branch) for each
+  standing part, as a peer message in its author's name at the epoch whose key opened it
+  (`intents.nim:871-885` on this branch), and none for an entry that is no note's part.
+  Pinned by `voice_test` §15.
 
 `voice_test` pins those rows field for field, the way `swarm_test` §8 pins FileShare's.
 
@@ -550,7 +583,8 @@ twice, so the second goes out on the held path (§4), and asserts that both fram
 *The store node still sees the conversation graph* (`contracts/claims/registry.json:83`) and
 does not soften it.
 
-**What still leaks.** The design note listed these, and each stays true after this PR:
+**What still leaks.** The design note listed the first five, and the S6 review found the
+sixth. Each stays true after this PR:
 1. **A voice is a biometric, against FS-7.** FS-7 scopes a member's identity to the room. A
    voice undoes that for everyone who hears it:
    - a listener in two rooms can tell that the same person speaks in both;
@@ -578,6 +612,23 @@ does not soften it.
    - Today a send that fails is visible only under `MUSTER_LP_DEBUG`.
    - Voice notes make no mix claim, and the gap *The store node still sees the conversation
      graph* (`contracts/claims/registry.json:83`) stays partial.
+6. **An older client in the room returns the audio over IPC.** A member on Muster 0.3.x or
+   earlier (the published `muster-v0.3.0` among them) opens every voice frame sealed in an
+   epoch they hold, and serves each part's value whole, the base64 Opus included, to any
+   module loaded beside it with the access policy off. Nothing in this PR reaches their code:
+   - its session reads a padded frame unchanged: the pad is ASCII spaces after the JSON,
+     which `decodeEvent`'s `parseJson` skips (`session.nim:82-90` on `main`);
+   - its `authenticEventsWith` passes every event that `authorOf` does not mark authored
+     (`authorship.nim:238-240` on `main`), and its `authorOf` has no `voice/` branch, so its
+     room view keeps every part, a forged one too;
+   - its room map copies every field of a value into `content` (`room_graph.nim:198`, `:348`
+     on `main`), so its `coordinate_graph` returns `part`, and its `coordinate_proof` returns
+     every raw value.
+
+   So in a room with such a member, "audio plaintext never crosses IPC" (§18) holds on the
+   machines of members who run this PR, not on theirs. Only that member's upgrading, or
+   `--access-policy enforce` on their machine (§13), closes it. It is put to the operator in
+   §18.
 
 The S10 registry entries carry these as gaps unless the maintainer prefers them folded into
 existing entries:
@@ -585,7 +636,9 @@ existing entries:
 - "modules loaded beside Muster can record and send as you" (exposed; the party is the
   co-resident modules);
 - "leaving re-keys nothing" (exposed; the party is a former member). It is a room-wide gap
-  that no entry names today.
+  that no entry names today;
+- "an older client in the room returns the audio over IPC" (exposed; the party is the modules
+  loaded beside an older member's Muster, on that member's machine).
 
 ## 11. macOS
 
@@ -668,9 +721,11 @@ caller. So any module loaded beside Muster can:
 
 What it cannot do is read audio through a voice method: none returns it, and `voice_status`
 carries state, position and peak only. That is unlike `coordinate_messages`, which serves
-room plaintext to any caller (`side-modules.md:104`). Two methods that return raw log content,
-`coordinate_graph` and `coordinate_proof`, would hand it the clip. S6 closes the first, and
-the second is the operator's decision (§10, §18).
+room plaintext to any caller (`side-modules.md:104`). Two methods that returned raw log
+content, `coordinate_graph` and `coordinate_proof`, would have handed it the clip. S6 closed
+the first, and the second is the operator's decision (§10, §18). On the machine of a member
+who runs an older Muster (0.3.x or earlier), both still return it, and nothing here reaches
+that code (§10, "What still leaks", item 6).
 
 **The mitigations:**
 - **A banner.** The room's 1 s timer shows a recording banner from `voice_status`, whoever
@@ -700,7 +755,7 @@ and the PR says so (§18).
 
 ## 15. What is not verified
 
-Nothing in this document is built. What is unverified even as a plan:
+S1–S6 are built (§17) and S7–S11 are not. What is unverified, built or planned:
 - **The audio facts came from a throwaway prototype on an Apple M5.** These are packet sizes,
   the varargs hazard, the null backend, encode and decode cost, and miniaudio compiled through
   `{.compile.}`. None of them has run through the real `logos-module-builder` derivation, and
@@ -724,7 +779,15 @@ Nothing in this document is built. What is unverified even as a plan:
   `roomEvents`' authorship checks over 84 KB values are not, and nor is the whole hosted read.
 - **Audio over `coordinate_proof`** (§10). It still returns a voice part's `part`, and waits on
   the operator. S6 stripped it from the room map: an entry's content is `v`, `ts`, `durMs` and
-  `digest` at most, and `voice_test` §14 finds no stretch of any half in the map `toJson` gives.
+  `digest` at most, and `voice_test` §14 finds no 48-character stretch of any half, taken at
+  every 24-character step and at its end, in the map `toJson` gives. So a leaked stretch of
+  71 characters or more is caught wherever it sits in a half; a shorter one, or the clip in
+  another encoding than its base64, is not looked for.
+- **Audio over an older client's IPC** (§10, "What still leaks", item 6). A member on Muster
+  0.3.x or earlier returns every part whole through their `coordinate_graph` and
+  `coordinate_proof`, to any module loaded beside them. This PR cannot change that code, and
+  no test here runs a 0.3.x client against a voice note: what it does is read from `main`'s
+  source.
 - **The size budget** (§5) is arithmetic until S4 and S5 measure the worst case.
 - **Checks that are Linux-only or the maintainer's:**
   - the runner self-tests and `ui-parity.sh` for both UIs;
@@ -834,6 +897,12 @@ Still open:
   event's value whole, so a proof of a room with a note carries its Opus to the caller. Either
   the proof export is named as an exception to "audio plaintext never crosses IPC", or a new
   proof form carries voice parts as committed digests. S7 needs the answer;
+- **for the operator: an older client in the room** (§10, "What still leaks", item 6). A member
+  on Muster 0.3.x or earlier serves every note's Opus to the modules loaded beside them,
+  through `coordinate_graph` and `coordinate_proof`, and nothing in this PR can change that.
+  Accept it as a stated gap (S10's registry entry), or keep voice notes out of a room until
+  every member runs a version that strips them (nothing in the room says today which version
+  a member runs);
 - whether to coarsen `voice_status`'s peak for co-resident callers (§13);
 - the exact disclosure wording on the draft surface (§8);
 - whether the gaps of §10 become new registry entries.

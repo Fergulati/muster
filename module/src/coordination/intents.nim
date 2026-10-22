@@ -36,7 +36,7 @@ from ./effect_summary import inDecimals   # a split's total in its asset's own d
 export intent_events
 import ./effect_summary           # one reading of an effect for the card and the history (exo-59c)
 import ./attest                   # live attestations: the fold's gate + every surface's grade (exo-ef1)
-from ./voice import voicePartKey, VoiceParts   # a voice note's part, by its key alone (voice-notes.md §6)
+from ./voice import voiceStanding, VoiceParts   # a voice note's part, as the fold stands it (voice-notes.md §6)
 export attest
 
 proc hexToBytes(s: string): seq[byte] =
@@ -839,6 +839,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
   var seenSig = initHashSet[string]()
   var seenDecline = initHashSet[string]()
   var proposals = initTable[string, IntentProposal]()
+  let standing = voiceStanding(events)   # the voice fold's parts, by event id
   proc ownProposal(id: string, e: Event): bool =
     ## a propose or policy is the intent's only as the pair its id commits to (exo-dbd)
     if id notin proposals: proposals[id] = proposalOf(events, id)
@@ -869,11 +870,13 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
       continue
     if p[0] == "voice":
       # a voice note's part (docs/design/voice-notes.md §10): a peer message in the name
-      # its key gives, which the room's view verified signed it. Classed by the key alone;
-      # the value, half a clip, is never parsed here. An entry under voice/ that is no
-      # note's part is none (§6 rule 2).
-      let k = voicePartKey(e.key)
-      if not k.ok: continue
+      # its key gives, which the room's view verified signed it. A part is one the fold
+      # stands (voiceStanding, its header pass: §6 rules 2 to 4, which decodes no clip),
+      # so an entry under voice/ that is no note's part, whether by its key, its value, an
+      # equivocating later copy or a squatted note id, is none, and the room map, which
+      # counts what this lists, agrees with the fold.
+      if eventId(e) notin standing: continue
+      let k = standing[eventId(e)]
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "voice", account: k.author,
         accountable: true, what: "a voice note (part " & $(k.i + 1) & " of " & $VoiceParts & ")",
         detail: "",

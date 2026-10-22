@@ -20,6 +20,7 @@ import ../log/log
 import ../drivers/manifest
 import ../intents/disclosure
 import ./intents
+from ./voice import voiceStanding   # what a voice note's part is: the fold's header pass
 export disclosure
 
 type
@@ -78,6 +79,7 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
                       members: (if d.to == obRoomMember: membersAt(entryEpoch) else: @[]),
                       epoch: entryEpoch, declared: declared)
   let envelope = @[row("timing", obStoreNode), row("topic", obStoreNode)]
+  let standing = voiceStanding(events)   # the voice fold's parts, by event id
   for i in 0 ..< ordered.len:
     let e = ordered[i]
     let p = e.key.split('/')
@@ -119,13 +121,17 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
       result.addRows(i, "file", "", rows & envelope, true)
       continue
     if p[0] == "voice":
-      # a voice note's part (docs/design/voice-notes.md §10): the members who hold its
-      # epoch's key can play the note and learn its length. The store node keeps the
-      # envelope, as for any entry, and sees its size, which says nothing of the note:
-      # session.publish pads every voice/ frame to one fixed size (§4). Read from the key
-      # alone; the value, half a clip, is never parsed here.
-      result.addRows(i, "voice", "", @[row("voice-note", obRoomMember),
-        row("voice-note-length", obRoomMember)] & envelope & @[row("fixed-size", obStoreNode)], true)
+      # docs/design/voice-notes.md §10. A part is one the fold stands (voiceStanding, the
+      # header pass: rules 2 to 4), as in provenance and so the room map: the members who
+      # held its epoch's key can play its note and learn its length. An entry under voice/
+      # that is no note's part tells the room nothing. Either way the store node keeps the
+      # envelope and sees one fixed size, which marks a voice note but not its length: the
+      # sending client's session.publish pads every voice/ frame (§4), whatever its shape.
+      # Ingest does not check the size of a frame another member sent, so for theirs this
+      # is what an honest client sends.
+      let inside = (if eventId(e) in standing: @[row("voice-note", obRoomMember),
+                      row("voice-note-length", obRoomMember)] else: @[])
+      result.addRows(i, "voice", "", inside & envelope & @[row("fixed-size", obStoreNode)], true)
       continue
     if p.len < 3 or p[0] != "intent":
       # an entry this fold does not know still reached the store node as an envelope

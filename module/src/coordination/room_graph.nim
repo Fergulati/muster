@@ -14,13 +14,17 @@
 ##    entry carries its value, parsed — message text, the effect, context, read values,
 ##    signatures, chain references, payment reports, shared material, account details —
 ##    beside its structure. It carries nothing the member's client did not decrypt. One kind
-##    is the exception: a voice note's part carries its metadata alone, never its half of the
-##    clip (docs/design/voice-notes.md §10), because no hosted method returns audio and any
-##    caller can read the map (coordinate_graph; with the access policy off, any module).
+##    is the exception: an entry under voice/ carries a voice note's metadata alone, never
+##    its half of the clip (docs/design/voice-notes.md §10), so that no hosted method but
+##    coordinate_proof returns audio (that one is the operator's decision, §18): any caller
+##    can read the map (coordinate_graph; with the access policy off, any module).
 ##  * An actor is named only where the log proves it: an author-signed kind's author
 ##    (authorship.nim), a driver-counted approval's signer, a binding's verified link.
 ##    An entry the fold refused (an uncounted approval, a substitute proposal) stays in
-##    the graph, unattributed and marked so (invariant 9).
+##    the graph, unattributed and marked so (invariant 9). An uncounted entry of an
+##    author-signed kind (an account disclosure, a ceremony join or a file/ entry, which
+##    provenance never lists; a voice/ entry the voice fold does not stand) is still its
+##    signer's, since authorship proved who signed it, and its facet says both.
 ##  * Nothing here is per-viewer but `viewer` and `readFrom`: two members' graphs of the
 ##    same log differ only there. The input is what the viewer's client could open, so a
 ##    later joiner's graph holds nothing from before its admission (invariant 7, F-16).
@@ -98,15 +102,23 @@ proc rawKind(p: seq[string]): string =
 proc facet(about, class, party, mechanism: string): JsonNode =
   %*{"about": about, "class": class, "party": party, "mechanism": mechanism}
 
-proc facetsFor(kind, attestation, source: string, counted: bool, epoch: int): JsonNode =
+proc facetsFor(kind, attestation, source: string, counted, attributed: bool, epoch: int): JsonNode =
+  ## `attributed`: the map names the entry's signer (an author-signed kind, by authorship.nim)
   result = newJArray()
   result.add facet("who could read it", "imperative", "",
     "sealed under epoch " & $epoch & "'s key: only the members of that epoch could open it")
-  result.add facet("that it exists", "exposed", "the store node",
-    "it keeps every envelope, so it sees when this one arrived and which topic it is on, never what it says")
+  if kind == "voice":
+    # every voice/ frame a client sends is padded to one size (voice-notes.md §4, §10)
+    result.add facet("that it exists", "exposed", "the store node",
+      "it keeps every envelope, so it sees when this one arrived, which topic it is on and its one fixed size, " &
+      "which marks a voice note but not its length; never what it says")
+  else:
+    result.add facet("that it exists", "exposed", "the store node",
+      "it keeps every envelope, so it sees when this one arrived and which topic it is on, never what it says")
   if not counted:
     result.add facet("this entry", "not-applicable", "",
-      "the fold refused it, so it counts for nothing and names no one")
+      (if attributed: "the fold counts it for nothing; its author signed it, bound to this room"
+       else: "the fold refused it, so it counts for nothing and names no one"))
     return
   case kind
   of "message":
@@ -212,8 +224,8 @@ proc voiceContentOf(value: string): JsonNode =
 proc contentOf(e: Event, p: seq[string]): JsonNode =
   ## An entry's content: its value parsed (a JSON object as is, anything else under
   ## "value"), with what its key says spelled out — the read's field, the part and step,
-  ## the requirement a material fills, the admitted member and epoch. A voice note's part
-  ## is the exception: its metadata alone (voiceContentOf).
+  ## the requirement a material fills, the admitted member and epoch. An entry under voice/
+  ## is the exception, a part or not: a note's metadata alone (voiceContentOf).
   if p.len > 0 and p[0] == "voice": return voiceContentOf(e.value)
   result = newJObject()
   try:
@@ -369,8 +381,10 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       elif p.len >= 4 and p[0] == "intent" and p[2] == "proposer":
         basis = "author-signed"; author = p[3]; attrs["counted"] = %true
       elif p.len >= 3 and p[0] == "voice":
-        # an entry under voice/ that is no note's part (voice-notes.md §6 rule 2): the fold
-        # counts it for nothing, but authorship proved the member its key names signed it
+        # an entry under voice/ that is no note's part (voice-notes.md §6 rules 2 to 4:
+        # provenance lists only the parts the fold stands, so a key or value of the wrong
+        # shape, an equivocating later copy or a squatted note id lands here): it counts for
+        # nothing, but authorship proved the member its key names signed it
         basis = "author-signed"; author = p[2]
     attrs["basis"] = %basis
     attrs["content"] = contentOf(e, p)
@@ -380,7 +394,8 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
       except CatchableError: discard
       if source.len > 0: attrs["source"] = %source
     attrs["facets"] = facetsFor(attrs["kind"].getStr(), attrs{"attestation"}.getStr(), source,
-                                attrs["counted"].getBool(), epochAt[i])
+                                attrs["counted"].getBool(), basis == "author-signed" and author.len > 0,
+                                epochAt[i])
     addNode(id, "entry", i, epochAt[i], attrs)
     for par in e.parents:
       if par in idAt: addEdge(idAt[par], id, "parent", i)

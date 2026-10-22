@@ -1553,7 +1553,8 @@ Rectangle {
         if (n.kind === "entry") {
             d.kicker = qsTr("LOG ENTRY #%1 · EPOCH %2").arg(n.seq).arg(n.epoch);
             d.title = map.kindWord(String(a.kind || "")) + (a.account ? qsTr(" by %1").arg(map.actorName(a.account)) : "");
-            if (!a.counted) d.lead = qsTr("Not counted: the fold refused this entry, so it names no one.");
+            if (!a.counted) d.lead = a.account ? qsTr("Not counted: the fold counts this entry for nothing, though its author signed it.")
+                                               : qsTr("Not counted: the fold refused this entry, so it names no one.");
             d.rows.push([qsTr("Class"), String(a.cls || qsTr("not classed"))]);
             d.rows.push([qsTr("Attribution"), map.basisWords(String(a.basis || ""))]);
             if (a.attestation) d.rows.push([qsTr("Attestation"), String(a.attestation)]);
