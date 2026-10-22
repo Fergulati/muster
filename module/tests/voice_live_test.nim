@@ -59,6 +59,14 @@
 ##  23. coordinate_proof (`roomProof`) refuses `voice-notes-present` for a room whose raw log
 ##      holds any `voice/` entry, an unsigned or malformed one too, and exports no event; a
 ##      room with none exports the proof as before, and it verifies
+##  24. a member who received part 0 of a Send that failed between its frames sends a copy of
+##      it with a long, unsigned `after` that sorts first, so the author's log keeps that copy;
+##      the author's retry is not blocked (`too-large` before the fix, for good): it re-seals
+##      the copy the author signed, two frames of 90,153 B, and the other member holds the
+##      note complete
+##  25. a note's two frames leave back to back: when the first reaches the transport, both
+##      parts are already signed, logged and journalled, for a 1 s and a 59 s note alike, so
+##      nothing whose cost grows with the note's length runs between the two sends
 ## Needs libopus, libsecp256k1, libsodium and the miniaudio pin (run-suite.sh links them all).
 
 import std/[algorithm, json, math, os, strutils, sequtils, tables]
@@ -691,6 +699,94 @@ block:
   doAssert roomProof(s4){"error"}.getStr() == "voice-notes-present", "any voice/ entry in the raw log refuses"
   echo "23. coordinate_proof refuses voice-notes-present for a room with any voice/ entry; ",
        "a room with none exports a proof that verifies OK"
+
+# ── 24. a member's copy of a part does not block the author's retry ──────────────────
+block:
+  const topic5 = "/muster/1/room-voice-variant/proto"
+  let malKs = newInMemoryKeystore(seed(0x73), seed(0x83))
+  let ac = newEpochCrypto(aliceKs, topic5, @[bobKs.encIdentity(), malKs.encIdentity()])
+  let bc = newEpochJoiner(bobKs)
+  bc.ingestGrant(ac.grantFor(0, bobKs.encIdentity()))
+  let mc = newEpochJoiner(malKs)
+  mc.ingestGrant(ac.grantFor(0, malKs.encIdentity()))
+  let refuse = refuser(net, topic5)       # before the members: none sees what it refuses
+  let w5 = tap(net, topic5)
+  let a5 = newCoordinationSession(newLocalTransport(net), ac, topic5)
+  let b5 = newCoordinationSession(newLocalTransport(net), bc, topic5)
+  let m5 = newCoordinationSession(newLocalTransport(net), mc, topic5)
+  let vc = VirtualClock()
+  let a = newVoiceRecorder(newSyntheticAudioIo(sine(1000.0, 2 * Second), vc.clock))
+  discard a.recordFor(vc, a5, 1_000)
+  refuse.left = 1                         # part 0 goes out, part 1 is refused
+  doAssertRaises(IOError): discard a.draftSend(a5, aliceKs, nextTs())
+  # Mallory, who received part 0, sends a copy of it: the same id, an `after` of 1,400
+  # made-up ids nobody signed, ground until it sorts before Alice's copy, so her log keeps it
+  var p0: Event
+  for e in m5.log.allEvents():
+    if isVoiceKey(e.key) and e.key.split('/')[3] == "0": p0 = e
+  doAssert p0.key.len > 0, "Mallory holds part 0"
+  let aliceCopy = a5.log.find(eventId(p0)).event
+  var v = p0
+  var n = 0
+  while true:
+    inc n
+    v.after = @[]
+    for k in 0 ..< 1400: v.after.add hex(seed(byte(n and 0xff))) & ($k).align(6, '0') & ($n).align(58, '0')
+    v.afterSig = ""
+    if afterDigest(v) < afterDigest(aliceCopy): break
+  var j = %*{"parents": [], "key": v.key, "value": v.value}
+  j["after"] = %v.after
+  var plain: seq[byte]
+  for c in $j: plain.add byte(c)
+  doAssert plain.len > 90_112, "the copy does not fit a voice frame: " & $plain.len & " B"
+  discard newLocalTransport(net).publish(topic5, @[0x00'u8] & mc.seal(plain))
+  doAssert a5.log.find(eventId(p0)).event.after.len == 1400, "Alice's log keeps Mallory's copy"
+  let before = w5.dataFrames().len
+  let sent = a.draftSend(a5, aliceKs, nextTs()).ck
+  doAssert sent{"note"}.getStr().len == 32, "the retry is not blocked: " & $sent
+  let resent = w5.dataFrames()[before .. ^1]
+  doAssert resent.len == 2 and resent.allIt(it.len == WireBytes), "two frames of 90,153 B: " & $resent.mapIt(it.len)
+  let bobHolds = reduceVoice(b5.roomEvents())
+  doAssert bobHolds.len == 1 and bobHolds[0].nid == sent["note"].getStr() and bobHolds[0].state == vsComplete, $bobHolds
+  echo "24. a member's long unsigned copy of part 0, kept by the author's log, does not block ",
+       "the retry: it re-seals the author's own copy, two frames of 90,153 B, complete for Bob OK"
+
+# ── 25. a note's two frames leave back to back ───────────────────────────────────────
+block:
+  const topic6 = "/muster/1/room-voice-burst/proto"
+  let ac = newEpochCrypto(aliceKs, topic6, @[bobKs.encIdentity()])
+  let bc = newEpochJoiner(bobKs)
+  bc.ingestGrant(ac.grantFor(0, bobKs.encIdentity()))
+  let a6 = newCoordinationSession(newLocalTransport(net), ac, topic6)
+  var journal: seq[seq[byte]]
+  a6.setJournal(proc (f: seq[byte]) {.gcsafe.} = {.cast(gcsafe).}: journal.add f)
+  let b6 = newCoordinationSession(newLocalTransport(net), bc, topic6)
+  # when the first voice frame reaches the transport, what of the note is already done
+  var atFirst: tuple[logged, journalled, frames: int] = (-1, -1, 0)
+  newLocalTransport(net).subscribe(topic6, proc (m: IncomingMessage) {.gcsafe.} =
+    {.cast(gcsafe).}:
+      if m.payload.len == WireBytes:
+        if atFirst.frames == 0:
+          atFirst.logged = a6.log.allEvents().countIt(isVoiceKey(it.key))
+          atFirst.journalled = journal.deduplicate().countIt(it.len == WireBytes)
+        inc atFirst.frames)
+  for secs in [1, 59]:
+    atFirst = (-1, -1, 0)
+    journal = @[]
+    let vc = VirtualClock()
+    let a = newVoiceRecorder(newSyntheticAudioIo(sine(1000.0, (secs + 1) * Second), vc.clock))
+    discard a.recordFor(vc, a6, secs * 1000)
+    let before = a6.log.allEvents().countIt(isVoiceKey(it.key))
+    doAssert a.draftSend(a6, aliceKs, nextTs()).ck{"note"}.getStr().len == 32
+    doAssert atFirst.frames == 2, "two voice frames: " & $atFirst
+    # both parts signed, padded, sealed, logged and journalled before the first frame leaves:
+    # what is left between the two sends is the first send itself, the same for any length
+    doAssert atFirst.logged == before + 2 and atFirst.journalled == 2,
+             "at the first send of a " & $secs & " s note: " & $atFirst & " (voice entries before: " & $before & ")"
+  let bobNotes = reduceVoice(b6.roomEvents())
+  doAssert bobNotes.len == 2 and bobNotes.allIt(it.state == vsComplete), $bobNotes
+  echo "25. both parts of a 1 s and a 59 s note are logged and journalled before the first ",
+       "frame leaves, so the two sends are back to back OK"
 
 # ── 8. no JSON carries audio or a float ─────────────────────────────────────────────
 block:

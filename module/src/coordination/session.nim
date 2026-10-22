@@ -205,30 +205,50 @@ proc replay*(s: CoordinationSession, frames: seq[seq[byte]]) =
 proc topic*(s: CoordinationSession): string = s.topic
   ## The room's content topic — what an author signature binds to (authorship.nim).
 
-proc publish*(s: CoordinationSession, ev: Event, padTo = 0) =
+proc sealFrame(s: CoordinationSession, ev: Event, padTo: int, asGiven: bool): seq[byte] =
+  ## Everything `publish` does but the send: the copy chosen, padded, recorded (the log,
+  ## `sealedIn`, the journal) and sealed. The frame it returns is for the transport.
+  var e = ev
+  let id = eventId(e)
+  if not asGiven:
+    let held = s.log.find(id)
+    if held.found: e = held.event
+    elif e.after.len == 0: e.after = s.log.heads()
+  let plain = padded(e, padFor(e.key, padTo))
+  s.log.ingest(e)
+  let ep = (try: s.crypto.epoch() except CatchableError: -1)
+  if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
+  result = @[FrameData] & s.crypto.seal(plain)
+  if s.journal != nil: s.journal(result)
+
+proc publish*(s: CoordinationSession, ev: Event, padTo = 0, asGiven = false) =
   ## Record locally, then broadcast the sealed event to the room. A new event names the
   ## log's heads in `after` (what this member had seen; never part of the id, never read
   ## by a fold). An event the log already holds — a re-announce, a second submit — is
   ## re-sealed as the stored copy, so it carries its original order, not a fresh one
-  ## (docs/design/causal-parents.md §3.2).
+  ## (docs/design/causal-parents.md §3.2). `asGiven` seals `ev` as it is, its `after` and
+  ## `afterSig` included, on either path: authorship.publishAuthored passes the copy this
+  ## member signed, never one another member planted in the log (voice-notes.md §4).
   ##
   ## `padTo` > 0 pads the sealed plaintext to exactly that many bytes (`padded`); 0 is
   ## today's frame. A `voice/` key is padded to VoiceFrameBytes on either path with no pad
   ## passed, and any other non-zero pad for one raises ValueError, as a negative pad does
   ## (`padFor`; docs/design/voice-notes.md §4). An event whose JSON is over its pad
   ## raises FrameTooLarge before the log, the journal or the transport see it.
-  var e = ev
-  let id = eventId(e)
-  let held = s.log.find(id)
-  if held.found: e = held.event
-  elif e.after.len == 0: e.after = s.log.heads()
-  let plain = padded(e, padFor(e.key, padTo))
-  s.log.ingest(e)
-  let ep = (try: s.crypto.epoch() except CatchableError: -1)
-  if ep >= 0 and (id notin s.sealedIn or ep < s.sealedIn[id]): s.sealedIn[id] = ep
-  let frame = @[FrameData] & s.crypto.seal(plain)
-  if s.journal != nil: s.journal(frame)
-  discard s.transport.publish(s.topic, frame)
+  discard s.transport.publish(s.topic, s.sealFrame(ev, padTo, asGiven))
+
+proc publishTogether*(s: CoordinationSession, n: int, next: proc (i: int): Event) =
+  ## Publish `n` events, each sealed as given (`publish`'s `asGiven`), as one burst: event
+  ## `i` is made by `next(i)` once event `i - 1` is in the log (so the heads it names
+  ## include it), padded, recorded and sealed, and only once all `n` are does any frame go
+  ## out, then every frame back to back. So nothing whose cost depends on the events'
+  ## contents runs between two sends: a voice note's two frames leave at a spacing its
+  ## length does not set (voice-notes.md §10). FrameTooLarge from any event is raised
+  ## before any frame of the burst is sent; the events before it stay recorded, as after a
+  ## send that raised.
+  var frames: seq[seq[byte]]
+  for i in 0 ..< n: frames.add s.sealFrame(next(i), 0, true)
+  for f in frames: discard s.transport.publish(s.topic, f)
 
 # ── membership handshake ───────────────────────────────────────────────────────
 

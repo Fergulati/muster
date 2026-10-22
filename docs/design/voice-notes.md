@@ -190,6 +190,19 @@ byte, for every key but one:
 
 So every voice frame is exactly 1 + 24 + 16 + 90,112 = **90,153 B**, on either path.
 
+**Which copy the held path seals** (built, on this branch). On `main`, the held path re-seals the
+copy the log keeps: of the copies of one id, the one with the smallest `afterDigest` (`log.nim`
+`keep`). Ingest takes a copy with an `after` of any length, unsigned, from any member, so a
+member who received a part could plant a copy whose `after` alone overflows the pad and that
+sorts first; every later held-path send of that part would then raise `FrameTooLarge`, and a
+retried Send would fail for good. So `publishAuthored` passes `publish` the copy to seal
+(`asGiven`): for an event the log already holds, the copy whose `after` this member signed,
+the smallest by `afterDigest` if there are several, as the room's view picks; with none, the
+event with no ordering claim, which is what the room's view makes of any copy whose `after`
+its author did not sign (`authorship.copyToSeal`). That copy's `after` came from `heads()`, at
+most 8 ids, so it fits the pad (§5). `voice_live_test` §24 plants such a copy with 1,400 ids
+and retries.
+
 Why on the frame, not inside the value:
 - `publishAuthored` signs the value first. Only then does it set `after = heads()` (0 to 8 ids,
   `log.nim:226`) and sign `afterSig` (`authorship.nim:279-287`).
@@ -211,7 +224,9 @@ and `session_pad_test` fails a NUL pad (`docs/labbook/voice-notes-audio-stack.md
   ordinary event, and its thread ignores the `voice/` key (§7).
 
 **What does not fit, raises.** An event whose JSON exceeds `padTo` raises `FrameTooLarge`
-before anything is ingested, journalled or sent. Today nothing guards size: an oversized frame
+before anything is ingested, journalled or sent. Send seals both parts before either frame
+leaves (§10), so a part that does not fit is refused before any frame of its note is sent; for
+a draft under the cap neither can (§5). Today nothing guards size: an oversized frame
 lands in the sender's own log and reaches nobody, and a failed send is logged only under
 `MUSTER_LP_DEBUG` (`transport/delivery.nim:118-123`).
 
@@ -460,12 +475,15 @@ declares a return type.
   which room holds the draft yet, so S8's draft surface shows a draft in whichever room is
   open and says whose it is only when Send is refused (§18).
 - **A retried Send sends the same note, where the failure is seen.** The note's ts is fixed at
-  the draft's first Send. `session.publish` puts each part into the log and the journal
-  before the transport sees it (`session.nim` `publish`), so after a Send that failed between
-  its two parts, the log holds both, and a retry re-sends both on the held path (§4), under
-  the same note id. That covers `too-large` and a transport that raises (`voice_live_test`
-  §15 makes one raise through a `LocalTransport` subscriber). Until the retry, the sender's
+  the draft's first Send. Send signs both parts and puts each into the log and the journal
+  before either frame reaches the transport (`session.publishTogether`, §10), so after a
+  transport raised between the two frames, the log holds both, and a retry re-sends both on
+  the held path (§4), under the same note id, each as this member first sealed it, so a copy
+  another member planted cannot block it (`voice_live_test` §15 makes the transport raise
+  through a `LocalTransport` subscriber, §24 adds such a copy). Until the retry, the sender's
   own thread shows the note complete while the room may hold only its first part.
+  `too-large` is refused before any frame leaves, and cannot happen for a draft under the
+  cap (§4, §5).
 - **The live transport raises nothing.** `DeliveryTransport.publish` is fire-and-forget: it
   hands the frame to `lp_invoke_async` and returns, and a failed send is logged only under
   `MUSTER_LP_DEBUG` (`delivery.nim:118-123`, `:202-212`). So if either 90 KB frame fails on
@@ -686,7 +704,16 @@ sixth. Each stays true after this PR:
 2. **Size and timing are visible.** The store node sees the two frames at the moment of Send.
    Their size marks them as a voice note: chat frames are far smaller, and the largest
    events the tree sends today, Monero multisig blob parts, are of the same scale. Only the
-   length is hidden. Like text, the store keeps the
+   length is hidden. That takes the time between the two frames too: sent one part at a
+   time, the second frame waited on its own signing, hashing and encoding, about 20 to 30 µs
+   more per second of audio (0.36 ms for a 0.5 s note, 2.1 ms for 60 s, measured on
+   darwin-arm64 outside the repo), and each Waku message carries its publisher's nanosecond
+   timestamp, which the store keeps (`store_catchup.nim:149` on `main`). So Send signs,
+   records and seals both parts first and then hands both frames to the transport back to
+   back (`session.publishTogether`), with nothing between them whose cost depends on the
+   note (`voice_live_test` §25; the same measurement then shows under 1 µs between the two
+   calls at every length). What the delivery node adds between two sends of the same size
+   on its side of the IPC hop is not measured (§15). Like text, the store keeps the
    ciphertext for as long as the fleet's capacity policy allows, and `room_journal` keeps it
    sealed on every member's disk. A note is exactly as forward-secret as the room's text: a
    later holder of that epoch's key opens it.
@@ -888,7 +915,7 @@ unverified, built or planned:
   And a failed delivery is not seen. `DeliveryTransport.publish` is fire-and-forget (§8), so
   if either frame fails on the fleet, `voice_draft_send` returns `{note}` and drops the
   draft, and the note can stay `arriving` for every other member: no path re-sends it
-  (§18). The retry of §8 covers only `too-large` and a transport that raises, and
+  (§18). The retry of §8 covers only a transport that raises, and
   `voice_live_test` §15 raises through a `LocalTransport` subscriber, a failure the hosted
   module never sees.
 - **A half-sent note looks whole to its sender.** `session.publish` logs a part before the
@@ -1022,15 +1049,11 @@ unverified, built or planned:
   `logos_host`, in `DeliveryModuleCdylibProvider::emitTrampoline` on its event thread. That
   was not investigated, and no run of `origin/main` was made to compare, so whether this
   branch has any part in it is not known.)
-- **A Send that a member's variant blocks.** The held path re-seals the copy the log keeps,
-  the one with the smallest `afterDigest`, and nothing caps the length of `after` on ingest
-  (`session.nim` `publish`, `log.nim` `keep` and `ingest`). So a member who saw a part can
-  ingest a variant of it with a long, unsigned `after` that sorts first; from then on every
-  held-path send of that part raises `FrameTooLarge`, which `voice_draft_send` returns as
-  `too-large`. A first Send never takes the held path, so this bites only a retry. No
-  unpadded frame leaves, but such a retry fails for good. The fix, re-sealing a copy whose
-  `after` fits (the author's own) or refusing a long `after` on ingest, is `session.nim`'s
-  and not built.
+- **The time between a note's two frames, past the module.** Muster hands the two frames to
+  `delivery_module` back to back (§10, item 2), but each Waku timestamp is set by the
+  delivery node, after the IPC hop, and what that node does between two sends of the same
+  size (on `logos.test`, an RLN proof each) is not measured, so neither is the spacing a
+  store node records.
 - **Checks that are Linux-only or the maintainer's:**
   - the runner self-tests and `ui-parity.sh` for both UIs, `scripts/voice-self-test.sh` and
     its `voice` entry among them (S9, above);

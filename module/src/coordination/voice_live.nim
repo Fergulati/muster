@@ -29,14 +29,18 @@
 ## through another room's session is `room-changed`. Send refuses a draft under 500 ms as
 ## `too-short` (a recording of nothing included), then an all-zero one as `silent` with the
 ## platform note (§11: on macOS, Basecamp 0.3.2's logos_host lacks the microphone
-## permission), and publishes nothing then. A note's ts is fixed at its first Send, so a Send
-## retried after it failed between its parts re-sends the same note id: after `too-large`
-## (FrameTooLarge), or a transport that raised. The log takes each part before the transport
-## does, so such a retry re-sends both on the held path, and until it does the sender's own
-## fold calls the note complete while the room may hold half of it. On the hosted
-## DeliveryTransport a failed send is not seen at all: its publish is fire-and-forget, so Send
-## returns {note} and drops the draft, and a part the fleet lost leaves the note arriving for
-## the others, with nothing that re-sends it (voice-notes.md §8, §15).
+## permission), and publishes nothing then. Send signs, records and seals both parts before
+## either frame goes out, then hands the two to the transport back to back
+## (authorship.publishAuthoredTogether), so the gap between them does not grow with the
+## note's length (§10). A note's ts is fixed at its first Send, so a Send retried after a
+## transport raised between the frames re-sends the same note id: the log took both parts
+## first, so the retry re-seals both on the held path, each as this member first sealed it,
+## never a copy another member planted (§4); until then the sender's own fold calls the note
+## complete while the room may hold half of it. `too-large` (FrameTooLarge) cannot happen for
+## a draft under the cap (§5's worst case fits) and is refused before any frame leaves. On the
+## hosted DeliveryTransport a failed send is not seen at all: its publish is fire-and-forget,
+## so Send returns {note} and drops the draft, and a part the fleet lost leaves the note
+## arriving for the others, with nothing that re-sends it (voice-notes.md §8, §15).
 ##
 ## The thread's rows (`rows`, and `messagesJson` as coordinate_messages serves them) go
 ## through `threadRows` with one `VoiceMemo` per room, so a clip is decoded and checked once
@@ -287,9 +291,11 @@ proc draftSend*(v: VoiceRecorder, s: CoordinationSession, ks: Keystore, ts: int6
   ## or {error}, the draft kept on each: no-draft; too-short (under 500 ms, a recording of
   ## nothing included); silent (every sample exactly zero; with `detail`, the platform note);
   ## not-joined; room-changed (`s` is another room than the one the draft was recorded in);
-  ## too-large (a part did not fit its frame, FrameTooLarge; a retry sends the same note).
-  ## A transport that raises between the parts raises out of here with the draft kept, and a
-  ## retry sends the same note; DeliveryTransport never raises (the module header).
+  ## too-large (a part did not fit its frame, FrameTooLarge, before any frame left; never for
+  ## a draft under the cap). Both parts are sealed before either frame goes out, then sent
+  ## back to back. A transport that raises between the frames raises out of here with the
+  ## draft kept, and a retry sends the same note; DeliveryTransport never raises (the module
+  ## header).
   discard v.pump()                    # a draft the cap made since the last read is a draft
   if v.state != rsDraft: return refusal("no-draft")
   if v.draft.durationMs < VoiceMinMs: return refusal("too-short")
@@ -301,7 +307,7 @@ proc draftSend*(v: VoiceRecorder, s: CoordinationSession, ks: Keystore, ts: int6
     v.draftTsSet = true
   let (nid, parts) = voiceEvents(hexOf(ks.encIdentity().toBytes()), v.draft, v.draftTs)
   try:
-    for e in parts: s.publishAuthored(ks, e)
+    s.publishAuthoredTogether(ks, parts)
   except FrameTooLarge:
     return refusal("too-large")
   if v.playNote == DraftNote: v.releasePlayback()
