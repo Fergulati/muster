@@ -641,7 +641,7 @@ seven `logos_module_*` entry points and a constructor). So S7 does two things (b
 | store node (delivery) | that the room's topic carried two frames of 90,153 B each, and when; the publishing node, unless `mix` is on; a frame that size marks a voice note | its length, which member sent it (FS-7), the audio |
 | relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
 | mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
-| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, in any room it makes the current one, send or discard the draft, play the draft or a note aloud (§13) | the audio, through any method: no voice method returns it, S6 closed `coordinate_graph`, and `coordinate_proof` refuses a room holding a voice note (below) |
+| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, in any room it makes the current one, send or discard the draft, play the draft or a note aloud (§13) | the audio, through any method: no voice method returns it, S6 closed `coordinate_graph`, and `coordinate_proof` refuses a room holding a voice note (below; a member's copy of a note this member's view does not hold is "What is left" there) |
 | a module loaded beside another member's Muster from before voice notes (0.3.2 or earlier) (access policy off) | every note's clip, through that member's `coordinate_graph` and `coordinate_proof`, which return each part's value whole (§7; "What still leaks", item 6) | nothing of a note sealed in an epoch that member never held |
 
 **Two methods that returned raw log content.** No voice method returns audio. But a part's
@@ -919,7 +919,9 @@ carries state, position and peak only. That is unlike `coordinate_messages`, whi
 room plaintext to any caller (`side-modules.md:104`). Two methods that returned raw log
 content, `coordinate_graph` and `coordinate_proof`, would have handed it the clip. S6 closed
 the first. The second refuses a room holding a voice note until the operator decides between
-an exception and a new proof form (§10, §18). On the machine of a member
+an exception and a new proof form (§10, §18); an entry under `voice/` that is no note's part
+leaves with the proof, so a member's copy of a note this member's view does not hold leaves
+too (§10, "What is left"). On the machine of a member
 who runs a Muster from before voice notes (0.3.2 or earlier), both still return it, and
 nothing here reaches that code (§10, "What still leaks", item 6).
 
