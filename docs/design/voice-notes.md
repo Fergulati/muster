@@ -637,17 +637,30 @@ differ:
   `room_graph.nim:208-229` on this branch). `voice_test` §14 pins that field by field, and
   finds no 48-character stretch of any half, taken at every 24-character step and at its end,
   in the map `toJson` gives.
-- **`coordinate_proof`: refused until the operator decides** (§18). A room whose raw log
-  holds any `voice/` entry, by the key's first segment as the session pads one, and an
-  unsigned or malformed one too, exports no proof: `{error: "voice-notes-present", detail}`
-  (`voice_live.roomProof`, `voice_live_test` §23). A room with none exports its proof as
-  before. That keeps the fixed decision that no hosted method returns audio, at the cost of
-  no proof export for a room with a voice note. The operator then picks one of two. One
-  option keeps raw values, since a proof accounts for every entry, and says here that a proof
-  export carries the audio. That amends the IPC decision for this one explicit export. The
-  other is a proof form that carries a voice part as a committed digest. Because today's id
-  hashes the value itself, that means a new proof format, and perhaps a new id derivation,
-  not a filter on today's.
+- **`coordinate_proof`: refused until the operator decides** (§18). A room whose authentic
+  view holds a part the fold stands (`voiceStanding`, §6's header pass: a part of a note
+  complete, arriving or broken, as every member's own note is) exports no proof:
+  `{error: "voice-notes-present", detail}` (`voice_live.roomProof`, `voice_live_test` §23,
+  §26). Any other room exports its proof as before, with every entry under `voice/` that is
+  no note's part: unsigned, a forged author, a malformed value, a squatted note id or a key
+  of the wrong shape. Until PR 340's review the refusal took any `voice/` key in the raw log,
+  and the log is append-only, so one member's junk entry switched the room's proof off for
+  good; now only a note does.
+  - **What is left.** An entry that is no note's part leaves with the proof whole, as a
+    message's body does. So junk that copies a note's bytes carries them out when this
+    member's view holds none of that note's own parts: a note sealed in an epoch this member
+    never held, re-posted in one they hold, or a note whose parts the fleet lost while the
+    copy arrived. When the view holds the note, the note refuses the proof. A member who can
+    play a note can post its bytes in a message's body as well, which `coordinate_messages`
+    serves to any caller. `voice_live_test` §26 pins this case.
+
+  That keeps the fixed decision that no hosted method returns a note's audio from this
+  member's view, at the cost of no proof export for a room with a voice note. The operator
+  then picks one of two. One option keeps raw values, since a proof accounts for every
+  entry, and says here that a proof export carries the audio. That amends the IPC decision
+  for this one explicit export. The other is a proof form that carries a voice part as a
+  committed digest. Because today's id hashes the value itself, that means a new proof
+  format, and perhaps a new id derivation, not a filter on today's.
 - **Neither on an older client.** A member on a Muster from before voice notes (0.3.2 or
   earlier) holds the same parts and returns them whole through both methods; nothing in this
   PR reaches their code ("What still leaks", item 6).
@@ -995,9 +1008,13 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   `side-modules.md` S4, `exo-ff5.4`, not built). `voice.nim`'s own cost is measured (§6), but
   `roomEvents`' authorship checks over 84 KB values are not, and nor is the whole hosted read.
 - **Audio over `coordinate_proof`** (§10). It refuses `voice-notes-present` for a room whose
-  raw log holds any `voice/` entry, so no proof of such a room leaves the module until the
-  operator decides; `voice_live_test` §23 holds the refusal on `roomProof`, which the hosted
-  method calls after its `not-joined` check and a poll. S6 stripped the audio from the room
+  authentic view holds a part the fold stands, so no proof of a room with a voice note leaves
+  the module until the operator decides; `voice_live_test` §23 and §26 hold the refusal on
+  `roomProof`, which the hosted method calls after its `not-joined` check and a poll. An
+  entry under `voice/` that is no note's part refuses nothing and leaves with the proof
+  whole, so junk that copies a note's bytes carries them out of a room whose view holds none
+  of that note's parts (§10, "What is left"): §26 pins that in process, and no run has
+  looked for it on the fleet. S6 stripped the audio from the room
   map: an entry's content is `v`, `ts`, `durMs` and `digest` at most, and `voice_test` §14
   finds no 48-character stretch of any half, taken at every 24-character step and at its end,
   in the map `toJson` gives. So a leaked stretch of 71 characters or more is caught wherever
@@ -1370,8 +1387,12 @@ Still open:
   event's value whole, so a proof of a room with a note carries its Opus to the caller. Either
   the proof export is named as an exception to "audio plaintext never crosses IPC", or a new
   proof form carries voice parts as committed digests. Until then `coordinate_proof` refuses
-  `voice-notes-present` for a room whose raw log holds any `voice/` entry, so such a room
-  exports no proof at all;
+  `voice-notes-present` for a room whose authentic view holds a part the fold stands, so a
+  room with a voice note exports no proof at all. Since the review it no longer refuses for
+  junk: an entry under `voice/` that is no note's part refuses nothing, so no member can
+  switch a room's proof off for good, and it leaves with the proof whole, so a copy of a
+  note's bytes leaves too when this member's view holds none of that note's parts (§10). A
+  proof form that commits a part by digest would close that as well;
 - **a re-send path for a note the fleet half-delivered** (§8, §15). Delivery's send is
   fire-and-forget, so a part it lost is never seen, and nothing re-publishes a voice part:
   `coordinate_reannounce` re-sends intents only. Options: a voice part joins what

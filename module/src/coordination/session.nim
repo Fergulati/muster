@@ -89,8 +89,9 @@ proc encodeEvent(e: Event): seq[byte] =
 
 proc isVoiceKey*(key: string): bool =
   ## A voice note's part (voice-notes.md §3.3), by the key's first segment, as `authorOf`
-  ## classifies a kind: so nothing a fold reads as a voice part leaves unpadded, and no log
-  ## proof of a room holding one leaves the module (voice_live.roomProof, §10).
+  ## classifies a kind: so nothing a fold reads as a voice part leaves unpadded. Whether a
+  ## room holds a note, which a log proof is refused for, is the fold's (voice_live.roomProof,
+  ## §10).
   key.split('/', maxsplit = 1)[0] == "voice"
 
 proc padFor(key: string, padTo: int): int =

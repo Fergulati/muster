@@ -56,9 +56,9 @@
 ##      holds open, miniaudio's context included
 ##  22. coordinate_messages' rows (`messagesJson`): a message's row is exactly {id, author, ts,
 ##      body, alias, self}, a note's the same plus `voice`, with an empty body
-##  23. coordinate_proof (`roomProof`) refuses `voice-notes-present` for a room whose raw log
-##      holds any `voice/` entry, an unsigned or malformed one too, and exports no event; a
-##      room with none exports the proof as before, and it verifies
+##  23. coordinate_proof (`roomProof`) refuses `voice-notes-present` for a room holding a
+##      voice note, and exports no event; a room with none exports the proof as before, and it
+##      verifies; an unsigned `voice/` entry of no note's shape refuses nothing (§26)
 ##  24. a member who received part 0 of a Send that failed between its frames sends a copy of
 ##      it with a long, unsigned `after` that sorts first, so the author's log keeps that copy;
 ##      the author's retry is not blocked (`too-large` before the fix, for good): it re-seals
@@ -67,6 +67,12 @@
 ##  25. a note's two frames leave back to back: when the first reaches the transport, both
 ##      parts are already signed, logged and journalled, for a 1 s and a 59 s note alike, so
 ##      nothing whose cost grows with the note's length runs between the two sends
+##  26. coordinate_proof refuses only a room whose authentic view holds a part the fold stands
+##      (voiceStanding): a room whose raw log holds only junk under voice/ (unsigned, a forged
+##      author, a malformed value, a squatted note id, keys of the wrong shape) exports a proof
+##      that accounts for every raw entry (exo-f76) and verifies, a copied half of a note's
+##      clip with it (voice-notes.md §10's residual); beside the same junk, a note arriving,
+##      complete or broken refuses with the same error and detail as before
 ## Needs libopus, libsecp256k1, libsodium and the miniaudio pin (run-suite.sh links them all).
 
 import std/[algorithm, json, math, os, strutils, sequtils, tables]
@@ -696,8 +702,11 @@ block:
   doAssert okP, why
   s4.publish(Event(key: "voice/not-a-note", value: "{}"))   # unsigned, no note's shape
   doAssert reduceVoice(s4.roomEvents()).len == 0, "no fold stands it"
-  doAssert roomProof(s4){"error"}.getStr() == "voice-notes-present", "any voice/ entry in the raw log refuses"
-  echo "23. coordinate_proof refuses voice-notes-present for a room with any voice/ entry; ",
+  # since the review (corpetty, PR 340): a voice/ entry no fold stands refuses nothing, so
+  # one member's junk cannot switch the room's proof off for good; §26 holds the rest
+  let pj = roomProof(s4)
+  doAssert pj{"error"} == nil and pj["events"].len == 2, "a voice/ entry no fold stands refuses nothing: " & $pj{"error"}
+  echo "23. coordinate_proof refuses voice-notes-present for a room holding a voice note; ",
        "a room with none exports a proof that verifies OK"
 
 # ── 24. a member's copy of a part does not block the author's retry ──────────────────
@@ -787,6 +796,68 @@ block:
   doAssert bobNotes.len == 2 and bobNotes.allIt(it.state == vsComplete), $bobNotes
   echo "25. both parts of a 1 s and a 59 s note are logged and journalled before the first ",
        "frame leaves, so the two sends are back to back OK"
+
+# ── 26. a proof is refused for a note's part the room's view stands, not for junk ────
+block:
+  let malKs = newInMemoryKeystore(seed(0x74), seed(0x84))
+  proc signedAs(ks: Keystore, room: string, e: Event): Event =
+    ## `e` signed by `ks` for `room`, whoever its key names: a forgery unless `ks` is its author.
+    var j = parseJson(e.value)
+    j["authorSig"] = %hex(ks.edSign(authorDigest(room, e)))
+    Event(parents: e.parents, key: e.key, value: $j)
+  let (okR, record) = voiceRecordOf(bobS.roomEvents(), nid1)
+  doAssert okR
+  let clip = decodeRecord(record).clip                 # a real note's clip, 3 s
+  proc junkRoom(t: string): tuple[s: CoordinationSession, copied: string] =
+    ## A room of Alice's whose raw log holds a message and, under voice/, only junk: entries
+    ## the room's view drops (unsigned, a forged author) and entries it keeps that no fold
+    ## stands (a malformed value, a squatted note id, keys of the wrong shape). The unsigned
+    ## one copies a real note's half; `copied` is that half.
+    let s = newCoordinationSession(newLocalTransport(net), newEpochCrypto(aliceKs, t, @[]), t)
+    let (_, m) = newMessageEvent(alice, nextTs(), "no note here", 3)
+    s.publishAuthored(aliceKs, m)
+    let (nid, parts) = voiceEvents(alice, clip, nextTs())
+    s.publish(parts[0])                                                    # unsigned
+    s.publish(signedAs(malKs, t, parts[1]))                                # Mallory, under Alice's key
+    var bad = parseJson(parts[1].value)
+    bad["part"] = %"    AB"                                                # base64 decode reads past the end of
+    s.publish(signedAs(aliceKs, t, Event(key: parts[1].key, value: $bad)))
+    s.publish(signedAs(aliceKs, t, Event(key: parts[0].key, value: $(%*{"v": 1}))))
+    s.publish(signedAs(aliceKs, t, Event(key: "voice/" & "0f".repeat(16) & "/" & alice & "/0/2",
+                                         value: parts[0].value)))           # squatted: her clip, another nid
+    s.publish(signedAs(aliceKs, t, Event(key: "voice/" & nid & "/" & alice & "/0/3", value: parts[0].value)))
+    s.publish(Event(key: "voice/not-a-note", value: "{}"))
+    (s, parseJson(parts[0].value)["part"].getStr())
+  let (j, copied) = junkRoom("/muster/1/room-voice-junk/proto")
+  let raw = j.log.allEvents()
+  let junk = raw.filterIt(isVoiceKey(it.key))
+  doAssert junk.len == 7 and raw.len == 8, $junk.len & " " & $raw.len
+  doAssert j.roomEvents().countIt(isVoiceKey(it.key)) == 4, "the view keeps the four Alice signed"
+  doAssert voiceStanding(j.roomEvents()).len == 0 and reduceVoice(j.roomEvents()).len == 0, "no fold stands any"
+  let p = j.roomProof()
+  doAssert p{"error"} == nil, "junk alone refuses nothing: " & $p
+  let ids = p["ids"].getElems().mapIt(it.getStr())
+  doAssert p["events"].len == raw.len, $p["events"].len
+  for e in raw: doAssert eventId(e) in ids, "the proof accounts for every raw entry (exo-f76): " & e.key
+  let (okP, why) = verifyProof(proofFromJson(p))
+  doAssert okP, why
+  # what it costs (voice-notes.md §10): junk that copies a note's bytes, in a room whose view
+  # holds none of that note's parts, leaves with the proof, as a message's body would
+  doAssert copied.len > 1_000 and copied in $p
+  # a note the fold stands, whatever its state, refuses as before, beside the same junk
+  let (_, brokenParts) = voicePartEvents(alice, newSeq[byte](300), nextTs(), 1_000)
+  for (what, k) in [("arriving", 1), ("complete", 2), ("broken", -1)]:
+    let (r, _) = junkRoom("/muster/1/room-voice-junk-" & what & "/proto")
+    let parts = (if k < 0: brokenParts else: voiceEvents(alice, clip, nextTs()).events)
+    for i in 0 ..< (if k < 0: 2 else: k): r.publishAuthored(aliceKs, parts[i])
+    let notes = reduceVoice(r.roomEvents())
+    doAssert notes.len == 1 and $notes[0].state == what, what & ": " & $notes
+    let q = r.roomProof()
+    doAssert q == %*{"error": ProofRefusal, "detail": ProofRefusalDetail}, what & ": " & $q
+    doAssert q["error"].getStr() == "voice-notes-present"
+  echo "26. a room whose raw log holds only junk under voice/ (unsigned, a forged author, a malformed ",
+       "value, a squatted note id, wrong-shape keys) exports a proof that accounts for every entry; ",
+       "a note arriving, complete or broken refuses voice-notes-present as before OK"
 
 # ── 8. no JSON carries audio or a float ─────────────────────────────────────────────
 block:

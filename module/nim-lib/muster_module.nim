@@ -3280,8 +3280,9 @@ proc musterCoordinateProvenance(): string =
 proc musterCoordinateProof(): string =
   ## An exportable, self-verifying proof of the room's log (M4). Epoch-scoped: the
   ## range is the founding epoch to the current one; only holders can read it. A proof
-  ## carries every raw value whole, so a room whose log holds a voice note's part exports
-  ## none (`voice-notes-present`): audio never leaves the module (voice_live.roomProof,
+  ## carries every raw value whole, so a room whose view holds a part the voice fold stands
+  ## exports none (`voice-notes-present`): a note's audio never leaves the module; an entry
+  ## under voice/ that is no note's part refuses nothing (voice_live.roomProof,
   ## docs/design/voice-notes.md §10, §18).
   if gSession == nil: return $(%*{"error": "not-joined"})
   gSession.poll()

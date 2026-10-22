@@ -49,15 +49,15 @@
 ## per pair of standing parts, not on every read (§6).
 ##
 ## `roomProof` is coordinate_proof while voice notes are in the tree: a log proof carries every
-## raw value whole, a voice part's half of the clip with it, so it refuses a room whose raw
-## log holds any `voice/` entry (§10, §18).
+## raw value whole, a voice part's half of the clip with it, so it refuses a room whose
+## authentic view holds a part the fold stands, and nothing else (§10, §18).
 ##
 ## This module codes against AudioIo, never against miniaudio, so voice_live_test runs it on
 ## SyntheticAudioIo. Which AudioIo the module makes is `voiceIoChoice`'s: MUSTER_VOICE_SOURCE
 ## or MUSTER_VOICE_SINK give FileAudioIo (the offscreen self-test, S9), MUSTER_VOICE_BACKEND=null
 ## miniaudio's null device, anything else the platform's own backends.
 
-import std/[json, tables]
+import std/[json, sequtils, tables]
 import ../audio/[audio_io, voice_clip, voice_codec]
 import ../crypto/[keystore, curve25519]
 import ../log/[log, proof]
@@ -68,7 +68,8 @@ from ./contacts import normId
 
 const
   ProofRefusal* = "voice-notes-present"
-    ## coordinate_proof's refusal for a room whose raw log holds a `voice/` entry (§10).
+    ## coordinate_proof's refusal for a room whose authentic view holds a part the fold
+    ## stands (§10).
   ProofRefusalDetail* = "A log proof carries every event's value whole, and a voice note's " &
                         "value holds its audio, which never leaves the module. Until that is " &
                         "decided, a room with a voice note exports no proof."
@@ -353,15 +354,20 @@ proc messagesJson*(v: VoiceRecorder, s: CoordinationSession,
 proc roomProof*(s: CoordinationSession): JsonNode =
   ## coordinate_proof (M4) while voice notes are in the tree (§10, §18). A log proof carries
   ## every raw event's value whole, because its verifier recomputes each id from it, and a
-  ## voice part's value holds its half of the clip. So a room whose raw log holds any `voice/`
-  ## entry (by the key's first segment, as the session pads one), an unsigned or malformed one
-  ## too, exports no proof: {error: "voice-notes-present", detail}. Audio never leaves the
-  ## module; the operator decides between naming the export an exception and a proof form
-  ## that commits a part by digest. Any other room: buildProof's JSON over the raw log, from
-  ## epoch 0 to the current one.
+  ## voice part's value holds its half of the clip. So a room whose authentic view holds a
+  ## part the fold stands (`voiceStanding`: a part of a note complete, arriving or broken,
+  ## which every member's own note is) exports no proof: {error: "voice-notes-present",
+  ## detail}. An entry under `voice/` that is no note's part (unsigned, a forged author, a
+  ## malformed value, a squatted note id, a key of the wrong shape) refuses nothing: the log
+  ## is append-only, so a refusal for junk would let any one member switch the room's proof
+  ## off for good. Such an entry leaves with the proof, as a message's body does; one that
+  ## copies a note's bytes leaves with them when this member's view holds none of that note's
+  ## parts (§10). Audio never leaves the module; the operator decides between naming the
+  ## export an exception and a proof form that commits a part by digest. Any other room:
+  ## buildProof's JSON over the raw log, from epoch 0 to the current one.
   let events = s.log.allEvents()
-  for e in events:
-    if isVoiceKey(e.key): return %*{"error": ProofRefusal, "detail": ProofRefusalDetail}
+  if events.anyIt(isVoiceKey(it.key)) and voiceStanding(s.roomEvents()).len > 0:
+    return %*{"error": ProofRefusal, "detail": ProofRefusalDetail}
   var epochTo = 0
   try: epochTo = s.epoch()
   except CatchableError: discard
