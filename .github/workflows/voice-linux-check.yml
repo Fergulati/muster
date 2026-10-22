@@ -1,0 +1,60 @@
+# Fork-only check for the voice-notes draft PR (not part of the PR): the module suite and the
+# end-to-end voice self-test on Linux, which the contributor's Mac cannot run.
+name: voice notes on Linux
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ci/voice-notes-linux]
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: module suite (${{ matrix.runs-on }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      - name: The voice and audio tests first
+        shell: bash
+        run: module/tests/run-suite.sh voice audio session_pad
+      - name: The whole suite
+        if: always()
+        shell: bash
+        run: module/tests/run-suite.sh
+
+  selftest:
+    name: voice self-test (runner, ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+      - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      - name: Build the standalone runner
+        shell: bash
+        run: BUILD_MEM= make build
+      - name: voice-self-test.sh on the logos.dev fleet
+        shell: bash
+        run: KEEP_LOGS=1 scripts/voice-self-test.sh
+      - name: voice-self-test.sh with MUSTER_FLEET=local
+        if: always()
+        shell: bash
+        run: MUSTER_FLEET=local KEEP_LOGS=1 scripts/voice-self-test.sh
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: voice-self-test-logs
+          path: /tmp/tmp.*/*.log
+          if-no-files-found: ignore

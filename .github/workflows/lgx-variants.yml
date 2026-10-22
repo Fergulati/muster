@@ -25,6 +25,8 @@ on:
       - '.github/workflows/lgx-variants.yml'
   push:
     tags: ['v*']
+    # fork-only CI branch for the voice-notes draft PR (not part of the PR)
+    branches: [ci/voice-notes-linux]
 
 permissions:
   contents: read
