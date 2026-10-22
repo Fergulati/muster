@@ -143,9 +143,10 @@ proc hits*(m: VoiceMemo): int =
   ## How many verdicts the memo has served.
   m.hits
 
-proc partKey(key: string): tuple[ok: bool, nid, author: string, i: int] =
+proc voicePartKey*(key: string): tuple[ok: bool, nid, author: string, i: int] =
   ## Rule 2: exactly voice/<nid>/<author>/<i>/2, a 32-hex nid and a 128-hex author, both
-  ## lowercase (as voiceEvents writes them), i "0" or "1".
+  ## lowercase (as voiceEvents writes them), i "0" or "1". Read from the key alone, so the
+  ## room's other folds (provenance) class a part as the fold does without parsing its value.
   let p = key.split('/')
   if p.len != 5 or p[0] != "voice" or p[4] != $VoiceParts: return
   if not (isLowerHex(p[1], 32) and isLowerHex(p[2], 128)): return
@@ -215,7 +216,7 @@ proc gather(events: seq[Event]): OrderedTable[(string, string), Group] =
   for e in events:
     if e.key.startsWith("voice/"): voice.add e
   for e in canonicalOrder(voice):
-    let k = partKey(e.key)
+    let k = voicePartKey(e.key)
     if not k.ok: continue
     let at = (k.nid, k.author)
     if at in result and result[at].have[k.i]: continue

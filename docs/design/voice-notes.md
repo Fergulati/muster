@@ -500,7 +500,7 @@ when the host unloads the plugin is a crash risk.
 | store node (delivery) | that the room's topic carried two frames of 90,153 B each, and when; the publishing node, unless `mix` is on; a frame that size marks a voice note | its length, which member sent it (FS-7), the audio |
 | relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
 | mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
-| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13); until S6 and the operator's decision close them (below), the clip itself, through two methods that return raw log content | the audio through any voice method: none returns it |
+| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13); until the operator decides (below), the clip itself, through `coordinate_proof`, which returns raw log content (S6 closed `coordinate_graph`) | the audio through any voice method: none returns it |
 
 **Two methods that return raw log content.** No voice method returns audio. But a part's value
 holds its half of the clip as base64 Opus, and two existing methods hand event values to any
@@ -722,8 +722,9 @@ Nothing in this document is built. What is unverified even as a plan:
   and every hosted read re-runs `roomEvents` with no fold cache (the cache is
   `side-modules.md` S4, `exo-ff5.4`, not built). `voice.nim`'s own cost is measured (§6), but
   `roomEvents`' authorship checks over 84 KB values are not, and nor is the whole hosted read.
-- **Audio over `coordinate_graph` and `coordinate_proof`** (§10). Neither method strips a voice
-  part's `part` today. S6 strips it from the room map; the proof waits on the operator.
+- **Audio over `coordinate_proof`** (§10). It still returns a voice part's `part`, and waits on
+  the operator. S6 stripped it from the room map: an entry's content is `v`, `ts`, `durMs` and
+  `digest` at most, and `voice_test` §14 finds no stretch of any half in the map `toJson` gives.
 - **The size budget** (§5) is arithmetic until S4 and S5 measure the worst case.
 - **Checks that are Linux-only or the maintainer's:**
   - the runner self-tests and `ui-parity.sh` for both UIs;

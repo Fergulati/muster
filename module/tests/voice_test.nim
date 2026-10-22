@@ -38,11 +38,22 @@
 ##      any order; it holds one verdict per pair of standing parts, keyed by their ids, so
 ##      a part that comes to stand in another's place is judged afresh; threadLastTs, which
 ##      judges no clip, is the newest row's ts
+##  13. the information-flow view (§10): each part tells the room members who held its
+##      epoch's key `voice-note` and `voice-note-length`, and the store node `timing`,
+##      `topic` and `fixed-size`; no other observer, and no other row
+##  14. the room map (§10): each part is an entry of kind `voice`, author-signed, credited
+##      to the member its key names, with the facets an author-signed note has; its content
+##      is v, ts, durMs and digest at most, never `part`, so no half of any clip is anywhere
+##      in the map coordinate_graph serves; an entry under voice/ that is no note's part is
+##      still its signer's, never counted
+##  15. provenance (§10): each part is a peer message of kind `voice`, "a voice note (part i
+##      of 2)", in its author's name, accountable, on the guarantee a message carries, at
+##      the epoch whose key opened it; an entry under voice/ that is no note's part is none
 ## Clips are synthetic CDE records of 40-byte packets: the fold checks structure and digest
 ## and never decodes audio, so this test links no codec. LocalTransport + epoch crypto;
 ## needs libsecp256k1 + libsodium.
 
-import std/[json, strutils, base64, algorithm, random, sequtils]
+import std/[json, strutils, base64, algorithm, random, sequtils, tables]
 import ../src/log/log
 import ../src/transport/transport
 import ../src/crypto/epoch_crypto
@@ -55,6 +66,11 @@ import ../src/coordination/session
 import ../src/coordination/authorship
 import ../src/coordination/intent_events
 import ../src/coordination/voice
+import ../src/coordination/intents
+import ../src/coordination/flow
+import ../src/coordination/room_graph
+import ../src/drivers/driver
+import ../src/intents/disclosure
 
 proc seed(b: byte): array[32, byte] = (for i in 0 ..< 32: result[i] = b)
 proc hex(b: openArray[byte]): string =
@@ -590,5 +606,131 @@ block:
   doAssert now == reduceVoice(authenticEvents(evs & early, topic)), "the memo changes no verdict"
   echo "12. a memo of verdicts keyed by the standing parts' ids changes no fold; another part standing is judged afresh; ",
        "threadLastTs is the newest row's ts OK"
+
+# ── 13. the information-flow view: what each part tells whom (§10) ───────────────
+let stub: DriverFor = proc(kind: string): Driver = newStubDriver(rounds = 1, threshold = 1, verifyResult = true)
+let carol = hex(carolKs.encIdentity().toBytes())
+let founders = @[alice, bob, mallory]
+block:
+  # the room as the hosted layer records it: Carol's admission (§11) as the admitting
+  # member's log event, sealed under the epoch it opened, and a note of Bob's in that epoch
+  aliceS.publish(membershipEvent(1, carol))
+  let (bobNid, bobParts) = voiceEvents(bob, synthClip(1_500, 80), 1_792_003_000)
+  for e in bobParts: bobS.publishAuthored(bobKs, e)
+  doAssert noteIn(reduceVoice(bobS.roomEvents()), bobNid).state == vsComplete
+  let evs = bobS.roomEvents()
+  let rows = reduceFlow(evs, stub, founders, bobS.sealedIn)
+  proc fields(to: Observer): seq[string] =
+    for r in rows:
+      if r.kind == "voice" and r.to == to and r.field notin result: result.add r.field
+    result.sort()
+  doAssert fields(obRoomMember) == @["voice-note", "voice-note-length"], $fields(obRoomMember)
+  doAssert fields(obStoreNode) == @["fixed-size", "timing", "topic"], $fields(obStoreNode)
+  for o in Observer:
+    if o notin {obRoomMember, obStoreNode}: doAssert fields(o).len == 0, $o & " learns of a voice note"
+  # each part: exactly those five rows, at the epoch whose key opened it, its room-member
+  # rows naming the members who held that key
+  let ordered = canonicalOrder(evs)
+  var perEpoch: array[2, int]
+  for i, e in ordered:
+    if not e.key.startsWith("voice/"): continue
+    let ep = bobS.sealedIn[eventId(e)]
+    inc perEpoch[ep]
+    let mine = rows.filterIt(it.seq == i)
+    doAssert mine.mapIt(($it.to, it.field)).sorted() == @[("room-member", "voice-note"),
+      ("room-member", "voice-note-length"), ("store-node", "fixed-size"), ("store-node", "timing"),
+      ("store-node", "topic")], e.key & ": " & $mine.mapIt(($it.to, it.field))
+    let holders = (if ep == 0: sorted(founders) else: sorted(founders & carol))
+    for r in mine:
+      doAssert r.kind == "voice" and r.intentId == "" and r.declared and r.epoch == ep, $r
+      doAssert r.members == (if r.to == obRoomMember: holders else: newSeq[string]()), $r
+  doAssert perEpoch == [10, 4], "Alice's five notes in epoch 0, hers and Bob's in epoch 1: " & $perEpoch
+  doAssert rows.observerMatrix()["store-node"] == %["fixed-size", "timing", "topic"]
+  echo "13. the flow: each part tells its epoch's members a voice note and its length, the store node ",
+       "its timing, topic and one fixed size, and no one else anything OK"
+
+# Beside the room's notes, two entries of Alice's own, each genuinely signed: one under
+# voice/ that is no note's part (an i the fold refuses), and a part whose digest field
+# carries her half of the clip in place of a digest.
+let (extraNid, extraParts) = voiceEvents(alice, synthClip(800, 81), 1_792_003_100)
+let notAPart = signAuthored(aliceKs, topic,
+  Event(key: "voice/" & extraNid & "/" & alice & "/x/2", value: extraParts[0].value))
+let stuffed = signAuthored(aliceKs, topic,
+  withField(extraParts[1], "digest", parseJson(extraParts[0].value)["part"]))
+
+# ── 14. the room map: each part credited to its author, its content metadata alone (§10) ──
+block:
+  let evs = authenticEvents(bobS.roomEvents() & @[notAPart, stuffed], topic)
+  doAssert evs.len == bobS.roomEvents().len + 2, "both are Alice's, genuinely signed"
+  let g = reduceRoomGraph(evs, stub, founders, bob, bobS.sealedIn)
+  var nodeOf = initTable[string, GraphNode]()
+  for n in g.nodes: nodeOf[n.id] = n
+  var credited = 0
+  for e in evs:
+    if not e.key.startsWith("voice/"): continue
+    let n = nodeOf["e:" & eventId(e)]
+    let who = e.key.split('/')[2]
+    let part = eventId(e) != eventId(notAPart)
+    doAssert n.attrs["kind"].getStr() == "voice", $n.attrs
+    doAssert n.attrs["basis"].getStr() == "author-signed", e.key & ": " & $n.attrs["basis"]
+    doAssert n.attrs{"account"}.getStr() == "m:" & who, e.key & ": " & $n.attrs{"account"}
+    doAssert g.edges.anyIt(it.kind == "authored" and it.src == "m:" & who and it.dst == n.id), e.key
+    doAssert n.attrs["counted"].getBool() == part, e.key & ": counted " & $n.attrs["counted"]
+    if eventId(e) in bobS.sealedIn: doAssert n.epoch == bobS.sealedIn[eventId(e)], e.key
+    var abouts: seq[string]
+    for f in n.attrs["facets"]: abouts.add f["about"].getStr()
+    doAssert abouts == (if part: @["who could read it", "that it exists", "who sent it", "what it says"]
+                        else: @["who could read it", "that it exists", "this entry"]), e.key & ": " & $abouts
+    # field by field: v, ts, durMs and the digest, each as the part states it, and nothing
+    # else; a digest that is no digest is left out, whatever it holds
+    let j = parseJson(e.value)
+    var keys: seq[string]
+    for k, v in n.attrs["content"]:
+      keys.add k
+      doAssert v == j[k], e.key & ": " & k
+    doAssert keys.sorted() == (if eventId(e) == eventId(stuffed): @["durMs", "ts", "v"]
+                               else: @["digest", "durMs", "ts", "v"]), e.key & ": " & $keys
+    inc credited
+  doAssert credited == 16, "Alice's 12 parts, Bob's 2, and her two extras: " & $credited
+  # the map as coordinate_graph serves it holds no half of any clip, nor a stretch of one
+  let served = $g.toJson()
+  for e in evs:
+    if not e.key.startsWith("voice/"): continue
+    let half = parseJson(e.value)["part"].getStr()
+    doAssert half notin served and half[half.len div 2 ..< half.len div 2 + 48] notin served,
+             e.key & ": the clip rides the room map"
+  echo "14. the room map: each part author-signed in its author's name, its content v, ts, durMs and digest ",
+       "alone, no clip anywhere in the map; an entry that is no note's part is still its signer's, uncounted OK"
+
+# ── 15. provenance: each part a peer message in its author's name (§10) ──────────
+block:
+  let evs = authenticEvents(bobS.roomEvents() & @[notAPart, stuffed], topic)
+  let items = logProvenance(evs, stub, bobS.sealedIn)
+  let (_, hello) = newMessageEvent(bob, 1_792_003_200, "hello", 11)
+  let said = logProvenance(@[signAuthored(bobKs, topic, hello)], stub)
+  doAssert said.len == 1 and said[0].kind == "message"
+  var listed = 0
+  var epochs: seq[int]
+  for i, e in canonicalOrder(evs):
+    if not e.key.startsWith("voice/"): continue
+    let mine = items.filterIt(it.seq == i)
+    if eventId(e) == eventId(notAPart):
+      doAssert mine.len == 0, "an entry under voice/ that is no note's part is none: " & $mine
+      continue
+    doAssert mine.len == 1, e.key & ": " & $mine.len
+    let it = mine[0]
+    let p = e.key.split('/')
+    doAssert it.cls == icPeerMessage and it.kind == "voice" and it.intentId == "", $it
+    doAssert it.account == p[2] and it.accountable, $it
+    doAssert it.what == "a voice note (part " & $(parseInt(p[3]) + 1) & " of 2)", it.what
+    doAssert it.detail == "" and it.attestation == "", $it
+    doAssert it.guarantee == said[0].guarantee, "a message's guarantee: " & it.guarantee
+    if eventId(e) in bobS.sealedIn:
+      doAssert it.epoch == bobS.sealedIn[eventId(e)], $it
+      if it.epoch notin epochs: epochs.add it.epoch
+    inc listed
+  doAssert listed == 15 and epochs.sorted() == @[0, 1], $listed & " " & $epochs
+  echo "15. provenance: each part a peer message in its author's name, accountable as a message is, ",
+       "at the epoch that opened it; an entry that is no note's part is none OK"
 
 echo "voice_test: all OK"

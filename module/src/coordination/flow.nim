@@ -25,7 +25,7 @@ export disclosure
 type
   FlowRow* = object
     seq*: int              ## canonical log position of the action
-    kind*: string          ## message · propose · sig · decline · policy · submit · final · admit
+    kind*: string          ## message · propose · sig · decline · policy · submit · final · admit · voice
     intentId*: string
     field*: string         ## what is visible
     to*: Observer          ## who can see it
@@ -117,6 +117,15 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
                   elif p.len == 2: @[row("file", obRoomMember), row("file-key", obRoomMember)] & serving
                   else: @[row("file", obRoomMember)])
       result.addRows(i, "file", "", rows & envelope, true)
+      continue
+    if p[0] == "voice":
+      # a voice note's part (docs/design/voice-notes.md §10): the members who hold its
+      # epoch's key can play the note and learn its length. The store node keeps the
+      # envelope, as for any entry, and sees its size, which says nothing of the note:
+      # session.publish pads every voice/ frame to one fixed size (§4). Read from the key
+      # alone; the value, half a clip, is never parsed here.
+      result.addRows(i, "voice", "", @[row("voice-note", obRoomMember),
+        row("voice-note-length", obRoomMember)] & envelope & @[row("fixed-size", obStoreNode)], true)
       continue
     if p.len < 3 or p[0] != "intent":
       # an entry this fold does not know still reached the store node as an envelope

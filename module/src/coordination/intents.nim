@@ -36,6 +36,7 @@ from ./effect_summary import inDecimals   # a split's total in its asset's own d
 export intent_events
 import ./effect_summary           # one reading of an effect for the card and the history (exo-59c)
 import ./attest                   # live attestations: the fold's gate + every surface's grade (exo-ef1)
+from ./voice import voicePartKey, VoiceParts   # a voice note's part, by its key alone (voice-notes.md §6)
 export attest
 
 proc hexToBytes(s: string): seq[byte] =
@@ -811,8 +812,8 @@ proc intentProvenance*(events: seq[Event], driverFor: DriverFor, intentId: strin
 type LogProvItem* = object
   seq*: int               ## canonical log position
   cls*: InputClass
-  kind*: string           ## message · propose · sig · decline · policy · submit · final · admit
-  intentId*: string       ## "" for a message / membership entry
+  kind*: string           ## message · propose · sig · decline · policy · submit · final · admit · voice
+  intentId*: string       ## "" for a message / membership / voice entry
   account*: string        ## who: a verified signer, or the author/sharer a sealed entry claims
   accountable*: bool
   what*: string
@@ -862,6 +863,19 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
       except CatchableError: discard
       result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "message", account: author,
         accountable: true, what: "a message",
+        detail: "",
+        guarantee: "sealed to the room's epoch and signed by its author, bound to this room — the room's views read it only if that signature verifies",
+        epoch: sealedIn.getOrDefault(eventId(e), epoch))
+      continue
+    if p[0] == "voice":
+      # a voice note's part (docs/design/voice-notes.md §10): a peer message in the name
+      # its key gives, which the room's view verified signed it. Classed by the key alone;
+      # the value, half a clip, is never parsed here. An entry under voice/ that is no
+      # note's part is none (§6 rule 2).
+      let k = voicePartKey(e.key)
+      if not k.ok: continue
+      result.add LogProvItem(seq: i, cls: icPeerMessage, kind: "voice", account: k.author,
+        accountable: true, what: "a voice note (part " & $(k.i + 1) & " of " & $VoiceParts & ")",
         detail: "",
         guarantee: "sealed to the room's epoch and signed by its author, bound to this room — the room's views read it only if that signature verifies",
         epoch: sealedIn.getOrDefault(eventId(e), epoch))

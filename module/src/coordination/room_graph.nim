@@ -13,7 +13,10 @@
 ##  * The content, all of it: the map is local, read by this member's own client, so each
 ##    entry carries its value, parsed — message text, the effect, context, read values,
 ##    signatures, chain references, payment reports, shared material, account details —
-##    beside its structure. It carries nothing the member's client did not decrypt.
+##    beside its structure. It carries nothing the member's client did not decrypt. One kind
+##    is the exception: a voice note's part carries its metadata alone, never its half of the
+##    clip (docs/design/voice-notes.md §10), because no hosted method returns audio and any
+##    caller can read the map (coordinate_graph; with the access policy off, any module).
 ##  * An actor is named only where the log proves it: an author-signed kind's author
 ##    (authorship.nim), a driver-counted approval's signer, a binding's verified link.
 ##    An entry the fold refused (an uncounted approval, a substitute proposal) stays in
@@ -67,7 +70,7 @@ type
     fingerprints*: seq[JsonNode]  ## per epoch: {fromEpoch, entries, digest} (exo-26a)
 
 const AuthorSigned = ["message", "decline", "material", "account", "join", "part-settled",
-                      "part-confirmed", "proposer"]
+                      "part-confirmed", "proposer", "voice"]
   ## kinds whose author signed the event (authorship.nim): the room may name them
 
 proc norm(s: string): string =
@@ -108,6 +111,9 @@ proc facetsFor(kind, attestation, source: string, counted: bool, epoch: int): Js
   case kind
   of "message":
     result.add facet("who wrote it", "imperative", "", "its author signed it, bound to this room; the room's views drop one whose signature fails")
+    result.add facet("what it says", "motivational", "its author", "a member's word, as any message is")
+  of "voice":
+    result.add facet("who sent it", "imperative", "", "its author signed each part, bound to this room; the room's views drop a part whose signature fails")
     result.add facet("what it says", "motivational", "its author", "a member's word, as any message is")
   of "propose":
     result.add facet("who could place it", "imperative", "", "sealed under the epoch key: only a member could have placed it")
@@ -187,10 +193,28 @@ proc parseOrEmpty(s: string): JsonNode =
   ## a value parsed as JSON, or a JSON string of it when it is not JSON
   try: parseJson(s) except CatchableError: %s
 
+proc voiceContentOf(value: string): JsonNode =
+  ## A voice note part's content (docs/design/voice-notes.md §10): v, ts and durMs where
+  ## each is an integer, and the digest where it is 64 lowercase hex — never `part`, the
+  ## half of the clip, nor any other field, so no audio rides the map whatever a part holds.
+  result = newJObject()
+  try:
+    let j = parseJson(value)
+    if j.kind != JObject: return
+    for k in ["v", "ts", "durMs"]:
+      if j{k} != nil and j[k].kind == JInt: result[k] = j[k]
+    let dg = j{"digest"}
+    if dg != nil and dg.kind == JString and dg.getStr().len == 64 and
+       dg.getStr().allCharsInSet({'0' .. '9', 'a' .. 'f'}):
+      result["digest"] = dg
+  except CatchableError: discard
+
 proc contentOf(e: Event, p: seq[string]): JsonNode =
   ## An entry's content: its value parsed (a JSON object as is, anything else under
   ## "value"), with what its key says spelled out — the read's field, the part and step,
-  ## the requirement a material fills, the admitted member and epoch.
+  ## the requirement a material fills, the admitted member and epoch. A voice note's part
+  ## is the exception: its metadata alone (voiceContentOf).
+  if p.len > 0 and p[0] == "voice": return voiceContentOf(e.value)
   result = newJObject()
   try:
     let j = parseJson(e.value)
@@ -344,6 +368,10 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
           except CatchableError: discard
       elif p.len >= 4 and p[0] == "intent" and p[2] == "proposer":
         basis = "author-signed"; author = p[3]; attrs["counted"] = %true
+      elif p.len >= 3 and p[0] == "voice":
+        # an entry under voice/ that is no note's part (voice-notes.md §6 rule 2): the fold
+        # counts it for nothing, but authorship proved the member its key names signed it
+        basis = "author-signed"; author = p[2]
     attrs["basis"] = %basis
     attrs["content"] = contentOf(e, p)
     var source = ""
