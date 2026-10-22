@@ -15,13 +15,14 @@
 ##    signatures, chain references, payment reports, shared material, account details —
 ##    beside its structure. It carries nothing the member's client did not decrypt. One kind
 ##    is the exception: an entry under voice/ carries a voice note's metadata alone, never
-##    its half of the clip (docs/design/voice-notes.md §10), since any caller can read the
-##    map (coordinate_graph; with the access policy off, any module). So no hosted method
-##    returns a note's audio from this member's view: coordinate_proof, whose proof would
-##    carry every value whole, refuses a room whose view holds a part of a note
-##    (voice-notes-present) until the operator decides (§10, §18). An entry under voice/ that
-##    is no note's part leaves with a proof whole, and so does junk that copies a note's bytes
-##    when this member's view holds none of that note's parts (§10, "What is left").
+##    its half of the clip (docs/design/voice-notes.md §10; voice.voiceContentOf, read off
+##    the header the room's voice memo holds for a part), since any caller can read the map
+##    (coordinate_graph; with the access policy off, any module). So no hosted method returns
+##    a note's audio from this member's view: coordinate_proof, whose proof would carry every
+##    value whole, refuses a room whose view holds a part of a note (voice-notes-present)
+##    until the operator decides (§10, §18). An entry under voice/ that is no note's part
+##    leaves with a proof whole, and so does junk that copies a note's bytes when this
+##    member's view holds none of that note's parts (§10, "What is left").
 ##  * An actor is named only where the log proves it: an author-signed kind's author
 ##    (authorship.nim), a driver-counted approval's signer, a binding's verified link.
 ##    An entry the fold refused (an uncounted approval, a substitute proposal) stays in
@@ -44,6 +45,7 @@ import ./intents
 import ./flow
 import ./accounts
 import ./attest
+from ./voice import VoiceMemo, voiceContentOf   # a voice/ entry's content, off the room's memo (voice-notes.md §6, §10)
 
 type
   GraphNode* = object
@@ -209,28 +211,13 @@ proc parseOrEmpty(s: string): JsonNode =
   ## a value parsed as JSON, or a JSON string of it when it is not JSON
   try: parseJson(s) except CatchableError: %s
 
-proc voiceContentOf(value: string): JsonNode =
-  ## A voice note part's content (docs/design/voice-notes.md §10): v, ts and durMs where
-  ## each is an integer, and the digest where it is 64 lowercase hex — never `part`, the
-  ## half of the clip, nor any other field, so no audio rides the map whatever a part holds.
-  result = newJObject()
-  try:
-    let j = parseJson(value)
-    if j.kind != JObject: return
-    for k in ["v", "ts", "durMs"]:
-      if j{k} != nil and j[k].kind == JInt: result[k] = j[k]
-    let dg = j{"digest"}
-    if dg != nil and dg.kind == JString and dg.getStr().len == 64 and
-       dg.getStr().allCharsInSet({'0' .. '9', 'a' .. 'f'}):
-      result["digest"] = dg
-  except CatchableError: discard
-
-proc contentOf(e: Event, p: seq[string]): JsonNode =
+proc contentOf(e: Event, p: seq[string], id: EventId, memo: VoiceMemo): JsonNode =
   ## An entry's content: its value parsed (a JSON object as is, anything else under
   ## "value"), with what its key says spelled out — the read's field, the part and step,
   ## the requirement a material fills, the admitted member and epoch. An entry under voice/
-  ## is the exception, a part or not: a note's metadata alone (voiceContentOf).
-  if p.len > 0 and p[0] == "voice": return voiceContentOf(e.value)
+  ## is the exception, a part or not: a note's metadata alone (voice.voiceContentOf, which
+  ## reads a part's off the header the room's memo holds).
+  if p.len > 0 and p[0] == "voice": return voiceContentOf(e.value, id, memo)
   result = newJObject()
   try:
     let j = parseJson(e.value)
@@ -259,11 +246,14 @@ proc contentOf(e: Event, p: seq[string]): JsonNode =
     result["ceremony"] = %p[1]; result["step"] = %p[2]
 
 proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[string],
-                      viewer: string, sealedIn = initTable[string, int]()): RoomGraph =
+                      viewer: string, sealedIn = initTable[string, int](),
+                      memo: VoiceMemo = nil): RoomGraph =
   ## `sealedIn` is the session's record of which epoch's key opened each event
   ## (CoordinationSession.sealedIn). An entry's epoch comes from it; only an event it does
   ## not name falls back to the admissions before it in canonical order, which is right
-  ## only for a log whose events carry their parents.
+  ## only for a log whose events carry their parents. `memo` is the room's VoiceMemo
+  ## (voice_live.graphOf passes it): its provenance, its flow and each voice part's content
+  ## read through it, so a poll parses no part it has read before (voice-notes.md §6).
   # Positions are CAUSAL (log.causalOrder: parents, then the `after` each publisher
   # stamped), so a view replays the room in the order it happened, up to concurrency
   # (docs/design/causal-parents.md §4). The folds this joins index the CANONICAL order;
@@ -337,7 +327,7 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
     "k:" & a
 
   # ── entries: every event the client holds, attributed where the log proves it ──
-  let prov = logProvenance(events, driverFor, sealedIn)
+  let prov = logProvenance(events, driverFor, sealedIn, memo)
   var provAt = initTable[int, LogProvItem]()
   for it in prov:
     var item = it
@@ -347,7 +337,8 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   for i, e in ordered: idAt[eventId(e)] = "e:" & eventId(e)
   for i, e in ordered:
     let p = e.key.split('/')
-    let id = idAt[eventId(e)]
+    let eid = eventId(e)
+    let id = idAt[eid]
     var attrs = newJObject()
     var author = ""
     var basis = "sealed"
@@ -391,7 +382,7 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
         # nothing, but authorship proved the member its key names signed it
         basis = "author-signed"; author = p[2]
     attrs["basis"] = %basis
-    attrs["content"] = contentOf(e, p)
+    attrs["content"] = contentOf(e, p, eid, memo)
     var source = ""
     if attrs["kind"].getStr() == "read":
       try: source = parseJson(e.value){"source"}.getStr()
@@ -508,7 +499,7 @@ proc reduceRoomGraph*(events: seq[Event], driverFor: DriverFor, founders: seq[st
   # ── what left, and to whom (reduceFlow, outside rows only) ───────────────────
   addNode("o:" & $obStoreNode, "observer", -1, 0, newJObject())   # every envelope reaches it (FS-9)
   var leaves = initOrderedTable[string, tuple[src, obs: string, seq: int, fields: seq[string], declared: bool]]()
-  for r in reduceFlow(events, driverFor, founders, sealedIn):
+  for r in reduceFlow(events, driverFor, founders, sealedIn, memo):
     if r.to in {obRoomMember, obStoreNode}: continue
     let at = pos(r.seq)
     var src = ""

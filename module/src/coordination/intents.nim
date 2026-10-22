@@ -36,7 +36,7 @@ from ./effect_summary import inDecimals   # a split's total in its asset's own d
 export intent_events
 import ./effect_summary           # one reading of an effect for the card and the history (exo-59c)
 import ./attest                   # live attestations: the fold's gate + every surface's grade (exo-ef1)
-from ./voice import voiceStanding, VoiceParts   # a voice note's part, as the fold stands it (voice-notes.md §6)
+from ./voice import voiceStanding, VoiceParts, VoiceMemo   # a voice note's part, as the fold stands it (voice-notes.md §6)
 export attest
 
 proc hexToBytes(s: string): seq[byte] =
@@ -828,10 +828,12 @@ proc membershipEvent*(epoch: int, joinerHex: string, parents: seq[EventId] = @[]
   Event(parents: parents, key: "membership/" & $epoch & "/admit/" & joinerHex, value: "1")
 
 proc logProvenance*(events: seq[Event], driverFor: DriverFor,
-                    sealedIn = initTable[string, int]()): seq[LogProvItem] =
+                    sealedIn = initTable[string, int](), memo: VoiceMemo = nil): seq[LogProvItem] =
   ## `sealedIn` (CoordinationSession.sealedIn) names the epoch whose key opened each
   ## event; an item's epoch comes from it, else from the admissions before it in
   ## canonical order — right only for a log whose events carry their parents (exo-dde.9).
+  ## `memo` is the room's VoiceMemo (voice_live.provenanceOf passes it), so a poll parses no
+  ## voice part it has read before (voice-notes.md §6).
   let ordered = canonicalOrder(events)
   let gradeOf = gradeLookup(events, driverFor)
   let partsAt = countedPartsAt(ordered, reduceIntents(events, driverFor), driverFor, events)
@@ -839,7 +841,7 @@ proc logProvenance*(events: seq[Event], driverFor: DriverFor,
   var seenSig = initHashSet[string]()
   var seenDecline = initHashSet[string]()
   var proposals = initTable[string, IntentProposal]()
-  let standing = voiceStanding(events)   # the voice fold's parts, by event id
+  let standing = voiceStanding(events, memo)   # the voice fold's parts, by event id, through the room's memo
   proc ownProposal(id: string, e: Event): bool =
     ## a propose or policy is the intent's only as the pair its id commits to (exo-dbd)
     if id notin proposals: proposals[id] = proposalOf(events, id)

@@ -314,7 +314,8 @@ The result is `{nid, author, ts, durMs, state, parts}` per note, ordered by (ts,
 **The memo.** A part's header fields are a pure function of its event id, and a verdict of
 the two standing parts' ids, because an id is a content address. So every fold takes an
 optional `VoiceMemo` (`reduceVoice`, `threadRows`, `threadLastTs`, `voiceStanding`,
-`voiceNoteOf`, `voiceRecordOf`), which holds both:
+`voiceNoteOf`, `voiceRecordOf`, and the room's other folds that read a part: `reduceFlow`,
+`logProvenance` and `reduceRoomGraph`), which holds both:
 - **Headers**, by event id: `v`, `ts`, `durMs` and `digest`, and whether the value is a
   part's at all, never the half. A part read once is not parsed again, and a part a pass
   parses keeps its half for that pass alone. A verdict or a decode reads a half back from its
@@ -324,10 +325,25 @@ optional `VoiceMemo` (`reduceVoice`, `threadRows`, `threadLastTs`, `voiceStandin
   checked on every read. A part that comes to stand in another's place, such as an
   equivocating copy that sorts first, makes a new key, so its note is judged afresh.
 - **Where it lives.** The hosted layer keeps one per room (S7, built:
-  `VoiceRecorder.memoFor`), and every hosted read that polls goes through it:
-  `coordinate_messages`' rows, the `lastTs` of `coordinate_conversations` for every joined
-  room, and `voice_play`, which reads its note from one header pass (`voiceNoteOf`). The
-  flow, provenance and the room map, read on demand, take none.
+  `VoiceRecorder.memoFor`). Every hosted read that folds the room's voice parts goes through
+  it, by a recorder proc the hosted method calls:
+  - `coordinate_messages`' rows (`rows`), on the room's 1 s tick;
+  - the `lastTs` of `coordinate_conversations` for every joined room (`lastTs`, given the
+    events the method already read);
+  - `coordinate_flow` (`flowRows`), on the room's 5 s tick;
+  - `coordinate_graph` (`graphOf`), every 2 s while the room map is open: its provenance,
+    its flow, and each part's content, which is read off the part's header
+    (`voiceContentOf`);
+  - `coordinate_provenance` (`provenanceOf`);
+  - `voice_play`, which reads its note from one header pass (`voiceNoteOf`).
+
+  The flow, provenance and the map went through no memo until the second pass of PR 340's
+  review, which found the flow and the map polled, not read on demand: each of their polls
+  parsed every part's value again, once in the flow and three times in the map.
+  `coordinate_proof`, which no UI calls, reads the header pass with no memo, once per call
+  and only in a room whose raw log holds a `voice/` key. An entry under `voice/` that holds
+  no part's value (a key of no part's shape, a value the fold refuses, an equivocating later
+  copy) the map parses on each poll for its content, as it parses each message.
 - **Memory.** A part's id and four fields, a few hundred bytes, and a verdict, about 140 B,
   per pair of parts that ever stood, against their 90 KB frames in the log (not measured).
   The log is append-only, so a room's memo is bounded by its log,
@@ -335,9 +351,12 @@ optional `VoiceMemo` (`reduceVoice`, `threadRows`, `threadLastTs`, `voiceStandin
   rooms joined, never of every room ever read.
 
 `voice_test` §16 holds every fold output byte-identical with a memo and without one, in any
-order, duplicated, and as the set grows. `voice_live_test` §27 counts the parses
-(`voiceParses`, `voiceHalfReads`): over an unchanged log a second read parses 0 parts, a new
-part alone is parsed, and Play goes through one pass.
+order, duplicated, and as the set grows; §17 does the same for the flow, provenance and the
+map, whose cold memo parses each part once across the three and whose warm one parses none.
+`voice_live_test` §27 counts the parses (`voiceParses`, `voiceHalfReads`): over an unchanged
+log a second read parses 0 parts, a new part alone is parsed, and Play goes through one pass.
+§28 counts them for the recorder procs the flow, the map, provenance and `lastTs` are served
+by: none on the next poll, and none at all once the thread's rows have read the room.
 
 Measured on darwin-arm64 (Apple M5, `-d:release`, 20 notes of 60 s and 20 messages, outside
 the repo), per call, before the header memo and after it:
@@ -349,8 +368,11 @@ the repo), per call, before the header memo and after it:
 
 What a warm memo still pays is the pass itself: each voice event's id, whose memo key copies
 the whole value (`log.nim:71-75`), the canonical order, and the copies a pass makes.
-`coordinate_messages` polls each second and `coordinate_conversations` folds every room, all
-on the module thread, so a room of 20 full notes now costs a few ms a second, not tens.
+`coordinate_messages` polls each second, `coordinate_conversations` folds every room,
+`coordinate_flow` polls every 5 s and `coordinate_graph` every 2 s while the map is open, all
+on the module thread, so a room of 20 full notes now costs a few ms a second, not tens. The
+flow and the map through the memo are not measured: §17 and §28 count their parses, not their
+time.
 
 S7 measured the hosted reads the same way, before the header memo (20 notes of 60 s, a
 member's session over `LocalTransport`, `-d:release`, darwin-arm64, outside the repo), per
@@ -661,7 +683,8 @@ differ:
 - **`coordinate_graph`: S6 strips it.** An entry under `voice/` has as `content` its value's
   `v`, `ts` and `durMs` where each is an integer and its `digest` where that is 64 lowercase
   hex, and nothing else: no `part`, whatever a part holds (`voiceContentOf`,
-  `room_graph.nim:208-229` on this branch). `voice_test` §14 pins that field by field, and
+  `voice.nim:314-336` on this branch, which reads a part's off the header the room's memo
+  holds, §6). `voice_test` §14 pins that field by field, and
   finds no 48-character stretch of any half, taken at every 24-character step and at its end,
   in the map `toJson` gives.
 - **`coordinate_proof`: refused until the operator decides** (§18). A room whose authentic
@@ -693,12 +716,12 @@ differ:
   PR reaches their code ("What still leaks", item 6).
 
 **What the code adds** (built, S6). Every one of them takes a part to be what the fold
-stands: `voiceStanding` (`voice.nim:246` on this branch), the header pass's standing parts of
+stands: `voiceStanding` (`voice.nim:300` on this branch), the header pass's standing parts of
 the notes it keeps (§6 rules 2 to 4), by event id: exactly the ids `reduceVoice`'s notes name
 in `parts`, whatever each note's state. So the flow, provenance and the room map agree with
 the fold on what is a part, and an entry under `voice/` that is none, by its key, its value,
 an equivocating later copy or a squatted note id, is no part in any of them.
-- **A `voice/` branch in `flow.nim`** (`:123-135` on this branch). On `main` an unknown
+- **A `voice/` branch in `flow.nim`** (`:126-138` on this branch). On `main` an unknown
   prefix falls through to envelope-only rows (`flow.nim:121-124`), which would show the room
   nothing about its own content. With the branch, each part shows:
   - room-member: `voice-note`, `voice-note-length`;
@@ -709,19 +732,19 @@ an equivocating later copy or a squatted note id, is no part in any of them.
   Ingest does not check the size of a frame another member sent, so `fixed-size` on another
   member's entry is what an honest client sends. Pinned by `voice_test` §13.
 - **The room map.** An entry of kind `voice`, its basis author-signed and its account the
-  member its key names (`AuthorSigned`, `room_graph.nim:69`, `:76-77` on this branch). It is
+  member its key names (`AuthorSigned`, `room_graph.nim:69`, `:82-83` on this branch). It is
   counted exactly when provenance lists it, so exactly when the fold stands it. An entry under
   `voice/` that is no note's part is still its signer's, since authorship proved who signed
-  it, but uncounted (`room_graph.nim:383-388` on this branch), and its facet says so: "the
+  it, but uncounted (`room_graph.nim:378-383` on this branch), and its facet says so: "the
   fold counts it for nothing; its author signed it, bound to this room". The map's `file/`
   entries, account disclosures and ceremony joins, which provenance never lists and the map
   has always named by their signer, now say the same. The store node's facet
   names the one fixed size, which marks a voice note but not its length
-  (`room_graph.nim:110-114` on this branch). Its `content` carries no `part` (above). Pinned
+  (`room_graph.nim:116-120` on this branch). Its `content` carries no `part` (above). Pinned
   by `voice_test` §14, the `file/` facet by `swarm_test` §8.
 - **Provenance.** A `logProvenance` item (`intents.nim:829`, `:830` on this branch) for each
   standing part, as a peer message in its author's name at the epoch whose key opened it
-  (`intents.nim:871-885` on this branch), and none for an entry that is no note's part.
+  (`intents.nim:873-887` on this branch), and none for an entry that is no note's part.
   Pinned by `voice_test` §15.
 
 `voice_test` pins those rows field for field, the way `swarm_test` §8 pins FileShare's.
@@ -1036,7 +1059,16 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   and every hosted read re-runs `roomEvents` with no fold cache (the cache is
   `side-modules.md` S4, `exo-ff5.4`, not built). `voice.nim`'s own cost is measured, with the
   room's memo of part headers and verdicts and without it (§6), but `roomEvents`' authorship
-  checks over 84 KB values are not, and nor is the whole hosted read since the header memo.
+  checks over 84 KB values are not, and nor is the whole hosted read since the header memo,
+  nor the flow and the room map through it (their parses are counted, not timed).
+- **The room's memo in the hosted methods.** `voice_live_test` §27 and §28 drive the
+  recorder procs the hosted methods call (`rows`, `lastTs`, `flowRows`, `graphOf`,
+  `provenanceOf`) and `forgetRoom`, over the room's memo. No test runs the hosted lines
+  that call them: `coordinate_conversations`' `lastTs` for each joined room, `coordinate_flow`,
+  `coordinate_graph`, `coordinate_provenance`, and `coordinate_leave`'s `voiceForgetRoom`
+  (`muster_module.nim` on this branch), which drops a left room's memo. They are built and
+  read, not run: the marshalling probe compiles them but calls none of them, and no harness
+  in the tree joins a room (below).
 - **Audio over `coordinate_proof`** (§10). It refuses `voice-notes-present` for a room whose
   authentic view holds a part the fold stands, so no proof of a room with a voice note leaves
   the module until the operator decides; `voice_live_test` §23 and §26 hold the refusal on
@@ -1258,7 +1290,9 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   the module unloads (§9). The recorder keeps a `VoiceMemo` per room and passes it to every
   `threadRows`; `coordinate_conversations`' `lastTs` reads `threadLastTs` (§6). Since PR 340's
   review the memo keeps each part's header as well, `threadLastTs` and Play read through it,
-  and leaving a room drops its memo.
+  and leaving a room drops its memo; since its second pass, the flow, the room map and
+  provenance read through it too, and each hosted method calls the recorder's proc
+  (`lastTs`, `flowRows`, `graphOf`, `provenanceOf`) that `voice_live_test` §28 drives.
   Until the operator decides (§10), `coordinate_proof` refuses a room holding a voice note.
   Test: `voice_live_test` on `SyntheticAudioIo` and `LocalTransport`, which holds §8's type
   rule (no float) in every state, and the marshalling probe's not-joined replies.

@@ -24,7 +24,9 @@
 ## record. A part's header fields are a pure function of its event id, and a verdict of the
 ## two standing parts' ids, so a `VoiceMemo` the hosted layer keeps per room holds both
 ## across reads (§6): a read parses no part it has read before and judges no pair twice.
-## The memo keeps no half: a verdict or a decode reads one back from its event.
+## The memo keeps no half: a verdict or a decode reads one back from its event. The room's
+## other folds take the same memo (the flow, provenance and the room map, whose content of a
+## part, `voiceContentOf`, is read off its header), so none of them parses a part again.
 ##
 ## Only `threadRows` makes a voice row, and the row carries the note in a field of its own,
 ## `voice`, never in `body` (§7): `reduceMessages` builds a row from a message's author, ts
@@ -172,8 +174,10 @@ proc headers*(m: VoiceMemo): int =
 var valuesParsed {.threadvar.}: int
 var halvesRead {.threadvar.}: int
 proc voiceParses*(): int =
-  ## How many part values the header pass has parsed on this thread, memo or none: a
-  ## counting seam for tests, as VoiceMemo.hits is (voice_test §16, voice_live_test §27).
+  ## How many voice/ values this file has parsed on this thread, memo or none: the header
+  ## pass's, and `voiceContentOf`'s for an entry whose header the memo does not hold as a
+  ## part's. A counting seam for tests, as VoiceMemo.hits is (voice_test §16, §17,
+  ## voice_live_test §27, §28).
   valuesParsed
 proc voiceHalfReads*(): int =
   ## How many halves a verdict or a decode has read back from their events on this thread,
@@ -300,11 +304,36 @@ proc voiceStanding*(events: seq[Event], memo: VoiceMemo = nil): Table[EventId, V
   ## threadLastTs does. An entry under voice/ that is not here is no note's part: a key or a
   ## value of the wrong shape, an equivocating later copy, or a squatted note id. This is
   ## what the room's other folds (the flow, provenance and so the room map) take a part to
-  ## be, so all of them agree with the fold. Pass the room's authentic view.
+  ## be, so all of them agree with the fold, and each passes its caller's memo on. Pass the
+  ## room's authentic view.
   for _, g in gather(events, memo).groups:
     if not header(g).kept: continue
     for i in 0 ..< VoiceParts:
       if g.have[i]: result[g.part[i].id] = (g.nid, g.author, i)
+
+proc voiceContentOf*(value: string, id: EventId, memo: VoiceMemo = nil): JsonNode =
+  ## What the room map shows of an entry under voice/ (§10), a part or not: `v`, `ts` and
+  ## `durMs` where each is an integer, and `digest` where it is 64 lowercase hex, never
+  ## `part`, the half of the clip, nor any other field, so no audio rides the map whatever an
+  ## entry holds. `id` is the entry's event id. For a part whose header the memo holds, the
+  ## header gives the four, since a part's value has exactly those beside its half and
+  ## signature (rule 2), so the value is not parsed again; any other entry is parsed, and
+  ## counted in voiceParses.
+  if memo != nil and id in memo.headers and memo.headers[id].ok:
+    let h = memo.headers[id]
+    return %*{"v": VoiceEventVersion, "ts": h.ts, "durMs": h.durMs, "digest": h.digest}
+  result = newJObject()
+  inc valuesParsed
+  try:
+    let j = parseJson(value)
+    if j.kind != JObject: return
+    for k in ["v", "ts", "durMs"]:
+      if j{k} != nil and j[k].kind == JInt: result[k] = j[k]
+    let dg = j{"digest"}
+    if dg != nil and dg.kind == JString and dg.getStr().len == 64 and
+       dg.getStr().allCharsInSet({'0' .. '9', 'a' .. 'f'}):
+      result["digest"] = dg
+  except CatchableError: discard
 
 proc bytesOf(s: string): seq[byte] =
   result = newSeq[byte](s.len)

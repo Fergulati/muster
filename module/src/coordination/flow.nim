@@ -20,7 +20,7 @@ import ../log/log
 import ../drivers/manifest
 import ../intents/disclosure
 import ./intents
-from ./voice import voiceStanding   # what a voice note's part is: the fold's header pass
+from ./voice import voiceStanding, VoiceMemo   # what a voice note's part is: the fold's header pass
 export disclosure
 
 type
@@ -45,14 +45,17 @@ proc foundersOf*(events: seq[Event], roster: seq[string]): seq[string] =
     if m.toLowerAscii() notin admitted: result.add m
 
 proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
-                 founders: seq[string], sealedIn = initTable[string, int]()): seq[FlowRow] =
+                 founders: seq[string], sealedIn = initTable[string, int](),
+                 memo: VoiceMemo = nil): seq[FlowRow] =
   ## `founders` are the members present at epoch 0 (the current roster minus every
   ## joiner the log admits — the caller derives it; the log does not name founders).
   ## `sealedIn` is the session's record of which epoch's key opened each event
   ## (CoordinationSession.sealedIn). An entry's epoch comes from it, and its readers are
   ## the founders plus everyone admitted at or before that epoch. Only an event it does
   ## not name falls back to the admissions before it in canonical order — right only
-  ## for a log whose events carry their parents (exo-dde.9).
+  ## for a log whose events carry their parents (exo-dde.9). `memo` is the room's VoiceMemo
+  ## (voice_live.flowRows passes it), so a poll parses no voice part it has read before
+  ## (voice-notes.md §6).
   let ordered = canonicalOrder(events)
   var epoch = 0
   var admittedAt = initTable[string, int]()   # joiner → the epoch its admission opened
@@ -79,7 +82,7 @@ proc reduceFlow*(events: seq[Event], driverFor: DriverFor,
                       members: (if d.to == obRoomMember: membersAt(entryEpoch) else: @[]),
                       epoch: entryEpoch, declared: declared)
   let envelope = @[row("timing", obStoreNode), row("topic", obStoreNode)]
-  let standing = voiceStanding(events)   # the voice fold's parts, by event id
+  let standing = voiceStanding(events, memo)   # the voice fold's parts, by event id, through the room's memo
   for i in 0 ..< ordered.len:
     let e = ordered[i]
     let p = e.key.split('/')

@@ -3279,7 +3279,9 @@ proc musterCoordinateProvenance(): string =
   if gSession == nil: return "[]"
   gSession.poll()
   var arr = newJArray()
-  for it in logProvenance(gSession.roomEvents(), driverFor, gSession.sealedIn):
+  # through the room's voice memo: a poll parses no voice part it has read before
+  # (voice_live.provenanceOf, docs/design/voice-notes.md §6)
+  for it in hostVoice().provenanceOf(gSession, gSession.roomEvents(), driverFor):
     let alias = (if it.account.len > 0: contactBook().nameFor(it.account) else: "")
     arr.add %*{"seq": it.seq, "class": $it.cls, "kind": it.kind, "intentId": it.intentId,
                "account": it.account, "alias": alias, "accountable": it.accountable,
@@ -3358,7 +3360,8 @@ proc musterCoordinateFlow(): string =
   if gSession == nil: return $(%*{"rows": [], "matrix": {}})
   gSession.poll()
   let events = gSession.roomEvents()
-  let rows = reduceFlow(events, driverFor, gSession.roomFounders(events), gSession.sealedIn)
+  # through the room's voice memo, on the room's 5 s tick (voice_live.flowRows, voice-notes.md §6)
+  let rows = hostVoice().flowRows(gSession, events, driverFor, gSession.roomFounders(events))
   result = $(%*{"rows": rows.toJson(),
                  "matrix": rows.observerMatrix(introducedObservers(events, driverFor))})
   if gLpDebug: stderr.writeLine("MUSTER-LP flow " & result)
@@ -3375,7 +3378,8 @@ proc musterCoordinateGraph(roomTopic: string): string =
   s.poll()
   let events = s.roomEvents()
   let me = toHex(moduleKeystore().encIdentity().toBytes()).toLowerAscii()
-  var j = reduceRoomGraph(events, driverFor, s.roomFounders(events), me, s.sealedIn).toJson()
+  # through the room's voice memo, every 2 s while the map is open (voice_live.graphOf, voice-notes.md §6)
+  var j = hostVoice().graphOf(s, events, driverFor, s.roomFounders(events), me).toJson()
   # what the room's views refused to read: entries whose author signature failed (exo-f76),
   # kept in the raw log, never in a fold — so a member can see the room dropped something
   j["dropped"] = %max(0, s.log.allEvents().len - events.len)
@@ -4688,8 +4692,8 @@ proc musterCoordinateConversations(): string =
     s.poll()
     let events = s.roomEvents()
     # the newest row's, a voice note's included (§7), through the room's memo: a poll parses
-    # no voice part it has read before (voice-notes.md §6)
-    let lastTs = threadLastTs(events, hostVoice().memoFor(s))
+    # no voice part it has read before (voice_live.lastTs, voice-notes.md §6)
+    let lastTs = hostVoice().lastTs(s, events)
     # each room's intents resolve under THAT room's roster and disclosed accounts, which
     # the resolver reads from the active session: swap it in for the fold
     var items: seq[HomeItem]

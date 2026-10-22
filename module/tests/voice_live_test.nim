@@ -80,6 +80,12 @@
 ##      its other half back once for the verdict (`voiceHalfReads`); Play gathers once and
 ##      reads back the two halves it decodes; the memo holds one header per part in the
 ##      room's view, and `forgetRoom` (coordinate_leave) drops a room's memo
+##  28. the room's other polled reads go through the same memo, by the recorder's procs the
+##      hosted methods call: `flowRows` (coordinate_flow), `graphOf` (coordinate_graph),
+##      `provenanceOf` (coordinate_provenance) and `lastTs` (coordinate_conversations, given
+##      the events the method read) each give the memo-less fold's output; a cold memo parses
+##      each part once across all four, a warm one none, and after the thread's rows have read
+##      the room (`memoFor`'s memo) none of them parses a part
 ## Needs libopus, libsecp256k1, libsodium and the miniaudio pin (run-suite.sh links them all).
 
 import std/[algorithm, json, math, os, strutils, sequtils, tables]
@@ -96,6 +102,8 @@ import ../src/coordination/intent_events
 import ../src/coordination/contacts
 import ../src/coordination/voice
 import ../src/coordination/voice_live
+import ../src/coordination/[flow, intents, room_graph]
+import ../src/drivers/driver
 
 var RLIMIT_FSIZE {.importc: "RLIMIT_FSIZE", header: "<sys/resource.h>".}: cint
   ## the largest file this process may write (§20); posix.nim declares no constant for it
@@ -878,8 +886,8 @@ block:
   let rows0 = b.rows(bobS)
   doAssert since(c) == (inView, 0), "a cold read parses each part once and reads no half back: " & $since(c)
   c = counts()
-  let last0 = b.lastTs(bobS)
-  doAssert b.rows(bobS) == rows0 and b.lastTs(bobS) == last0
+  let last0 = b.lastTs(bobS, bobS.roomEvents())
+  doAssert b.rows(bobS) == rows0 and b.lastTs(bobS, bobS.roomEvents()) == last0
   doAssert since(c) == (0, 0), "over an unchanged log coordinate_messages' rows and threadLastTs parse 0 parts: " & $since(c)
   doAssert memo.headers == inView, "one header per part in the room's view: " & $memo.headers
   # a new part arrives: that one alone is parsed
@@ -892,7 +900,7 @@ block:
   doAssert since(c) == (1, 0), "the new part alone: " & $since(c)
   doAssert noteRow(rows, nidN).note.state == vsArriving
   c = counts()
-  doAssert b.lastTs(bobS) == tsN and since(c) == (0, 0), $since(c)
+  doAssert b.lastTs(bobS, bobS.roomEvents()) == tsN and since(c) == (0, 0), $since(c)
   aliceS.publishAuthored(aliceKs, partsN[1])
   c = counts()
   rows = b.rows(bobS)
@@ -900,7 +908,7 @@ block:
   doAssert noteRow(rows, nidN).note.state == vsComplete
   c = counts()
   doAssert b.rows(bobS) == rows and since(c) == (0, 0), "nothing again on the next poll: " & $since(c)
-  doAssert rows == threadRows(bobS.roomEvents()) and b.lastTs(bobS) == threadLastTs(bobS.roomEvents()),
+  doAssert rows == threadRows(bobS.roomEvents()) and b.lastTs(bobS, bobS.roomEvents()) == threadLastTs(bobS.roomEvents()),
            "the rows and lastTs a read with no memo gives"
   # Play gathers once, through the memo: no part parsed, the two halves it decodes read back
   c = counts()
@@ -922,6 +930,49 @@ block:
   echo "27. the room's memo keeps each part's header: an unchanged log parses 0 parts, a new part ",
        "alone is parsed, Play gathers once and reads back the two halves it decodes; a room left ",
        "drops its memo OK"
+
+# ── 28. the room's other polled reads go through its memo: the flow, the map, provenance ─
+# PR 340's review, again: coordinate_flow (on the room's 5 s tick) and coordinate_graph (every
+# 2 s while the map is open) folded with no memo, so each poll parsed every part's value again,
+# and coordinate_conversations passed the memo itself, in a line no test ran. The hosted
+# methods now call the recorder's flowRows, graphOf, provenanceOf and lastTs, each over the
+# events the method read and the room's memo, the one memoFor gives and the thread's rows use.
+block:
+  let stub: DriverFor = proc(kind: string): Driver = newStubDriver(rounds = 1, threshold = 1, verifyResult = true)
+  let evs = bobS.roomEvents()
+  var roster: seq[string]
+  for m in bobS.members(): roster.add hex(m.toBytes())
+  let founders = foundersOf(evs, roster)
+  let me = hex(bobKs.encIdentity().toBytes())
+  let parts = evs.countIt(isVoiceKey(it.key))
+  doAssert parts >= 14 and voiceStanding(evs).len == parts, $parts & " " & $voiceStanding(evs).len
+  proc reads(v: VoiceRecorder): string =
+    $(%*{"flow": $v.flowRows(bobS, evs, stub, founders),
+         "graph": v.graphOf(bobS, evs, stub, founders, me).toJson(),
+         "provenance": $v.provenanceOf(bobS, evs, stub),
+         "lastTs": v.lastTs(bobS, evs)})
+  let want = $(%*{"flow": $reduceFlow(evs, stub, founders, bobS.sealedIn),
+                  "graph": reduceRoomGraph(evs, stub, founders, me, bobS.sealedIn).toJson(),
+                  "provenance": $logProvenance(evs, stub, bobS.sealedIn),
+                  "lastTs": threadLastTs(evs)})
+  let b = newVoiceRecorder(newSyntheticAudioIo(@[], VirtualClock().clock))
+  var p0 = voiceParses()
+  doAssert b.reads() == want, "the memo-less folds' output"
+  doAssert voiceParses() - p0 == parts, "cold: each part once across the four reads: " & $(voiceParses() - p0)
+  p0 = voiceParses()
+  doAssert b.reads() == want and voiceParses() == p0,
+           "warm: the next poll of each parses 0 parts: " & $(voiceParses() - p0)
+  doAssert b.memoFor(bobS).headers == parts, "the room's memo, the one memoFor gives"
+  # the thread's rows warm the memo the others read
+  let c = newVoiceRecorder(newSyntheticAudioIo(@[], VirtualClock().clock))
+  discard c.rows(bobS)
+  p0 = voiceParses()
+  doAssert c.reads() == want and voiceParses() == p0,
+           "after coordinate_messages' rows, the flow, the map, provenance and lastTs parse 0 parts: " &
+           $(voiceParses() - p0)
+  doAssert b.close() == "ok" and c.close() == "ok"
+  echo "28. the flow, the map, provenance and lastTs go through the room's memo, the thread's own: the ",
+       "memo-less output; each part parsed once across them, none on the next poll OK"
 
 # ── 8. no JSON carries audio or a float ─────────────────────────────────────────────
 block:

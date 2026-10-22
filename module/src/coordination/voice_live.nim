@@ -45,10 +45,13 @@
 ## arriving for the others, with nothing that re-sends it (voice-notes.md §8, §15).
 ##
 ## The thread's rows (`rows`, and `messagesJson` as coordinate_messages serves them), the
-## room's `lastTs` (coordinate_conversations) and Play go through one `VoiceMemo` per room, so
-## a part's value is parsed once, not on every poll, and a clip is decoded and checked once
-## per pair of standing parts (§6). Play reads the note from one header pass. A room's memo
-## goes when the member leaves it (`forgetRoom`).
+## room's `lastTs` (coordinate_conversations), the flow (`flowRows`, coordinate_flow), the room
+## map (`graphOf`, coordinate_graph), provenance (`provenanceOf`, coordinate_provenance) and
+## Play go through one `VoiceMemo` per room, so a part's value is parsed once, not on every
+## poll, and a clip is decoded and checked once per pair of standing parts (§6). The hosted
+## methods call these procs rather than the folds, so the memo they pass is the one
+## voice_live_test drives. Play reads the note from one header pass. A room's memo goes when
+## the member leaves it (`forgetRoom`).
 ##
 ## `roomProof` is coordinate_proof while voice notes are in the tree: a log proof carries every
 ## raw value whole, a voice part's half of the clip with it, so it refuses a room whose
@@ -67,6 +70,10 @@ import ./session
 import ./authorship
 import ./voice
 from ./contacts import normId
+from ./intent_events import DriverFor
+from ./intents import LogProvItem, logProvenance
+from ./flow import FlowRow, reduceFlow
+from ./room_graph import RoomGraph, reduceRoomGraph
 
 const
   ProofRefusal* = "voice-notes-present"
@@ -345,10 +352,30 @@ proc memoRooms*(v: VoiceRecorder): int =
   ## How many rooms' memos the recorder holds.
   v.memos.len
 
-proc lastTs*(v: VoiceRecorder, s: CoordinationSession): int64 =
-  ## The room's newest row's ts (coordinate_conversations' lastTs): `threadLastTs` over its
-  ## authentic view, with the room's memo, so a poll parses no part it has read before.
-  threadLastTs(s.roomEvents(), v.memoFor(s))
+proc lastTs*(v: VoiceRecorder, s: CoordinationSession, events: seq[Event]): int64 =
+  ## The room's newest row's ts (coordinate_conversations' lastTs): `threadLastTs` over
+  ## `events`, the room's authentic view as the method already read it for the room's other
+  ## folds, with the room's memo, so a poll parses no part it has read before.
+  threadLastTs(events, v.memoFor(s))
+
+proc flowRows*(v: VoiceRecorder, s: CoordinationSession, events: seq[Event],
+               driverFor: DriverFor, founders: seq[string]): seq[FlowRow] =
+  ## coordinate_flow (polled on the room's 5 s tick): `reduceFlow` over `events`, the room's
+  ## authentic view, with the room's memo.
+  reduceFlow(events, driverFor, founders, s.sealedIn, v.memoFor(s))
+
+proc graphOf*(v: VoiceRecorder, s: CoordinationSession, events: seq[Event],
+              driverFor: DriverFor, founders: seq[string], viewer: string): RoomGraph =
+  ## coordinate_graph (polled every 2 s while the room map is open): `reduceRoomGraph` over
+  ## `events`, the room's authentic view, with the room's memo, which its provenance, its flow
+  ## and each part's content read.
+  reduceRoomGraph(events, driverFor, founders, viewer, s.sealedIn, v.memoFor(s))
+
+proc provenanceOf*(v: VoiceRecorder, s: CoordinationSession, events: seq[Event],
+                   driverFor: DriverFor): seq[LogProvItem] =
+  ## coordinate_provenance: `logProvenance` over `events`, the room's authentic view, with the
+  ## room's memo.
+  logProvenance(events, driverFor, s.sealedIn, v.memoFor(s))
 
 proc rows*(v: VoiceRecorder, s: CoordinationSession): seq[ThreadRow] =
   ## The room's thread (coordinate_messages): `threadRows` over its authentic view, with the

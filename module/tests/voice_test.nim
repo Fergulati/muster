@@ -60,6 +60,11 @@
 ##      voiceNoteOf) is the memo-less one, in any order, duplicated, and as the set grows;
 ##      each part is parsed once (`voiceParses`), a warm memo parses none, a new part alone
 ##      is parsed, and an equivocating later copy or a key of no part's shape never is
+##  17. reduceFlow, logProvenance and reduceRoomGraph take the memo too (coordinate_flow and
+##      coordinate_graph poll): each output is the memo-less one, byte for byte, in any order;
+##      a cold memo parses each part once across them, a warm one none, the map's content of
+##      a part read off its header; only an entry under voice/ that holds no part's value is
+##      parsed again, by the map, for its content
 ## Clips are synthetic CDE records of 40-byte packets: the fold checks structure and digest
 ## and never decodes audio, so this test links no codec. LocalTransport + epoch crypto;
 ## needs libsecp256k1 + libsodium.
@@ -886,5 +891,67 @@ block:
   doAssert grown == outputs(all & f[0 .. 0], nil) and memo.headers == reached + 1
   echo "16. a memo of part headers changes no fold output, in any order or as the set grows; ",
        "a part is parsed once, and a new part alone is OK"
+
+# ── 17. the flow, provenance and the room map take the memo too ───────────────────
+# PR 340's review, again: coordinate_flow (on the room's 5 s tick) and coordinate_graph (every
+# 2 s while the map is open) folded with no memo, so each poll parsed every part's value again,
+# once in the flow and twice in the map (its provenance and its flow), and the map once more
+# for each entry's content. Each takes the room's memo now. Its output is the memo-less one,
+# byte for byte, in any order; a cold memo parses each part's value once, whichever fold reads
+# it first, and a warm one parses none. The map's content of a part comes from the header the
+# memo holds. An entry under voice/ that holds no part's value (a key of no part's shape, a
+# value the fold refuses, an equivocating later copy) the map parses on every call, as it
+# parses a message, to show its fields.
+block:
+  let clean = bobS.roomEvents()
+  let parts = clean.countIt(it.key.startsWith("voice/"))
+  doAssert parts == 14 and voiceStanding(clean).len == parts, $parts
+  proc flowOf(evs: seq[Event], memo: VoiceMemo): string =
+    $reduceFlow(evs, stub, founders, bobS.sealedIn, memo)
+  proc provOf(evs: seq[Event], memo: VoiceMemo): string =
+    $logProvenance(evs, stub, bobS.sealedIn, memo)
+  proc mapOf(evs: seq[Event], memo: VoiceMemo): string =
+    $reduceRoomGraph(evs, stub, founders, bob, bobS.sealedIn, memo).toJson()
+  var p0 = 0
+  proc parsed(): int = voiceParses() - p0
+  # the room's view: the map first, then each again
+  let want = (flowOf(clean, nil), provOf(clean, nil), mapOf(clean, nil))
+  let memo = newVoiceMemo()
+  p0 = voiceParses()
+  doAssert mapOf(clean, memo) == want[2], "the map with a memo is the map without one"
+  doAssert parsed() == parts,
+           "the map, cold: each part's value once, for its provenance, its flow and its content: " & $parsed()
+  p0 = voiceParses()
+  doAssert mapOf(clean, memo) == want[2] and flowOf(clean, memo) == want[0] and provOf(clean, memo) == want[1]
+  doAssert parsed() == 0, "warm: a second map, the flow and provenance parse 0 parts: " & $parsed()
+  doAssert memo.headers == parts
+  # the flow alone, from a cold memo, then again
+  let fresh = newVoiceMemo()
+  p0 = voiceParses()
+  doAssert flowOf(clean, fresh) == want[0] and parsed() == parts, "the flow, cold: " & $parsed()
+  p0 = voiceParses()
+  doAssert flowOf(clean, fresh) == want[0] and parsed() == 0, "the flow, warm: " & $parsed()
+  # beside §13's four entries under voice/ that are no note's part
+  let evs = authenticEvents(clean & extras, topic)
+  let wantX = (flowOf(evs, nil), provOf(evs, nil), mapOf(evs, nil))
+  let mx = newVoiceMemo()
+  p0 = voiceParses()
+  doAssert flowOf(evs, mx) == wantX[0] and provOf(evs, mx) == wantX[1]
+  doAssert parsed() == parts + 2,
+           "cold: the parts and the two extras of a part's key shape (a refused value, a squatted id), once: " & $parsed()
+  p0 = voiceParses()
+  doAssert mapOf(evs, mx) == wantX[2] and flowOf(evs, mx) == wantX[0] and provOf(evs, mx) == wantX[1]
+  doAssert parsed() == 3,
+           "warm: the map parses only the three entries that hold no part's value, for their content: " & $parsed()
+  # any order, through the warm memo: the memo-less outputs
+  var r = initRand(17)
+  for _ in 0 ..< 6:
+    var shuffled = evs
+    r.shuffle(shuffled)
+    doAssert flowOf(shuffled, mx) == wantX[0] and provOf(shuffled, mx) == wantX[1] and
+             mapOf(shuffled, mx) == wantX[2]
+  echo "17. the flow, provenance and the room map take the memo: each output is the memo-less one, in ",
+       "any order; a cold memo parses each part once, a warm one none, and the map parses only an entry ",
+       "that holds no part's value OK"
 
 echo "voice_test: all OK"
