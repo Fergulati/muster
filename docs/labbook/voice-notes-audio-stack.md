@@ -232,7 +232,7 @@ from Claude Code in the Claude desktop app, with the person's consent. Its micro
 called `startCapture` on Core Audio, and the call did not return. The test's watchdog ended it
 after 20 s, so no frame arrived and nothing was measured. Its speaker leg, run alone, passed.
 
-**Why.** tccd's log (`log show --predicate 'subsystem == "com.apple.TCC"'`) shows the request:
+**Why.** tccd's log shows the request:
 - It is charged to `com.anthropic.claude-code`, Claude Code's own `claude.app`, not to the
   Claude desktop app (`com.anthropic.claude`). The desktop app starts Claude Code through its
   `disclaimer` helper, so Claude Code is the responsible app, and it carries a microphone
@@ -260,6 +260,22 @@ after it unrun. A test that hangs until run-suite's 900 s timeout says nothing. 
 points to covers the last hour, not minutes: on a second run while the first prompt still
 waits, tccd logs only a preflight for the new request (seen on a re-run, 2026-10-22), so the
 prompt to look for is the earlier one.
+
+**Reading tccd's log.** tccd logs every process's requests, and `AUTHREQ_ATTRIBUTION` for each
+one: on this Mac, 143 `AUTHREQ_PROMPTING` or `AUTHREQ_ATTRIBUTION` lines in one hour. Keep
+the microphone prompts and the lines that name the test's binary
+(`voice_device_e2e_<hash>`, as `nim r` names it); in those, `responsible=` is the app asked:
+
+```bash
+/usr/bin/log show --last 1h --predicate 'subsystem == "com.apple.TCC"' \
+  | grep -E 'AUTHREQ_PROMPTING: .*kTCCServiceMicrophone|identifier=voice_device_e2e'
+```
+
+With `--last 12h`, at 06:10 on the day of the run above, that printed 9 lines (the hour's
+grep without the filter, 143): one prompt and eight attributions, each naming
+`com.anthropic.claude-code`. Write `/usr/bin/log`, not `log`: in zsh,
+macOS's default shell, `log` is a builtin of zsh's own, and `log show …` fails with "too many
+arguments".
 
 ## Not found out yet
 

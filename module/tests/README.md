@@ -174,9 +174,14 @@ MUSTER_VOICE_REAL=speaker module/tests/run-suite.sh e2e voice_device_e2e   # the
   to a file, and the only numbers printed from it are its peak and RMS. A capture of nothing
   but zeros fails, with a message naming the likely cause: on macOS, the microphone
   permission of the app macOS holds responsible (the terminal app, or the app that started
-  the shell), or a default input that hears nothing (muted, or a virtual or aggregate device
-  such as BlackHole with nothing playing into it). A start that delivers no frame within 5 s
-  fails apart from that, naming an input whose clock does not run.
+  the shell), or a default input that hears nothing (muted, its volume at zero, or a virtual
+  loopback device such as BlackHole, which gives frames of silence while nothing plays into
+  it). A start that gives no frame at all within 5 s fails apart from that. That has not been
+  seen, so its message names no cause for certain and asks for another input.
+- When the microphone's start stalls, the message gives the tccd log command that shows
+  which app macOS asked: the microphone prompts, and the lines naming this test's binary,
+  where `responsible=` is that app. It spells out `/usr/bin/log`, since zsh's own `log`
+  builtin refuses those arguments.
 - `MUSTER_VOICE_REAL` must name a leg: `1`, `all`, `mic`, `speaker`, or a comma list of
   those. Any other value fails, and so does one of separators alone (`,`), which used to pass
   with nothing run.

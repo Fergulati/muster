@@ -45,28 +45,41 @@ when defined(macosx):
   const
     WhoAsks = "the app macOS holds responsible for this process (the terminal app, or the " &
               "app that started the shell this runs in)"
-    # an hour, not minutes: a prompt an earlier run raised and nobody answered is still the
-    # one waiting, and a later run's request logs a preflight, not a new prompt
-    WhoWasAsked = " To see which app macOS asked: log show --last 1h --predicate " &
-                  "'subsystem == \"com.apple.TCC\"' | grep -E 'AUTHREQ_(PROMPTING|ATTRIBUTION)'"
+    # The binary's name starts with the test's (`nim r`, as run-suite runs it, adds a hash),
+    # and tccd names it as the accessing process; the source file gives the name.
+    TestName = currentSourcePath().splitFile.name
+    # An hour, not minutes: a prompt an earlier run raised and nobody answered is still the
+    # one waiting, and a later run's request logs a preflight, not a new prompt. tccd logs
+    # every process's requests (hundreds an hour), so the grep keeps the microphone prompts
+    # and the lines naming this test's binary. /usr/bin/log in full: zsh, macOS's default
+    # shell, has a `log` builtin of its own, which refuses these arguments.
+    WhoWasAsked = " To see which app macOS asked: /usr/bin/log show --last 1h --predicate " &
+                  "'subsystem == \"com.apple.TCC\"' | grep -E 'AUTHREQ_PROMPTING: " &
+                  ".*kTCCServiceMicrophone|identifier=" & TestName & "' (a PROMPTING line " &
+                  "names the app it asked for; in a line naming " & TestName & ", that app " &
+                  "is responsible=)."
     Grant = "grant it in System Settings > Privacy & Security > Microphone and run again"
+    # a loopback driver runs its own clock: with nothing playing into it, it gives frames of
+    # silence, so it is a cause of this check's failure, never of the no-frames one
     QuietInput = "the default input hears nothing: it is muted or its input volume is zero, " &
-                 "or it is a virtual or aggregate device (BlackHole, a Zoom or Teams device) " &
-                 "with nothing playing into it (System Settings > Sound > Input)"
+                 "or it is a virtual loopback device (BlackHole, a Zoom or Teams device), " &
+                 "which gives frames of silence while nothing plays into it (System " &
+                 "Settings > Sound > Input)"
     ZeroHint = "On macOS that is what capture gives when " & WhoAsks & " has been " &
                "denied the microphone (a prompt nobody answers holds the start instead, and " &
                "the watchdog says so): " & Grant & ". Otherwise " & QuietInput & "."
-    NoFramesHint = "The device started but delivered nothing: on macOS, most likely a default " &
-                   "input whose clock does not run, a virtual or aggregate device (BlackHole, " &
-                   "a Zoom or Teams device) with nothing driving it; pick another input in " &
-                   "System Settings > Sound > Input."
+    NoFramesHint = "The device started but gave no frames at all, not even silence. That has " &
+                   "not been seen on a Mac, so its cause is not known; an aggregate device " &
+                   "whose clock device is missing is a guess, not checked. Pick another " &
+                   "input in System Settings > Sound > Input and run again."
     NoDeviceHint = "There is no input device, or macOS refused to open one: the microphone " &
                    "permission belongs to " & WhoAsks & "; " & Grant & "."
 else:
   const
     ZeroHint = "The input is muted, or its volume is zero, or the default source hears " &
                "nothing (check pactl info, or arecord -l)."
-    NoFramesHint = "The audio server opened a source that delivers nothing (check pactl " &
+    NoFramesHint = "The audio server opened a source but gave no frames at all, not even " &
+                   "silence. That has not been seen, so its cause is not known (check pactl " &
                    "info, or arecord -l)."
     NoDeviceHint = "There is no input device, or the audio server (PulseAudio, PipeWire or " &
                    "ALSA) refused to open one, or this process could not load its library."
