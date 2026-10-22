@@ -40,8 +40,11 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   `coordination/voice_live.nim` (`VoiceRecorder`, the state machine of the seven voice
   methods, S7), is the one coordination file that links the codec: it imports `voice_codec`
   and the `AudioIo` seam. It drains the capture buffer into the incremental encoder on every
-  pump, and closes the `AudioIo` whenever a stream ends, so between streams no device and no
-  miniaudio context is open.
+  pump, and closes the `AudioIo` at the first pump after a stream ends (Stop, the cap's
+  `capped`, playback's `done`), so between streams no device and no miniaudio context is
+  open. Nothing on the device side stops a stream: past the cap a capture keeps its device
+  open, dropping frames, and past `done` a playback plays silence, until the next voice
+  method or `coordinate_intents` call pumps (voice-notes.md §9, §15).
 - A change to any clip constant or the record's fields strands notes already sent: it is a
   new `v`, never an edit (§3.4).
 - **The device thread.** miniaudio calls back on a thread Nim does not own
@@ -79,8 +82,9 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   `module/tests/voice_device_e2e.nim` (S11), sits behind `MUSTER_VOICE_REAL`, in run-suite's
   E2E list, and skips without it. It prints a capture's peak and RMS and nothing else from the
   audio, writes no file, and plays digital silence unless `MUSTER_VOICE_REAL_AUDIBLE=1`. On
-  macOS a first capture start can block until the person answers the microphone prompt (the
-  labbook, §9), so a watchdog thread ends the test when a device call has not returned.
+  macOS a first capture start blocks while a microphone prompt stands unanswered (seen: still
+  not returned after 20 s; that it returns on an answer is inferred; the labbook, §9), so a
+  watchdog thread ends the test when a device call has not returned.
 - Tests: `module/tests/voice_clip_test.nim` (pure), `module/tests/voice_codec_test.nim`
   (libopus; `run-suite.sh` links the builder pin's on macOS, the .lgx's 1.5.2, and nixpkgs'
   beside libsodium on Linux; `MUSTER_OPUS` picks another; §1 prints the version),

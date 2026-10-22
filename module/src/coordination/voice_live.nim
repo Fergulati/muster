@@ -20,8 +20,10 @@
 ## device. Start, Stop, Send and Play each pump first, so each decides on what the device side
 ## has done by now, not on what the last read left. A device is opened only by recordStart or
 ## play, and with the access policy off any caller can make those calls (§13). Every stream is
-## released when it ends: the AudioIo is closed (for miniaudio, the device and the context),
-## so between streams nothing is open. `close` stops whatever runs; the hosted module calls it
+## released by the first pump after it ends: the AudioIo is closed (for miniaudio, the device
+## and the context), so between streams nothing is open. Nothing here runs without a call, so
+## a capture past the cap, or a playback past done, keeps its device open (dropping frames,
+## playing silence) until the next voice method or coordinate_intents call (§9, §15). `close` stops whatever runs; the hosted module calls it
 ## at exit (§9).
 ##
 ## The draft lives in this object's memory only: never on disk, never over IPC, lost with the

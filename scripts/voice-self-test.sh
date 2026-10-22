@@ -3,7 +3,8 @@
 # no clicks, no microphone and no speaker. Two offscreen runners in one room on the delivery
 # fleet (MUSTER_FLEET, as every self-test), each with its own scratch HOME:
 #   A founds the room, admits B, and once B is in records VOICE_SECS seconds (3 by default; a
-#     whole number, 1 or more, as the autopilot reads it) from a 3 s, 1 kHz WAV this script
+#     whole number from 1 to 60, the module's cap, as the autopilot reads it; past 3 s the
+#     WAV is silence) from a 3 s, 1 kHz WAV this script
 #     writes (MUSTER_VOICE_SOURCE, the module's FileAudioIo), then sends the draft: the mic's
 #     Start, Stop and Send (MUSTER_AUTOVOICE);
 #   B sees the note in its thread and plays it (MUSTER_AUTOVOICEPLAY, the card's Play) into a
@@ -13,13 +14,20 @@
 #     two of A's sends (a note is two frames, one send each) and refused none. The count starts
 #     at the Stop, not the Send: a send's result comes back on delivery's thread whenever it
 #     does, and both UIs log the Send's answer only after re-reading voice_status;
-#   * B's thread holds that note, complete, and B logs it playing, then nothing playing;
+#   * B's thread holds that note, complete, and B logs it playing (a voice_status naming it,
+#     or its Play's own answer, ok: a note of a second can end before B's next tick reads
+#     voice_status), then nothing playing;
 #   * B's file holds exactly the note's samples (its length at 48 samples a millisecond, s16)
 #     and the WAV's 1 kHz tone, found by a Goertzel filter over the tone's part of the note
 #     (from 0.25 s to 0.25 s before the shorter of the note and the WAV): at least half the
 #     source's power at 1 kHz there, and over 100 times the power at 500 Hz, 1.5 kHz and
 #     3.1 kHz;
-#   * no log has a QML TypeError or ReferenceError.
+#   * no log has a QML TypeError or ReferenceError. That holds the voice QML only where the
+#     view loads: MUSTER_UI=nim (the Nim app loads Main.qml offscreen) or MUSTER_QPA=xcb. The
+#     default C++ runner never instantiates the QML view offscreen
+#     (docs/labbook/qml-errors-are-invisible-to-nix-build.md), so there a clean log says
+#     nothing of RoomVoiceNote, CardVoiceNote or Room's voice polls: the autopilot drives the
+#     backend's slots, and the gallery fixtures hold the QML.
 # Then a third runner, C, joins on MUSTER_VOICE_BACKEND=null (miniaudio's null device: all
 # zeros) and records and sends too. Its Stop must say the draft is silent, its Send must be
 # refused as silent (on macOS with a detail, the module's microphone note), its own thread
@@ -36,10 +44,13 @@ SECS="${VOICE_SECS:-3}"
 SILENT_LEG="${VOICE_SILENT:-1}"
 # Both backends read MUSTER_AUTOVOICE as a whole number, and anything else as 0, which
 # records nothing; the module refuses a draft under 500 ms.
+# Over 60 the module stops at its cap while the Stop still waits VOICE_SECS, and the wait
+# below (Stop, then B's playback of up to 60 s, in 240 s) no longer fits.
 case "$SECS" in
-  ''|*[!0-9]*) echo "VOICE_SECS must be a whole number of seconds, 1 or more, not '$SECS'"; exit 2 ;;
+  ''|*[!0-9]*) echo "VOICE_SECS must be a whole number of seconds from 1 to 60, not '$SECS'"; exit 2 ;;
 esac
-[ "$SECS" -ge 1 ] || { echo "VOICE_SECS must be a whole number of seconds, 1 or more, not '$SECS'"; exit 2; }
+[ "$SECS" -ge 1 ] && [ "$SECS" -le 60 ] \
+  || { echo "VOICE_SECS must be a whole number of seconds from 1 to 60, not '$SECS'"; exit 2; }
 . scripts/lib/ui-build.sh
 ui_require_runner
 trap ui_cleanup EXIT
@@ -78,14 +89,22 @@ for i in $(seq 1 240); do
   sleep 1
   [ -n "$NID" ] || NID=$(last 'VOICE-RESULT send' "$D/A.log" | grep -ao '"note":"[0-9a-f]*"' | sed 's/"note":"//;s/"//')
   [ -n "$NID" ] || continue
-  # B played it: a voice_status naming it playing, then one with nothing playing
-  played=$(lg "$D/B.log" | grep -a '\[muster_ui\] VOICE {' | sed 's/.*\[muster_ui\] VOICE //' | python3 -c '
+  # B played it: a voice_status naming it playing, or its Play's own answer ok, then a
+  # voice_status with nothing playing. Both autopilots log voice_status once a tick, before
+  # they decide to Play, and not the re-read after it, so a short note can end unseen.
+  played=$(lg "$D/B.log" | grep -aE '\[muster_ui\] VOICE( \{|-RESULT play )' | sed 's/.*\[muster_ui\] VOICE//' | python3 -c '
 import json, sys
 nid, seen = sys.argv[1], 0
 for line in sys.stdin:
+    if line.startswith("-RESULT play "):
+        parts = line[len("-RESULT play "):].split(" ", 1)
+        try: r = json.loads(parts[1]) if len(parts) == 2 else {}
+        except ValueError: r = {}
+        if parts[0] == nid and isinstance(r, dict) and r.get("ok") is True and "error" not in r: seen = max(seen, 1)
+        continue
     try: p = json.loads(line).get("playing")
-    except ValueError: continue
-    if p and p.get("note") == nid: seen = 1
+    except (ValueError, AttributeError): continue
+    if p and p.get("note") == nid: seen = max(seen, 1)
     elif p is None and seen: seen = 2
 print(seen)' "$NID")
   [ "$played" = 2 ] && { ok=1; break; }
@@ -179,6 +198,9 @@ ui_cleanup
 
 qml=$(cat "$D"/*.log | grep -aE 'TypeError|ReferenceError' | head -3)
 [ -z "$qml" ] || { echo "FAIL: QML errors:"; echo "$qml"; ok=0; }
+if [ "${MUSTER_UI:-cpp}" = cpp ] && [ -z "${MUSTER_QPA:-}" ]; then
+  echo "NOTE: offscreen, the C++ runner never loads the QML view, so no voice QML ran here (MUSTER_UI=nim or MUSTER_QPA=xcb runs it)"
+fi
 
 if [ "$ok" = 1 ]; then
   echo "SUCCESS: B played A's voice note ($NID), exactly its samples, the 1 kHz tone intact$([ "$SILENT_LEG" = 1 ] && echo '; the null device'"'"'s zeros were refused as silent')."

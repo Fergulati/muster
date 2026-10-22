@@ -3,10 +3,11 @@
 Status: **proposed 2026-10-21 by an outside contributor; slices S1–S10 are built on this
 branch. Of S11, the real-device test is built and has run in part (§17). S9's end-to-end
 self-test has not run yet (§15).** This document is
-the first commit of a draft PR, so the maintainer can object to the wire format (§3–§5) before any code depends on it. There is no exo id yet
+the first commit of a draft PR. The wire format (§3–§5) is what S4–S10 are built on, so an
+objection to it now means reworking those slices (§18). There is no exo id yet
 (§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
 an id is assigned. A code path named below as new is **planned** unless its slice is built.
-Every file:line reference is to `main` at `67701f8`, except one marked "on this branch".
+Every file:line reference is to `main` at `67701f8`, except those marked "on this branch".
 
 Where it comes from: the design note *Voice in Muster* (2026-10-21, desk research against
 `67701f8`) compared four designs for voice against the invariants. It recommended
@@ -336,7 +337,7 @@ S7 measured the hosted reads the same way (20 notes of 60 s, a member's session 
 ## 7. Thread rows
 
 The thread is `coordinate_messages`, which returns every message body on each 1 s poll
-(`muster_module.nim:4582-4594`). Audio must never ride that. So a note is never a `message/`
+(`muster_module.nim:4566-4578`). Audio must never ride that. So a note is never a `message/`
 event, and there is no pointer message as `intent-ref` uses.
 
 Instead, `threadRows(events)` (built, S5) merges `reduceMessages(events)` with one synthesized
@@ -365,7 +366,7 @@ under the forger's name, and its Play would play Alice's audio. That attributes 
 voice to another, against invariant 9. Three rules close it:
 - **The fold alone sets `voice`.** `reduceMessages` builds a row from a message's `author`,
   `ts` and `body` only. `musterCoordinateMessages` serializes just those fields
-  (`muster_module.nim:4590-4593`). So no `message/` event can put a `voice` field on a row.
+  (`muster_module.nim:4575-4577`). So no `message/` event can put a `voice` field on a row.
 - **The card draws from `modelData.voice` alone.** RoomThread's `parsedCard` refuses
   `voice-note` from a body, so a `message/` that claims it falls through to plain text: the
   forger's raw JSON, under the forger's name, with no voice card and no Play for the note it
@@ -379,8 +380,8 @@ construction. A co-resident module can call `voice_play` with any nid, but that 
 and names nobody (§13).
 
 `threadRows` is used in exactly two places:
-- `musterCoordinateMessages`, in place of `reduceMessages` (`:4590`);
-- the `lastTs` of `coordinate_conversations` (`:4640-4641`), so a note moves its room up the
+- `musterCoordinateMessages`, in place of `reduceMessages` (`:4574`);
+- the `lastTs` of `coordinate_conversations` (`:4624-4625`), so a note moves its room up the
   list. That one reads `threadLastTs`, the newest row's ts from the fold's header pass (§6),
   which judges no clip.
 
@@ -503,8 +504,8 @@ what the device side has captured, at 48 samples a millisecond.
 (`docs/design/side-modules.md:66`), and the SDK's `emit` callback is a threadvar, so the audio
 thread cannot emit. So:
 - `voice_status` drives `voicePump`, as `fileshare_files` drives `fileSharePump`
-  (`muster_module.nim:2778`);
-- `coordinate_intents` also calls it, from its pump list (`:2854-2861`);
+  (`muster_module.nim:2776`);
+- `coordinate_intents` also calls it, from its pump list (`:2838-2846`);
 - the UI polls `voice_status` every 250 ms while not idle: a note recording, a draft held (for
   as long as it is held), or a note playing;
 - the room's 1 s timer reads it too, so a recording any caller started shows a banner (§13),
@@ -556,18 +557,24 @@ buffer; the prototype decoded 60 s in about 27 ms. The callback copies out at an
 index, writes zeros past the end and sets `done`. The pump then releases the device.
 
 **Device lifetime.** A device is opened lazily, by `voice_record_start` or `voice_play`, and
-bounded. With the access policy off, any caller can make those calls (§13). It is stopped and
+released at the first pump after its stream ends (below). With the access policy off, any
+caller can make those calls (§13). It is stopped and
 uninitialised on the module thread only, never from the callback: on stop, on done, and before
 the module unloads. That is the `abandoned` lesson from the storage FFI (CLAUDE.md, pattern
 sources). The module has no unload hook: the generated surface exports none (`muster_gen.nim`:
 seven `logos_module_*` entry points and a constructor). So S7 does two things (built):
-- **Every stream releases its device when it ends.** At Stop, at the cap, when the pump sees
-  `done`, at `voice_play_stop` and at Discard, the recorder stops the stream and closes the
-  `AudioIo`: for `MiniaudioIo` that uninitialises the device and the context, so between
-  streams nothing is open (`voice_live_test` §13 reads the null device's context back as
-  gone; §19 holds Send and Discard while the draft plays, §20 a sink that refuses a write,
-  §21 a start the device refuses and `close`). `MiniaudioIo` makes a new context at the next
-  start.
+- **Every stream releases its device at the first pump after it ends.** At Stop, at
+  `voice_play_stop` and at Discard at once; at the cap and at `done` when the pump next runs
+  (`voice_status`, any other voice method, or `coordinate_intents`). The recorder stops the
+  stream and closes the `AudioIo`: for `MiniaudioIo` that uninitialises the device and the
+  context, so between streams nothing is open (`voice_live_test` §13 reads the null device's
+  context back as gone; §19 holds Send and Discard while the draft plays, §20 a sink that
+  refuses a write, §21 a start the device refuses and `close`). `MiniaudioIo` makes a new
+  context at the next start. Nothing on the device side stops a stream, and the module has no
+  clock, so until that pump a capture past the cap keeps the microphone open, dropping frames
+  (the draft still ends at 60,000 ms), and a finished playback keeps the speaker open,
+  playing silence. In Basecamp, with a room open, the room's ticks pump within a second;
+  headless, or before the UI enters a room, nothing does (§13, §15).
 - **An exit proc closes what still runs.** `muster_module` registers one (`std/exitprocs`)
   when it makes the recorder, and it calls `VoiceRecorder.close`. It runs at process exit,
   and when the plugin's image is unloaded, since `atexit` ties a handler to the image that
@@ -588,7 +595,8 @@ seven `logos_module_*` entry points and a constructor). So S7 does two things (b
     Null. The system IO never lists Null, so a machine with no backend says `no-device`, and
     never records zeros.
   - **Runtime linking is kept.** miniaudio dlopens the platform's audio libraries itself. On
-    macOS the staticlib's only new undefined symbol was `_dlopen` (prototype). Framework entries
+    macOS the staticlib's new undefined symbols are `dlopen`, `dlsym` and `dlclose`, from
+    libSystem (`nm -m` on S3's `.lgx`; the prototype had shown `_dlopen` alone). Framework entries
     on the flat link list would also land on the Linux link line.
 - **The test harness** learns libopus and miniaudio as well: `module/tests/run-suite.sh` and
   the host-harness probe (`probe_return_marshalling_host.nim`), or the suite goes red (S1, S3).
@@ -601,7 +609,7 @@ seven `logos_module_*` entry points and a constructor). So S7 does two things (b
 | store node (delivery) | that the room's topic carried two frames of 90,153 B each, and when; the publishing node, unless `mix` is on; a frame that size marks a voice note | its length, which member sent it (FS-7), the audio |
 | relay-mesh peers | the publishing node of each frame, as for any send, unless `mix` is on | the content, the member |
 | mix node (`mix` on) | a hop of each frame, if mix carries frames this size: **untested** | the endpoints together |
-| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, send or discard the draft, play the draft or a note aloud (§13) | the audio, through any method: no voice method returns it, S6 closed `coordinate_graph`, and `coordinate_proof` refuses a room holding a voice note (below) |
+| a module loaded beside Muster (access policy off) | the voice state and peak level; it can start a recording, in any room it makes the current one, send or discard the draft, play the draft or a note aloud (§13) | the audio, through any method: no voice method returns it, S6 closed `coordinate_graph`, and `coordinate_proof` refuses a room holding a voice note (below) |
 | a module loaded beside another member's Muster from before voice notes (0.3.2 or earlier) (access policy off) | every note's clip, through that member's `coordinate_graph` and `coordinate_proof`, which return each part's value whole (§7; "What still leaks", item 6) | nothing of a note sealed in an epoch that member never held |
 
 **Two methods that returned raw log content.** No voice method returns audio. But a part's
@@ -843,7 +851,13 @@ All of this is unverified, because there is no Linux host here.
 Basecamp runs with the access policy off by default, so any loaded module can call any other
 (`docs/basecamp-access-policy.md:3`, `side-modules.md:102`). A Nim provider cannot see its
 caller. So any module loaded beside Muster can:
-- call `voice_record_start` and turn on the microphone;
+- call `voice_record_start` and turn on the microphone. The cap ends the recording at 60 s,
+  but the device stays open until something pumps (§9), so a caller that makes no further
+  call, headless or before the UI has entered a room, keeps the microphone on past it;
+- choose where the note goes. `coordinate_join` makes any room the current one, one the
+  module founds there and then or one whose members it admitted (`coordinate_admit`), and
+  `voice_record_start` binds the draft to the current room, so the module can record there
+  and send, and the member's voice reaches whoever is in that room;
 - send the draft, with `voice_draft_send`, before the member decides. The note is signed with
   the member's key, as `coordinate_post_message` already lets such a module post text in the
   member's name;
@@ -899,10 +913,14 @@ and the PR says so (§18).
 S1–S10 are built (§17). Of S11, the real-device test is built: its speaker leg passed on this
 Mac, and its microphone leg stopped at a permission prompt nobody answered (§17 S11). What is
 unverified, built or planned:
-- **The audio facts came from a throwaway prototype on an Apple M5.** These are packet sizes,
-  the varargs hazard, the null backend, encode and decode cost, and miniaudio compiled through
-  `{.compile.}`. None of them has run through the real `logos-module-builder` derivation, and
-  none has run on Linux.
+- **Some audio facts are still the prototype's** (a throwaway on an Apple M5): the cost of
+  encoding and decoding 60 s (§3.1, §9), and the fixed-arity binding's wrong read-back
+  (§3.1; in this build a fixed-arity mutant failed `OPUS_BAD_ARG` instead, labbook §1). The rest has run through the
+  real `logos-module-builder` derivation since: S3 built the `.lgx` (`nix build
+  .#lgx-portable`, miniaudio compiled in through `{.compile.}`, `nm` showing `T
+  _ma_context_init`), `voice_codec_test` holds the 40 B packets on the shipping libopus
+  1.5.2, and S7's `.lgx` ran the null backend in `logos_host` (below). None of it has run on
+  Linux.
 - **Microphone capture under Basecamp's hardened runtime.** Neither outcome of §11 is
   observed: zero-filled buffers, or TCC terminating `logos_host`. S11 checks this first. Real
   capture anywhere without the person's grant is unobserved too, and so is real capture with
@@ -914,6 +932,12 @@ unverified, built or planned:
   module starts a device on its own thread (§9), so there every other module call would wait
   for the person's answer too (inferred, not run in a host). No timeout guards the start.
   Whether `logos_host` under Basecamp, with no usage string, is asked at all is §11's check.
+- **A device past the end of its stream.** The cap and `done` are noticed by the voice pump
+  alone (§9), so with nothing calling the module the microphone stays open past 60 s (a
+  review probe on the null device: still capturing 63 s after the start, 2,880,000 frames,
+  closed by the first `voice_status`), and a finished playback keeps the speaker open. A
+  device-side stop (a watchdog thread that calls `ma_device_stop` once `capped` or `done` is
+  set) is not built.
 - **Linux dlopen** of `libpulse` and `libasound`, from a portable `.lgx`, the AppImage and a
   nix-built runner; and PipeWire.
 - **Delivery of two 90,153 B frames:**
@@ -1034,7 +1058,13 @@ unverified, built or planned:
     C's thread holding a note of its own, and, on macOS, C's refusal with no `detail`,
     passed; and a `VOICE_SECS` of 2 failed whatever B heard, the filter's window being
     fixed at 0.25 s to 2.25 s (it now ends 0.25 s before the note or the WAV does: 1 and 2
-    pass, and 0 or 2.5 is refused before anything launches).
+    pass against the stand-in, and 0 or 2.5 is refused before anything launches). The
+    whole-diff review found two more, each now closed and shown on the same kind of stand-in:
+    both autopilots log `voice_status` once a tick, before they decide to Play, so a note of
+    a second can end before B's next tick logs it playing, and the script waited out its
+    240 s and failed (it now takes the Play's own answer, ok, as B playing it: red on the old
+    script, `FAIL: B never played A's note (sent: ab12cd, played: 0)`, green on the new); and
+    a `VOICE_SECS` past 60 could never fit the wait (now refused up front, as 61 is).
 
   The C++ autopilot compiles into the `.lgx` and has not run.
 
@@ -1050,9 +1080,15 @@ unverified, built or planned:
   module's shapes (above), and S9's recorded ones, the card complete, playing, arriving and
   broken and the message row recording and holding a draft, are not made:
   `scripts/ui-screenshot.sh record scripts/voice-self-test.sh` needs a runner, Xvfb and Qt's
-  xcb platform, none of which this Mac has. On Linux that recording's snapshots replace the
-  typed fixtures; a forged body, which no runner sends, is added to a recorded snapshot, and
-  the fixture says so. Until then the PR lists this as an open breach of that rule.
+  xcb platform, none of which this Mac has. That self-test drives one good note, its
+  playback and C's silent refusal, so on Linux its snapshots can replace `room-voice-record`
+  (recording, the draft), the complete and playing rows of `room-voice-notes`,
+  `room-voice-flow`, the voice entries of `room-map-voice`, and the silent refusal in
+  `room-voice-refused`. It makes no broken note, no reliably caught arriving one (B holds one
+  part only between two frames sent back to back), and no `busy`, `room-changed`,
+  `too-large`, `codec` or device word. Those, like a forged body, which no runner sends, are
+  a recorded snapshot with that one row or answer edited, and the fixture says which. Until
+  then the PR lists this as an open breach of that rule.
 - **The exit proc at unload** (§9). In that run `module unload muster_module` with a
   recording open on the null device took `logos_host` down with no crash report, and a
   reload answered idle; whether the exit proc ran then, rather than the process being ended
@@ -1093,7 +1129,8 @@ unverified, built or planned:
 ## 17. Order of work
 
 Each slice's test is written and run red before its code (worker.md), and every commit carries
-`Tested-Behavior` or `TDD-Exempt`.
+`Tested-Behavior` or `TDD-Exempt`. S9's is the exception so far: `scripts/voice-self-test.sh`
+has run, red and green, only against a stand-in runner, never a real one (§15).
 
 - **S0 — this document** (TDD-Exempt: docs).
 - **S1 — The Opus binding, the clip record, the codec.** `audio/opus.nim`, `voice_clip.nim`
@@ -1135,15 +1172,18 @@ Each slice's test is written and run red before its code (worker.md), and every 
   it as plain text under its poster's name, with no voice card and no Play (§7).
 - **S9 — End to end (built, not run: §15).** `scripts/voice-self-test.sh`, in
   `fileshare-self-test.sh`'s shape: two offscreen runners in one room, each with a scratch
-  HOME. A records `VOICE_SECS` (3; a whole number, 1 or more, as both autopilots read it)
+  HOME. A records `VOICE_SECS` (3; a whole number from 1 to 60, as both autopilots read it)
   seconds from a 3 s 1 kHz WAV the script writes (`MUSTER_VOICE_SOURCE`) and sends; B plays
   the note into a PCM file (`MUSTER_VOICE_SINK`). It passes when A logs the note it sent;
   from A's Stop on, delivery accepted at least two of A's sends (the note's two frames,
   whose results come back whenever they do) and refused none; B's thread holds that note
-  complete and B logs it playing then nothing playing; B's file holds exactly the draft's
+  complete and B logs it playing (a `voice_status` naming it, or its Play's own answer, ok),
+  then nothing playing; B's file holds exactly the draft's
   samples with the 1 kHz tone (a Goertzel filter over the tone's part of the note: at least
   half the source's power, over 100 times that at 500 Hz, 1.5 kHz and 3.1 kHz); and no log
-  has a QML TypeError or ReferenceError. Then C joins on `MUSTER_VOICE_BACKEND=null`: its
+  has a QML TypeError or ReferenceError, which holds the voice QML only on `MUSTER_UI=nim`
+  or `MUSTER_QPA=xcb`: offscreen, the C++ runner never instantiates the view, and the script
+  says so. Then C joins on `MUSTER_VOICE_BACKEND=null`: its
   Stop must call the draft silent, its Send must be refused `silent` (on macOS with the
   microphone note as `detail`), its own thread must hold no note of its own after the Send,
   and B must hold one note still (`VOICE_SILENT=0` skips C). The autopilot,
@@ -1243,8 +1283,9 @@ Asked of the maintainer (corpetty):
   touches `.pebbles/`.
 - **The typed spec.** It would be `derived-exo-<id>`, through `discuss-issue`, with your
   sign-off. The probes are written in stepper form now, as its oracles.
-- **The wire format, §3–§5, before S4 lands.** The alternative was 12 kbps in one 128 KiB
-  frame. Changing the format later strands notes already sent.
+- **The wire format, §3–§5.** S4–S10 are built on it in this PR, so an objection now means
+  reworking them; after a release, changing it strands notes already sent. The alternative
+  was 12 kbps in one 128 KiB frame.
 - **F-13** (§14): is a voice note a message in another medium, or a core vocabulary addition?
 - **`derived-exo-526`'s oracle.** S3 added `voice_status` to its host probe: the method listed
   as `QString`, `ready.codec` the libopus linked, both devices `"unknown"`. S7 added the six
