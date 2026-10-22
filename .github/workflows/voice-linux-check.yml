@@ -44,25 +44,50 @@ jobs:
         env:
           OUT: ${{ runner.temp }}/suite-voice
         run: JOBS="$(nproc)" module/tests/run-suite.sh voice audio session_pad
+      # Its verdict is the next step's: a test that times itself (room_graph_scale_test) runs
+      # here beside other tests' compiles on the same cores, and on these runners went 5 to 10
+      # times slower than alone.
       - name: The whole suite
+        id: all
         if: always()
+        continue-on-error: true
         shell: bash
         env:
           OUT: ${{ runner.temp }}/suite-all
         run: JOBS="$(nproc)" module/tests/run-suite.sh
+      # The whole suite's failures again, each alone on the runner: this step's result is the
+      # suite's. A test that failed beside the others and passes alone is named in a warning.
+      - name: The whole suite's failures, one at a time
+        if: always() && steps.all.outcome == 'failure'
+        shell: bash
+        env:
+          OUT: ${{ runner.temp }}/suite-alone
+        run: |
+          set +e
+          names=$(grep '^FAIL' "$RUNNER_TEMP/suite-all/results" 2>/dev/null | awk '{print $2}' | sort)
+          [ -n "$names" ] || { echo "the suite stopped before it ran a test"; exit 1; }
+          filters=()
+          for n in $names; do filters+=("/$n.nim"); done
+          JOBS=1 module/tests/run-suite.sh "${filters[@]}"
+          rc=$?
+          alone=$(grep '^PASS' "$OUT/results" 2>/dev/null | awk '{print $2}' | sort | tr '\n' ' ')
+          [ -z "$alone" ] || echo "::warning::failed with $(nproc) tests at a time, passed alone: $alone"
+          exit $rc
       # Each failing test's log tail in the job log, so a red run reads without the artifact.
       - name: The failing tests' logs
-        if: failure()
+        if: always()
         shell: bash
         run: |
-          for d in "$RUNNER_TEMP"/suite-voice "$RUNNER_TEMP"/suite-all; do
+          set +e
+          for d in "$RUNNER_TEMP"/suite-voice "$RUNNER_TEMP"/suite-all "$RUNNER_TEMP"/suite-alone; do
             [ -f "$d/results" ] || continue
-            grep '^FAIL' "$d/results" | sort | awk '{print $2}' | head -40 | while read -r n; do
+            for n in $(grep '^FAIL' "$d/results" | awk '{print $2}' | sort | head -40); do
               echo "::group::$(basename "$d") $n"
-              tail -n 60 "$d/$n.log" 2>/dev/null
+              tail -n 60 "$d/$n.log"
               echo "::endgroup::"
             done
           done
+          exit 0
       - name: Keep the suite's logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -71,6 +96,7 @@ jobs:
           path: |
             ${{ runner.temp }}/suite-voice/
             ${{ runner.temp }}/suite-all/
+            ${{ runner.temp }}/suite-alone/
           if-no-files-found: ignore
 
   selftest:
