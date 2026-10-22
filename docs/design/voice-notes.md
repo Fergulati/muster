@@ -2,7 +2,8 @@
 
 Status: **proposed 2026-10-21 by an outside contributor; slices S1–S10 are built on this
 branch. Of S11, the real-device test is built and has run in part (§17). S9's end-to-end
-self-test has not run yet (§15).** This document is
+self-test has not run yet; the module calls it makes have run once, between three headless
+hosts on the live fleet, with no UI (§15).** This document is
 the first commit of a draft PR. The wire format (§3–§5) is what S4–S10 are built on, so an
 objection to it now means reworking those slices (§18). There is no exo id yet
 (§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
@@ -915,8 +916,9 @@ and the PR says so (§18).
 ## 15. What is not verified
 
 S1–S10 are built (§17). Of S11, the real-device test is built: its speaker leg passed on this
-Mac, and its microphone leg stopped at a permission prompt nobody answered (§17 S11). What is
-unverified, built or planned:
+Mac, and its microphone leg stopped at a permission prompt nobody answered (§17 S11). A note
+has crossed the live fleet once, between three headless hosts outside Basecamp, with no UI
+(below). What is unverified, built or planned:
 - **Some audio facts are still the prototype's** (a throwaway on an Apple M5): the cost of
   encoding and decoding 60 s (§3.1, §9), and the fixed-arity binding's wrong read-back
   (§3.1; in this build a fixed-arity mutant failed `OPUS_BAD_ARG` instead, labbook §1). The rest has run through the
@@ -930,12 +932,18 @@ unverified, built or planned:
   capture anywhere without the person's grant is unobserved too, and so is real capture with
   it: `voice_device_e2e`'s microphone leg got no frame, because the prompt went unanswered
   (§17 S11).
-- **A first `voice_record_start` can hold the module thread on a Mac.** Outside Basecamp, for
-  an app with a microphone usage string whose permission is not yet decided, Core Audio held
-  the capture device's start while macOS asked (S11: still not returned after 20 s). The
-  module starts a device on its own thread (§9), so there every other module call would wait
-  for the person's answer too (inferred, not run in a host). No timeout guards the start.
-  Whether `logos_host` under Basecamp, with no usage string, is asked at all is §11's check.
+- **A device start has no timeout, so on a Mac it can hold the module thread** (asked of the
+  maintainer, §18). On a Mac where the responsible app can prompt for the microphone (it has a
+  usage string, and the permission is not decided), Core Audio's device start waited for the
+  permission prompt, and nobody answered it: `voice_device_e2e`'s `startCapture` had not
+  returned after 20 s (S11). Nothing in the module times out a device start, and the module
+  starts the device on its own thread (§9), so that thread could wait with it, and every
+  other module call behind it, until the person answers (inferred: not run in a host). The
+  options, neither built: start the device off the module thread, so `voice_record_start`
+  answers at once and `voice_status` says when the start lands or fails; or a start timeout,
+  after which the call refuses while the start, which has to run on another thread for that,
+  finishes or is closed when Core Audio returns. Whether `logos_host` under Basecamp, with no
+  usage string, is asked at all is §11's check.
 - **A device past the end of its stream.** The cap and `done` are noticed by the voice pump
   alone (§9), so with nothing calling the module the microphone stays open past 60 s (a
   review probe on the null device: still capturing 63 s after the start, 2,880,000 frames,
@@ -945,7 +953,8 @@ unverified, built or planned:
 - **Linux dlopen** of `libpulse` and `libasound`, from a portable `.lgx`, the AppImage and a
   nix-built runner; and PipeWire.
 - **Delivery of two 90,153 B frames:**
-  - over the live fleet;
+  - over the live fleet, past one headless run on `logos.dev` (below), which ran the module
+    from before `publishTogether` sends the two back to back;
   - with RLN on `logos.test`, where each note spends two sends;
   - under `mix = preferred | required`.
 
@@ -1000,8 +1009,9 @@ unverified, built or planned:
   change that code, and no test here runs such a client against a voice note: what it does
   is read from `main`'s source.
 - **The size budget** (§5) is measured in process only. The record's size is S1's arithmetic,
-  and the worst case's JSON and frames are measured over `LocalTransport` (S4, S5). No
-  90,153 B frame has crossed the fleet (above).
+  and the worst case's JSON and frames are measured over `LocalTransport` (S4, S5). One
+  note's two frames crossed `logos.dev` once, in the headless run below, but no frame's size
+  was read there.
 - **The voice methods through a host** (S7). `voice_live_test` runs `VoiceRecorder` in
   process, on `SyntheticAudioIo`, `FileAudioIo` and miniaudio's null device, with two members
   over `LocalTransport`, and holds the rows `coordinate_messages` serves (`messagesJson`, §22)
@@ -1011,7 +1021,8 @@ unverified, built or planned:
   byte (`not-joined`, `not-recording`, `no-draft`, `ok`), and `coordinate_messages` and
   `coordinate_proof` beside them; no device opens. With a room joined, the glue's remaining
   lines (the `not-joined` check, a poll, the session and keystore it passes) are not run
-  through a host by any test: no harness here joins a room. It was driven once by hand,
+  through a host by any test: no harness in the tree joins a room (the scratch one of the next
+  entry did). It was driven once by hand,
   headless, in logosctl 0.3.2's `logos_host`
   on darwin-arm64 (2026-10-21, the S7 `.lgx`, a throwaway room joined on `logos.dev`): with
   `MUSTER_VOICE_SOURCE` a 3 s 1 kHz WAV and `MUSTER_VOICE_SINK` a scratch file,
@@ -1020,9 +1031,42 @@ unverified, built or planned:
   `voice_play("draft")` wrote 8,700 ms to the sink with the source's 1 kHz power in its
   first 3 s, and Discard, `busy`, `no-draft`, `unknown-note` and `not-recording` answered as
   §8 says; on `MUSTER_VOICE_BACKEND=null` the null device's zeros were refused at Send as
-  `silent` with the macOS note as `detail`, and nothing was posted. No note was sent from a
-  host: two members, the live fleet and the thread's voice rows through `coordinate_messages`
-  are what S9's self-test drives, and it has not run (below).
+  `silent` with the macOS note as `detail`, and nothing was posted. Since then a note has gone
+  from one host to another (next entry).
+- **A note between hosts, headless, outside Basecamp (2026-10-22).** Three logosctl 0.3.2
+  hosts (`aarch64-macos`) ran on this Mac, each its own daemon, with `muster_module` from this
+  branch built at `ff071e3`, in one room on the `logos.dev` fleet. A harness (scratch, not in
+  the tree) made the module calls the UI's slots make: `coordinate_join`;
+  `coordinate_request_join` sent again every 3 s, as `scheduleJoinRetry` does;
+  `coordinate_pending` and `coordinate_admit`; `coordinate_intents` and `coordinate_messages`
+  as the 1 s tick; on A, `voice_record_start`, `voice_status`, `voice_record_stop` and
+  `voice_draft_send`, with `MUSTER_VOICE_SOURCE` a 3 s 1 kHz WAV; on B, `voice_play` and
+  `voice_status`, with `MUSTER_VOICE_SINK`. What it gave:
+  - A's draft was 4,777 ms: the WAV's 3 s, then silence, since the recording ran about 4.8 s
+    while the harness's status calls took that long. A sent it as note
+    `836b8a66b39f3d4488f706ae95f11eaf`.
+  - B's thread showed it complete about 1 s after the Send. B played it to its end:
+    `voice_status` named it playing, then `playing` was null.
+  - B's sink held exactly 229,296 samples, 4,777 × 48. From 0.25 s to 2.75 s the 1 kHz
+    Goertzel power was 0.99 of the source's, and over 8 × 10⁸ times that at 500 Hz, 1.5 kHz
+    and 3.1 kHz (S9's script asks for half, and 100 times).
+  - C, on `MUSTER_VOICE_BACKEND=null`: Stop gave `{durationMs 3130, silent true, peak 0}`,
+    Send was refused `{"error":"silent","detail":"Basecamp 0.3.2 can't use the microphone on
+    macOS yet: it lacks the microphone permission."}`, and 8 s later B's thread still held
+    exactly one voice row.
+  - A first attempt failed only because the harness sent `coordinate_request_join` once: no
+    admission in 180 s. Sent again every 3 s, as the UI does, admission took about 7 s.
+
+  What it does not cover: no UI, so no QML, neither backend and no autopilot (it is not S9's
+  self-test, next entry); no Basecamp window, since the screen was locked, so S11's checks in
+  the window and whether `logos_host` survives `voice_record_start` under Basecamp 0.3.2 are
+  still open; and no real microphone or speaker (`FileAudioIo` on A and B, the null device on
+  C). Nor does it cover the module's code after `ff071e3`, which is `2656f71`'s: a note's two
+  parts published together and sent back to back (`session.publishTogether`,
+  `authorship.publishAuthoredTogether`, `voice_live`'s `draftSend`), a retried Send sealing
+  the author's own copy (`copyToSeal`, `publish(asGiven)`), and `log.variantsOf`. In
+  `module/src` since then, `2cc3c53` and `2828cc1` changed only comments and
+  `src/audio/CLAUDE.md`, and nothing has changed `module/nim-lib`.
 - **S9's self-test has not run.** `scripts/voice-self-test.sh` (§17) needs the standalone
   runner, and the runner does not build on this Mac. `BUILD_MEM= make build` on 2026-10-22
   (macOS 26.5, Apple Silicon, Command Line Tools and no Xcode; 1 h 28 min from cold) stopped
@@ -1032,7 +1076,8 @@ unverified, built or planned:
   `risc0-build-kernel` 2.0.1 panics "Could not build metal kernels". `libmuster_module`, the
   `muster_ui` plugin and `logos-standalone-app` had built by then. So no note has crossed two
   runners on either UI, on `MUSTER_FLEET=local` or a fleet, and the `voice` entry of
-  `ui-parity.sh` has not run. What did run, on darwin:
+  `ui-parity.sh` has not run. (A note did cross between three headless hosts, the entry
+  above: no runner, no UI and no autopilot, so not this test.) What did run, on darwin:
   - the Nim autopilot, in `ui-nim/tests/autovoice/run.sh`, which compiles
     `ui-nim/app/backend.nim` whole against stubs made from the `.rep` and `muster.lidl` and
     a fake module with §8's state machine, and runs its timers in real time, with nim 2.2.12
@@ -1174,7 +1219,8 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   room map, the regenerated gallery `FakeBackend.qml`, and the unknown-kind fallback. The
   gallery fixture `room-voice-forged` holds a forged `voice-note` body, and RoomThread draws
   it as plain text under its poster's name, with no voice card and no Play (§7).
-- **S9 — End to end (built, not run: §15).** `scripts/voice-self-test.sh`, in
+- **S9 — End to end (built; the self-test not run, its module calls run once between three
+  headless hosts on `logos.dev`: §15).** `scripts/voice-self-test.sh`, in
   `fileshare-self-test.sh`'s shape: two offscreen runners in one room, each with a scratch
   HOME. A records `VOICE_SECS` (3; a whole number from 1 to 60, as both autopilots read it)
   seconds from a 3 s 1 kHz WAV the script writes (`MUSTER_VOICE_SOURCE`) and sends; B plays
@@ -1209,7 +1255,10 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
 - **S11 — Checks on a Mac display, the opt-in device test, and the draft PR.** First, before
   anything relies on the `silent` refusal: under Basecamp 0.3.2, with a throwaway profile,
   does `logos_host` survive `voice_record_start`? If it does not, that goes back to the
-  operator (§11).
+  operator (§11). Not checked yet: on 2026-10-22 the screen was locked, so neither this nor
+  any check in Basecamp's window ran. A headless run with three logosctl 0.3.2 hosts ran
+  instead (§15): one note from A's WAV to B's sink over `logos.dev`, and C's null device
+  refused `silent` with the macOS note, in logosctl's `logos_host`, not Basecamp's.
 
   **The device test (built): `voice_device_e2e`**, in run-suite's E2E list and gated behind
   `MUSTER_VOICE_REAL`. Without it, it prints a `SKIP` line and exits 0, and run-suite counts it
@@ -1298,6 +1347,14 @@ Asked of the maintainer (corpetty):
   acceptance criterion still names only `health()`, `propose()` and `status()`, so a voice
   regression now turns exo-526 red. Sign off on the wider oracle, or a voice spec's own probe
   takes these checks over once the epic has an exo id.
+- **A device start with no timeout** (§15). On a Mac where the responsible app can prompt,
+  Core Audio's device start waited for an unanswered permission prompt (S11), and nothing in
+  the module times out a device start, so the module thread could wait with it, and every
+  module call behind it. The options: start the device off the module thread, so the call
+  answers at once and `voice_status` reports the start; or a start timeout, the call refusing
+  after it while the start, run on another thread, finishes or is closed. This PR builds
+  neither. Which one, or neither until §11's check says whether Basecamp's `logos_host` is
+  asked at all?
 - **The Linux-only checks** (§15): who runs them? This PR is built on a Mac.
 - **Scope.** This PR regenerates the stale gallery `FakeBackend.qml`, which also pulls in
   FileShare's missing slots, and fixes the unknown-card fallback. The Nim backend's missing
