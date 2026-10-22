@@ -980,8 +980,8 @@ has crossed the live fleet once, between three headless hosts outside Basecamp, 
   (`room-voice-forged`, `-notes`, `-record`, `-refused`, `-flow`, and `room-map-voice`) pass
   against the real `Main.qml` and the generated `FakeBackend.qml`, offscreen with Qt 6.9.2's
   software renderer (icons draw blank there) and both design systems, Basecamp 0.3.2's and
-  the runner's; their voice rows, `voiceJson`, `voiceResultJson`, `flowJson` and the room
-  map's voice entries are typed from the shapes the module's code and tests give, not
+  the runner's; their voice rows, `voiceJson`, `voiceResultJson` and its count
+  `voiceResultSeq`, `flowJson` and the room map's voice entries are typed from the shapes the module's code and tests give, not
   recorded: no runner has recorded them, since S9's self-test has not run (below). No click
   has reached a real `muster_module`: the C++ backend compiles into the `.lgx`, and the Nim backend is
   type-checked only against stubs made from the `.rep` and `muster.lidl` (ui-nim builds on
@@ -1211,7 +1211,8 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   rule (no float) in every state, and the marshalling probe's not-joined replies.
 - **S8 — The UI (built).** The `.rep` (SLOTs `loadVoice`, `startVoiceRecording`,
   `stopVoiceRecording`, `sendVoiceDraft`, `discardVoiceDraft`, `playVoiceNote(noteId)`,
-  `stopVoicePlayback`; PROPs `voiceJson`, `voiceResultJson`), both backends (ADR-019),
+  `stopVoicePlayback`; PROPs `voiceJson`, `voiceResultJson` and, since `adb9812`,
+  `voiceResultSeq`), both backends (ADR-019),
   `CardVoiceNote.qml` (pure render from the row's `voice` field), the mic in the message row
   and `RoomVoiceNote.qml` above it (the recording banner whoever started it, the draft with
   Play, Send, Discard and §8's disclosure, the module's refusals and notes), Room's 250 ms
