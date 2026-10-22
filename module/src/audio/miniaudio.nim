@@ -39,11 +39,12 @@
 ## buffer to audio_io's captureInto / playFrom. A device is initialised, started and
 ## uninitialised on the module thread only, never from a callback; ma_device_uninit stops it
 ## and waits for its thread, so the buffer can be freed once a stop returns. The context is
-## made on the first start and kept until `close`. muster_module calls no `close` yet: it has
-## no unload hook (the generated surface exports none), and it starts no device before S7, so
-## it holds no context to leave open. Wiring `close` before the plugin unloads is S7's: a
-## context, and its backend's threads, left alive when the host unloads the plugin is a crash
-## risk.
+## made on the first start and kept until `close`, which uninitialises it; a later start makes
+## a new one. The voice recorder (coordination/voice_live.nim, S7) closes its AudioIo whenever
+## a stream ends, so between streams no context is open, and since muster_module has no
+## unload hook (the generated surface exports none) it registers an exit proc that closes
+## whatever still runs: a context, and its backend's threads, left alive when the host unloads
+## the plugin is a crash risk.
 
 import std/[compilesettings, os]
 import ./audio_io
@@ -153,7 +154,7 @@ const ClipFormat: StreamFormat = (rate: ClipRate, channels: ClipChannels, s16: t
 
 proc newMiniaudioIo*(backend = abSystem): MiniaudioIo =
   ## Opens nothing: the context is made by the first start, which only voice_record_start or
-  ## voice_play makes (S7; with the access policy off, any caller's, §13).
+  ## voice_play makes (with the access policy off, any caller's, §13).
   MiniaudioIo(backend: backend)
 
 proc miniaudioVersion*(): string = $ma_version_string()

@@ -120,7 +120,10 @@ import ../src/storage/storage_readiness # FileShare: where storage_module stands
 import ../src/coordination/swarm       # FileShare: the room as tracker (exo-4d0.4)
 import ../src/coordination/swarm_live  # FileShare: share, fetch and seed from a pump (exo-4d0.5)
 import ../src/coordination/voice_live  # voice notes' hosted half (docs/design/voice-notes.md §8)
+import ../src/coordination/voice       # …the thread's rows, a note's included (§7)
+import ../src/audio/audio_io           # …the device seam it codes against (§9)
 import ../src/audio/miniaudio          # …and its devices: miniaudio, on the platform's backends (§9)
+import std/exitprocs                   # the voice devices are released at exit (§9)
 import std/mimetypes
 import ../src/wallet/summary         # what the Wallet page shows: what this instance was given (exo-f37)
 import ../src/monero/address as xmraddr # the payTo rules and the CAIP-2 map (ADR-018)
@@ -2831,17 +2834,55 @@ proc musterFileshareRetract(fileId: string): string =
 
 # ── Voice notes (docs/design/voice-notes.md) ───────────────────────────────────────────
 # Capture, playback and Opus live in this module, and audio never crosses IPC (§9). The voice
-# half is made on the first voice call, over miniaudio on this platform's own backends (never
-# its null device). That opens nothing: only voice_record_start or voice_play opens a device
-# (S7), and with the access policy off any caller can make those calls (§13).
+# recorder is made on the first voice call (or thread read), over the AudioIo voiceIoChoice
+# picks: MUSTER_VOICE_SOURCE / MUSTER_VOICE_SINK give FileAudioIo (the offscreen self-test),
+# MUSTER_VOICE_BACKEND=null miniaudio's null device, anything else miniaudio on this
+# platform's own backends. Making it opens nothing: only voice_record_start or voice_play opens
+# a device, and with the access policy off any caller can make those calls (§13). Each stream
+# releases its device when it ends (the AudioIo closed: for miniaudio, the device and the
+# context), and the generated surface has no unload hook, so an exit proc closes whatever
+# still runs before the process, or this plugin's image, goes (§9). The recorder also holds
+# each room's memo of note verdicts, so a thread read decodes no clip twice (§6).
 
-var gVoice: VoiceLive = nil
+var gVoice: VoiceRecorder = nil
 
-proc voice(): VoiceLive =
-  if gVoice == nil: gVoice = newVoiceLive(newMiniaudioIo(abSystem))
+proc newVoiceIo(): AudioIo =
+  let c = voiceIoChoice(getEnv("MUSTER_VOICE_SOURCE"), getEnv("MUSTER_VOICE_SINK"),
+                        getEnv("MUSTER_VOICE_BACKEND"))
+  case c.kind
+  of vkFile: newFileAudioIo(c.source, c.sink)
+  of vkNull: newMiniaudioIo(abNull)
+  of vkSystem: newMiniaudioIo(abSystem)
+
+proc hostVoice(): VoiceRecorder =
+  if gVoice == nil:
+    gVoice = newVoiceRecorder(newVoiceIo())
+    addExitProc(proc() {.noconv.} =
+      if gVoice != nil: discard gVoice.close())
   gVoice
 
-proc musterVoiceStatus(): string = $voice().voiceStatus()
+proc voicePump() =
+  ## Drain and encode a recording, end one the cap filled, end a playback heard to the end,
+  ## and release their devices (voice_live.pump). Nothing to do before the first voice call.
+  if gVoice != nil: discard gVoice.pump()
+
+proc musterVoiceStatus(): string = $hostVoice().voiceStatus()
+
+proc musterVoiceRecordStart(): string = $hostVoice().recordStart(gSession)
+
+proc musterVoiceRecordStop(): string = $hostVoice().recordStop()
+
+proc musterVoiceDraftSend(): string =
+  if gSession == nil: return $hostVoice().draftSend(nil, nil, 0)
+  $hostVoice().draftSend(gSession, moduleKeystore(), int64(epochTime()))
+
+proc musterVoiceDraftDiscard(): string = hostVoice().draftDiscard()
+
+proc musterVoicePlay(noteId: string): string =
+  if gSession != nil: gSession.poll()
+  $hostVoice().play(gSession, noteId)
+
+proc musterVoicePlayStop(): string = hostVoice().playStop()
 
 proc musterCoordinateIntents(): string =
   ## The room's proposals, folded from the shared log and projected to what a card
@@ -2859,6 +2900,7 @@ proc musterCoordinateIntents(): string =
   splitPump()                          # report my landed payments; confirm what paid me (exo-a90)
   keystorePump()                       # publish what a human approved in keystore_module (exo-149.2)
   fileSharePump()                      # finish uploads and fetches the storage node completed (exo-4d0)
+  voicePump()                          # encode a recording, end one at the cap or a playback heard (voice notes §8)
   let events = gSession.roomEvents()
   let myEnc = moduleKeystore().encIdentity()
   let myEncHex = toHex(myEnc.toBytes()).toLowerAscii()
@@ -4580,17 +4622,21 @@ proc musterCoordinatePostMessage(body: string): string =
   id
 
 proc musterCoordinateMessages(): string =
-  ## The room's authored messages, oldest-first, folded from the shared log. Each
+  ## The room's thread, oldest-first, folded from the shared log: its authored messages and
+  ## one row per voice note (voice.threadRows, with the room's memo of note verdicts). Each
   ## carries its author's contact alias (so the chat log reads "Alice", not raw hex —
-  ## the same resolution the roster/pending use) and a `self` flag for our own lines.
+  ## the same resolution the roster/pending use) and a `self` flag for our own lines. A
+  ## note's row has an empty body and the note in `voice`, metadata only, which no message
+  ## can set (docs/design/voice-notes.md §7).
   if gSession == nil: return "[]"
   gSession.poll()
   let meHex = toHex(gSession.selfIdentity().toBytes())
   var arr = newJArray()
-  for m in reduceMessages(gSession.roomEvents()):
-    arr.add %*{"id": m.id, "author": m.author, "ts": m.ts, "body": m.body,
-               "alias": contactBook().aliasOf(m.author),
-               "self": (normId(m.author) == normId(meHex))}
+  for r in hostVoice().rows(gSession):
+    var row = rowJson(r)
+    row["alias"] = %contactBook().aliasOf(r.author)
+    row["self"] = %(normId(r.author) == normId(meHex))
+    arr.add row
   $arr
 
 proc musterCoordinateMembers(): string =
@@ -4619,7 +4665,8 @@ proc musterCoordinateConversations(): string =
   ## Every joined room, as {topic, title, address, lastTs, people, active, needs, waiting,
   ## settled} — people: the other members' names (exo-ef6);
   ## the home surface's room list. The active room is flagged; lastTs is each room's
-  ## latest message ts (0 if none yet), so home can order by recency. Multi-room: one
+  ## latest thread row's ts, a message's or a voice note's (0 if none yet), so home can
+  ## order by recency. Multi-room: one
   ## entry per session. The home surface is a query over intents (F-18, exo-ed5): `needs`
   ## lists what waits on THIS member in that room ({id, what, text}), and `waiting` /
   ## `settled` count the rest, each classed from the room's log and this member's keys.
@@ -4637,8 +4684,7 @@ proc musterCoordinateConversations(): string =
     if topic in gInboxTopics: continue      # an inbox is a drop-box, not a room to list
     s.poll()
     let events = s.roomEvents()
-    let msgs = reduceMessages(events)
-    let lastTs = if msgs.len > 0: msgs[^1].ts else: 0'i64
+    let lastTs = threadLastTs(events)   # the newest row's, a voice note's included (§7)
     # each room's intents resolve under THAT room's roster and disclosed accounts, which
     # the resolver reads from the active session: swap it in for the fold
     var items: seq[HomeItem]

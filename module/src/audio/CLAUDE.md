@@ -37,8 +37,11 @@ Rules:
   raise.
 - The room's fold and thread rows (`coordination/voice.nim`) import `voice_clip` only, never
   `opus` or `voice_codec`: the fold must not link a codec (§6). The hosted half,
-  `coordination/voice_live.nim`, is the one coordination file that links the codec: it
-  imports `voice_codec` and the `AudioIo` seam.
+  `coordination/voice_live.nim` (`VoiceRecorder`, the state machine of the seven voice
+  methods, S7), is the one coordination file that links the codec: it imports `voice_codec`
+  and the `AudioIo` seam. It drains the capture buffer into the incremental encoder on every
+  pump, and closes the `AudioIo` whenever a stream ends, so between streams no device and no
+  miniaudio context is open.
 - A change to any clip constant or the record's fields strands notes already sent: it is a
   new `v`, never an edit (§3.4).
 - **The device thread.** miniaudio calls back on a thread Nim does not own
@@ -63,20 +66,25 @@ Rules:
   no backend means `no-device`, never a recording of zeros. `backendNames` reads the lists
   with no context (audio_io_null_test §5).
 - Nothing outside this directory imports `miniaudio` but the hosted module
-  (`nim-lib/muster_module.nim`), which makes the one `MiniaudioIo(abSystem)` on the first
-  voice call and hands it to `voice_live` as an `AudioIo`. That opens nothing: the context is
-  made on the first start. `voice_live` codes against `AudioIo` only. Every miniaudio header
-  type stays in `miniaudio.nim`, never inside a generic (a `seq` of one put miniaudio.h into
-  system's C: use a fixed array), and the `-D` backend flags stay one global `passC` (they
-  change struct layouts).
+  (`nim-lib/muster_module.nim`), which makes the one `AudioIo` on the first voice call, as
+  `voice_live.voiceIoChoice` picks it: `FileAudioIo` when MUSTER_VOICE_SOURCE or
+  MUSTER_VOICE_SINK is set, `MiniaudioIo(abNull)` for MUSTER_VOICE_BACKEND=null, else
+  `MiniaudioIo(abSystem)`, and hands it to `voice_live`. That opens nothing: the context is
+  made on the first start. It registers an exit proc that closes the recorder, since the
+  generated surface has no unload hook. `voice_live` codes against `AudioIo` only. Every
+  miniaudio header type stays in `miniaudio.nim`, never inside a generic (a `seq` of one put
+  miniaudio.h into system's C: use a fixed array), and the `-D` backend flags stay one global
+  `passC` (they change struct layouts).
 - No test opens a real device: `abNull` only. A real-device test sits behind
   `MUSTER_VOICE_REAL`, in run-suite's E2E list (S11).
 - Tests: `module/tests/voice_clip_test.nim` (pure), `module/tests/voice_codec_test.nim`
   (libopus; `run-suite.sh` links the builder pin's on macOS, the .lgx's 1.5.2, and nixpkgs'
   beside libsodium on Linux; `MUSTER_OPUS` picks another; §1 prints the version),
-  `module/tests/audio_io_test.nim` (the seam with no device), and
+  `module/tests/audio_io_test.nim` (the seam with no device),
   `module/tests/audio_io_null_test.nim` (miniaudio's null device thread; `run-suite.sh` puts
-  the pin's checkout on `--path`). `probes/probe_return_marshalling_host.nim` (exo-526) builds
-  the whole module into a host, so it links libopus (`opusTokens`, `MUSTER_OPUS_LIB`) and
-  compiles miniaudio from the closure's checkout; its `voice_status` call must name the
-  libopus linked, with both devices still "unknown".
+  the pin's checkout on `--path`), and `module/tests/voice_live_test.nim` (the recorder over
+  `SyntheticAudioIo`, `FileAudioIo` and the null device, two members over `LocalTransport`).
+  `probes/probe_return_marshalling_host.nim` (exo-526) builds the whole module into a host,
+  so it links libopus (`opusTokens`, `MUSTER_OPUS_LIB`) and compiles miniaudio from the
+  closure's checkout; its `voice_status` call must name the libopus linked, with both
+  devices still "unknown".
