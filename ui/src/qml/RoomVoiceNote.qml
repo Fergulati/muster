@@ -1,0 +1,255 @@
+import QtQuick
+import QtQuick.Layouts
+
+import Logos.Theme
+import Logos.Controls
+
+// The composer's voice note (docs/design/voice-notes.md §8), above the message row. The
+// module records, holds the draft and sends it; nothing reaches this view but voice_status
+// and each call's answer (Room.voice, Room.voiceResult). Three states:
+//   recording  a banner whenever voice_status says so, whoever started it (§13): the time on a
+//              clock of this view's own (the module's 60 s cap is the one that counts), the
+//              level, Stop and Discard;
+//   draft      Play, Send and Discard, and who will see what, before anything is sent;
+//   a notice   the module's refusal or note, in its own words where it has them.
+ColumnLayout {
+    id: vn
+    required property var room   // the Room this piece belongs to (Room.qml's roomItem)
+
+    objectName: "voiceComposer"
+    Layout.fillWidth: true
+    // a layout in a layout fills its height by default, which would take the thread's space;
+    // and with nothing to show it takes no row of the composer either
+    Layout.fillHeight: false
+    visible: vn.recState !== "idle" || (vn.noticeText.length > 0 && !voiceNotice.dismissed)
+    spacing: Theme.spacing.small
+
+    readonly property var rec: (vn.room.voice && vn.room.voice.recording) || ({})
+    readonly property var ready: (vn.room.voice && vn.room.voice.ready) || ({})
+    readonly property string recState: vn.room.voiceState
+    readonly property int capMs: Number(vn.rec.capMs || 60000)
+    readonly property bool draftPlaying: !!vn.room.voicePlaying && String(vn.room.voicePlaying.note || "") === "draft"
+    function mss(ms) {
+        var s = Math.floor(Math.max(0, Number(ms) || 0) / 1000);
+        return Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
+    }
+
+    // the elapsed time, on this view's clock from the moment it saw the recording (less what
+    // the module had captured by then), so it moves smoothly between polls
+    property double startedAt: 0
+    property double nowMs: 0
+    function startClock() { vn.nowMs = Date.now(); vn.startedAt = vn.nowMs - Number(vn.rec.elapsedMs || 0); }
+    onRecStateChanged: if (vn.recState === "recording") vn.startClock()
+    Component.onCompleted: if (vn.recState === "recording") vn.startClock()
+    Timer {
+        interval: 200; repeat: true
+        running: vn.recState === "recording"
+        onTriggered: vn.nowMs = Date.now()
+    }
+    readonly property int elapsedMs: vn.recState === "recording"
+                                     ? Math.min(vn.capMs, Math.max(0, vn.nowMs - vn.startedAt))
+                                     : Number(vn.rec.elapsedMs || 0)
+
+    // ── recording: the banner ────────────────────────────────────────────
+    Rectangle {
+        objectName: "voiceRecording"
+        visible: vn.recState === "recording"
+        Layout.fillWidth: true
+        implicitHeight: recRow.implicitHeight + 2 * Theme.spacing.medium
+        radius: Theme.spacing.radiusLarge
+        color: MusterStyle.refusedSoft
+        border.width: 1
+        border.color: MusterStyle.tint(MusterStyle.refused, 0.42)
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: qsTr("Recording a voice note")
+
+        RowLayout {
+            id: recRow
+            anchors.fill: parent
+            anchors.margins: Theme.spacing.medium
+            spacing: Theme.spacing.medium
+
+            Rectangle {
+                implicitWidth: 10; implicitHeight: 10; radius: 5
+                color: MusterStyle.refused
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                RowLayout {
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        text: qsTr("Recording a voice note")
+                        color: Theme.palette.text
+                        font.pixelSize: MusterStyle.body
+                        font.weight: Theme.typography.weightBold
+                    }
+                    LogosText {
+                        objectName: "voiceRecordingTime"
+                        text: qsTr("%1 of %2").arg(vn.mss(vn.elapsedMs)).arg(vn.mss(vn.capMs))
+                        color: Theme.palette.textSecondary
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
+                    }
+                }
+                LogosText {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: vn.rec.silent
+                          ? qsTr("The microphone is on, but no sound has reached it yet.")
+                          : qsTr("The microphone is on. Nothing is sent until you press Send.")
+                    color: vn.rec.silent ? MusterStyle.warning : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                }
+                // the level: the loudest sample since the last look, on a square-root scale
+                // so speech moves it
+                Rectangle {
+                    objectName: "voiceLevel"
+                    Layout.preferredWidth: 160
+                    implicitHeight: 4
+                    radius: 2
+                    color: Theme.palette.borderSubtle
+                    Rectangle {
+                        width: parent.width * Math.min(1, Math.sqrt(Math.max(0, Number(vn.rec.peak || 0)) / 32767))
+                        height: parent.height
+                        radius: 2
+                        color: MusterStyle.refused
+                    }
+                }
+            }
+            ActionButton {
+                objectName: "voiceStopButton"
+                text: qsTr("Stop")
+                variant: LogosButton.Variant.Primary
+                onClicked: vn.room.stopVoice()
+            }
+            ActionButton {
+                objectName: "voiceRecordingDiscard"
+                text: qsTr("Discard")
+                quiet: true
+                onClicked: vn.room.discardVoice()
+            }
+        }
+    }
+
+    // ── draft: heard, sent or dropped, and said who sees it first ────────
+    Surface {
+        objectName: "voiceDraft"
+        visible: vn.recState === "draft"
+        Layout.fillWidth: true
+        implicitHeight: draftCol.implicitHeight + 2 * Theme.spacing.medium
+
+        ColumnLayout {
+            id: draftCol
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: Theme.spacing.medium
+            spacing: Theme.spacing.small
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                IconAction {
+                    objectName: "voiceDraftPlay"
+                    label: vn.draftPlaying ? qsTr("Stop") : qsTr("Play it back")
+                    icon: MusterStyle.icon(vn.draftPlaying ? "stop" : "play")
+                    onClicked: vn.draftPlaying ? vn.room.stopVoicePlay() : vn.room.playVoice("draft")
+                }
+                LogosText {
+                    text: qsTr("Your voice note")
+                    color: Theme.palette.text
+                    font.pixelSize: MusterStyle.body
+                    font.weight: Theme.typography.weightBold
+                }
+                LogosText {
+                    objectName: "voiceDraftTime"
+                    Layout.fillWidth: true
+                    text: vn.draftPlaying
+                          ? qsTr("%1 / %2").arg(vn.mss(vn.room.voicePlaying.positionMs)).arg(vn.mss(vn.elapsedMs))
+                          : vn.mss(vn.elapsedMs)
+                    color: Theme.palette.textSecondary
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
+                }
+                ActionButton {
+                    objectName: "voiceSendButton"
+                    text: qsTr("Send")
+                    variant: LogosButton.Variant.Primary
+                    onClicked: vn.room.sendVoice()
+                }
+                ActionButton {
+                    objectName: "voiceDiscardButton"
+                    text: qsTr("Discard")
+                    quiet: true
+                    onClicked: vn.room.discardVoice()
+                }
+            }
+            LogosText {
+                visible: !!vn.rec.capped
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("It stopped at the one-minute limit.")
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.caption
+            }
+            // who will see what, before anything is sent (material-and-disclosure.md §4, rule 2)
+            LogosText {
+                objectName: "voiceDisclosure"
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: qsTr("Everyone in this room can play it. Your voice can identify you, here and outside this room. "
+                         + "The store node sees two sealed frames of one fixed size, and when.")
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.caption
+            }
+        }
+    }
+
+    // ── what the module said ─────────────────────────────────────────────
+    readonly property var result: vn.room.voiceResult || ({})
+    readonly property string err: String(vn.result.error || "")
+    readonly property string detail: String(vn.result.detail || "")
+    function refusalWords(e, op) {
+        if (e === "not-joined") return qsTr("Join the room first.");
+        if (e === "busy") return qsTr("Something is already recording or playing. Stop it first.");
+        if (e === "codec") return qsTr("The voice encoder could not start on this device.");
+        if (e === "no-device")
+            return op === "play" ? qsTr("No speaker was found on this device.") : qsTr("No microphone was found on this device.");
+        if (e === "not-recording") return qsTr("Nothing is recording.");
+        if (e === "no-draft") return qsTr("There is no recording to send or play.");
+        if (e === "too-short") return qsTr("Too short to send: record at least half a second.");
+        if (e === "silent") return qsTr("The recording is silent: no sound reached the microphone.");
+        if (e === "room-changed") return qsTr("This recording belongs to another room. Send it from there, or discard it.");
+        if (e === "too-large") return qsTr("It did not fit to send. Press Send again; the same voice note goes again.");
+        if (e === "unknown-note") return qsTr("That voice note is not in this room.");
+        if (e === "incomplete") return qsTr("That voice note has not fully arrived yet.");
+        if (e === "broken") return qsTr("That voice note can't be played: its parts don't match.");
+        return op === "play" || op === "stopPlay" ? qsTr("The speaker refused: %1").arg(e)
+             : op === "record" ? qsTr("The microphone refused: %1").arg(e)
+             : qsTr("It did not work: %1").arg(e);
+    }
+    readonly property string noticeTitle: vn.err.length === 0 ? ""
+        : vn.room.voiceOp === "send" ? qsTr("Nothing was sent.")
+        : vn.room.voiceOp === "record" ? qsTr("Recording did not start.")
+        : vn.room.voiceOp === "play" ? qsTr("Nothing played.")
+        : ""
+    readonly property string noticeText: {
+        if (vn.err.length > 0)
+            return vn.refusalWords(vn.err, vn.room.voiceOp) + (vn.detail.length > 0 ? " " + vn.detail : "");
+        // a recording the module dropped, or a note the platform gives (on macOS, why the
+        // microphone gave nothing)
+        var re = String(vn.rec.error || "");
+        if (re.length > 0) return qsTr("The recording stopped: %1").arg(re);
+        return String(vn.ready.note || "");
+    }
+    InlineNotice {
+        id: voiceNotice
+        objectName: "voiceNotice"
+        visible: vn.noticeText.length > 0 && !dismissed
+        dismissible: true
+        tone: vn.err.length > 0 || String(vn.rec.error || "").length > 0 ? "error" : "info"
+        title: vn.noticeTitle
+        text: vn.noticeText
+    }
+}

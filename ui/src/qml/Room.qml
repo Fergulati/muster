@@ -303,6 +303,34 @@ Item {
         try { return JSON.parse(backend ? backend.membersJson : "[]"); }
         catch (e) { return []; }
     }
+
+    // ── voice notes (docs/design/voice-notes.md §8) ──────────────────────
+    // The module records, holds the draft, sends and plays; no audio reaches this view.
+    // voice_status ({ready, recording, playing}) and the last voice call's answer, each
+    // parsed once here for the composer's voice surface and the thread's cards.
+    readonly property var voice: {
+        try {
+            var v = JSON.parse(backend ? (backend.voiceJson || "{}") : "{}");
+            return (v && typeof v === "object") ? v : ({});
+        } catch (e) { return ({}); }
+    }
+    readonly property string voiceState: String(((room.voice && room.voice.recording) || {}).state || "idle")
+    readonly property var voicePlaying: (room.voice && room.voice.playing) ? room.voice.playing : null
+    readonly property var voiceResult: {
+        var r = backend ? String(backend.voiceResultJson || "") : "";
+        if (r.length === 0 || r === "ok") return ({});
+        try { var o = JSON.parse(r); return (o && typeof o === "object") ? o : ({}); }
+        catch (e) { return ({}); }
+    }
+    // which voice call that answer is to (record, stop, send, discard, play, stopPlay), so
+    // a refusal can say what was refused: the module's words are the same for each
+    property string voiceOp: ""
+    function startVoice() { if (!room.backend) return; room.voiceOp = "record"; room.backend.startVoiceRecording(); }
+    function stopVoice() { if (!room.backend) return; room.voiceOp = "stop"; room.backend.stopVoiceRecording(); }
+    function sendVoice() { if (!room.backend) return; room.voiceOp = "send"; room.backend.sendVoiceDraft(); }
+    function discardVoice() { if (!room.backend) return; room.voiceOp = "discard"; room.backend.discardVoiceDraft(); }
+    function playVoice(note) { if (!room.backend) return; room.voiceOp = "play"; room.backend.playVoiceNote(String(note || "")); }
+    function stopVoicePlay() { if (!room.backend) return; room.voiceOp = "stopPlay"; room.backend.stopVoicePlayback(); }
     // This instance's own encryption identity (the roster row flagged self) — the id
     // a decline is keyed by, so the card knows "you declined".
     readonly property string myIdentity: {
@@ -1863,7 +1891,20 @@ Item {
             room.backend.loadMembers();
             room.backend.loadMessages();
             room.backend.loadIntents();
+            // a recording shows whoever started it: with the access policy off, any module
+            // loaded beside Muster can turn the microphone on (docs/design/voice-notes.md §13)
+            room.backend.loadVoice();
         }
+    }
+
+    // While a voice note records or plays, its time, level and place are read four times a
+    // second; idle, the tick above is enough. voice_status also drives the module's voice
+    // pump, as fileshare_files drives FileShare's.
+    Timer {
+        interval: 250
+        running: room.joined && (room.voiceState !== "idle" || room.voicePlaying !== null)
+        repeat: true
+        onTriggered: if (room.backend) room.backend.loadVoice()
     }
 
     // Accounts other members (or the LEZ create / FROST ceremony pumps) disclose, on a slow

@@ -146,6 +146,16 @@ proc fileShareDone(o: MusterUi, r: string) =
   o.setFileShareResultJson(r)
   o.loadFileShareDo()
 
+proc loadVoiceDo(o: MusterUi, d: Done = nil) =
+  # Voice notes (docs/design/voice-notes.md §8): voice_status, which also drives the
+  # module's voice pump. No audio crosses this backend in either direction.
+  ask mm.voice_statusAsync(proc (r: string) = o.setVoiceJson(r); fin(d, r))
+
+proc voiceDone(o: MusterUi, r: string, d: Done = nil) =
+  # A voice call's answer: voiceResultJson, then voice_status re-reads.
+  o.setVoiceResultJson(r)
+  o.loadVoiceDo(d)
+
 proc loadPendingDo(o: MusterUi, d: Done = nil) =
   # Identities that asked to join and are not admitted yet.
   ask mm.coordinate_pendingAsync(proc (r: string) = o.setPendingJson(r); fin(d, r))
@@ -1141,6 +1151,22 @@ proc seedFileImpl(o: MusterUi, fileId, on: string) =
   ask mm.fileshare_seedAsync(fileId, on, proc (r: string) = o.fileShareDone(r))
 proc retractFileImpl(o: MusterUi, fileId: string) =
   ask mm.fileshare_retractAsync(fileId, proc (r: string) = o.fileShareDone(r))
+proc loadVoiceImpl(o: MusterUi) = o.loadVoiceDo()
+proc startVoiceRecordingImpl(o: MusterUi) =
+  ask mm.voice_record_startAsync(proc (r: string) = o.voiceDone(r))
+proc stopVoiceRecordingImpl(o: MusterUi) =
+  ask mm.voice_record_stopAsync(proc (r: string) = o.voiceDone(r))
+proc sendVoiceDraftImpl(o: MusterUi) =
+  ask mm.voice_draft_sendAsync(proc (r: string) =
+    info "muster_module.voice_draft_send() -> " & qs(r)
+    o.voiceDone(r)
+    o.loadMessagesDo())      # the note's row, at once
+proc discardVoiceDraftImpl(o: MusterUi) =
+  ask mm.voice_draft_discardAsync(proc (r: string) = o.voiceDone(r))
+proc playVoiceNoteImpl(o: MusterUi, noteId: string) =
+  ask mm.voice_playAsync(noteId, proc (r: string) = o.voiceDone(r))
+proc stopVoicePlaybackImpl(o: MusterUi) =
+  ask mm.voice_play_stopAsync(proc (r: string) = o.voiceDone(r))
 proc addContactImpl(o: MusterUi, identityHex, alias: string) = o.addContactDo(identityHex, alias)
 proc setContactAliasImpl(o: MusterUi, identityHex, alias: string) = o.setContactAliasDo(identityHex, alias)
 proc removeContactImpl(o: MusterUi, identityHex: string) = o.removeContactDo(identityHex)

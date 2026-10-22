@@ -137,8 +137,16 @@ Rectangle {
         "decline": qsTr("decline"), "submit": qsTr("submitted"), "final": qsTr("final"), "admit": qsTr("admission"),
         "material": qsTr("shared material"), "proposer": qsTr("proposer"), "account": qsTr("account"),
         "part-settled": qsTr("paid a part"), "part-confirmed": qsTr("confirmed a part"), "join": qsTr("ceremony join"),
-        "open": qsTr("ceremony"), "pmsg1": qsTr("ceremony step"), "pmsg2": qsTr("ceremony step")
+        "open": qsTr("ceremony"), "pmsg1": qsTr("ceremony step"), "pmsg2": qsTr("ceremony step"),
+        "file": qsTr("shared file"), "voice": qsTr("voice note")
     })
+    // a voice note's two envelopes are each one fixed size, which the store node sees: it
+    // marks a voice note, never its length (docs/design/voice-notes.md §10)
+    readonly property bool holdsVoice: {
+        for (var i = 0; i < map.allNodes.length; i++)
+            if (map.allNodes[i].kind === "entry" && String((map.allNodes[i].attrs || {}).kind || "") === "voice") return true;
+        return false;
+    }
     function kindWord(k) { return map.kindWords[k] || String(k || ""); }
     function basisWords(b) {
         return b === "author-signed" ? qsTr("Signed by its author, bound to this room")
@@ -801,7 +809,9 @@ Rectangle {
                             readonly property bool big: map.lens === "leaks"
                             readonly property var fields: node.kind === "observer" && node.modelData.id !== "o:store-node"
                                                          ? map.learned(node.modelData.id)
-                                                         : node.modelData.id === "o:store-node" ? [qsTr("timing"), qsTr("topic")] : []
+                                                         : node.modelData.id === "o:store-node"
+                                                           ? (map.holdsVoice ? [qsTr("timing"), qsTr("topic"), qsTr("one fixed size")]
+                                                                             : [qsTr("timing"), qsTr("topic")]) : []
                             readonly property real w: big ? 210 : 150
                             readonly property real h: big ? 64 + fieldText.implicitHeight : 46
                             Rectangle {
@@ -1541,6 +1551,8 @@ Rectangle {
             d.title = map.obsWord(n.id, 0);
             d.lead = map.obsWord(n.id, 2);
             if (n.id === "o:store-node") d.rows.push([qsTr("Learned"), qsTr("timing and topic of %n envelopes", "", map.heldCount), "out"]);
+            if (n.id === "o:store-node" && map.holdsVoice)
+                d.rows.push([qsTr("Voice notes"), qsTr("each one's two envelopes, of one fixed size: that one was sent, never how long it is"), "out"]);
             for (i = 0; i < allEdges.length; i++) {
                 e = allEdges[i];
                 if (e.dst === n.id && e.kind === "leaves" && map.rank(e.seq) <= map.k)

@@ -1,7 +1,7 @@
 # Voice notes: a short recorded clip in the room, sealed like text, one fixed size on the wire
 
-Status: **proposed 2026-10-21 by an outside contributor; slices S1–S7 and S10 are built on
-this branch, S8, S9 and S11 are not.** This document is the first commit of a draft PR, so
+Status: **proposed 2026-10-21 by an outside contributor; slices S1–S8 and S10 are built on
+this branch, S9 and S11 are not.** This document is the first commit of a draft PR, so
 the maintainer can object to the wire format (§3–§5) before any code depends on it. There is no exo id yet
 (§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
 an id is assigned. A code path named below as new is **planned** unless its slice is built.
@@ -388,14 +388,15 @@ What this means for each kind of reader:
   `content` is the whole value, `part` included (`room_graph.nim:198`, `:348` on `main`), so
   that peer's `coordinate_graph` returns the audio, as its `coordinate_proof` does: §10 lists
   it among what still leaks.
-- **Older clients in general.** S8 fixes that fallback for the next unknown kind, but clients
-  already released keep it.
-- **This branch's UIs before S8.** `coordinate_messages` now returns a note's row, with an
-  empty `body`. Today's RoomThread parses the body as a card in a `try`, gets null from `""`,
-  and falls through to plain chat text (`RoomThread.qml:75-79`), and the Nim UI passes the
-  same JSON through (`ui-nim/app/backend.nim:129`). So until S8 lands, both draw a voice note
-  as an empty chat line under its author's name, as would any older UI paired with this
-  module (§15).
+- **Older clients in general.** S8 fixes that fallback for the next unknown kind (built: a
+  body whose kind MusterCard does not know is the message's text, RoomThread's `isText`), but
+  clients already released keep it.
+- **A UI from before S8.** `coordinate_messages` returns a note's row, with an empty `body`.
+  RoomThread before S8 parses the body as a card in a `try`, gets null from `""`, and falls
+  through to plain chat text (`RoomThread.qml:75-79` on `main`), and the Nim UI passes the
+  same JSON through (`ui-nim/app/backend.nim:129` on `main`). So such a UI, paired with this
+  module, draws a voice note as an empty chat line under its author's name (§15). S8's
+  RoomThread draws the row's `voice` field as a `CardVoiceNote` instead (built).
 
 ## 8. Record → draft → send
 
@@ -454,7 +455,8 @@ declares a return type.
   `room-changed`, with nothing published to either room (`voice_live_test` §18). So a draft
   is never posted to a room other than the one its draft surface named, and a retry never
   sends a note's second part to another room than its first. `voice_status` does not say
-  which room holds the draft yet; S8's draft surface needs that (§18).
+  which room holds the draft yet, so S8's draft surface shows a draft in whichever room is
+  open and says whose it is only when Send is refused (§18).
 - **A retried Send sends the same note, where the failure is seen.** The note's ts is fixed at
   the draft's first Send. `session.publish` puts each part into the log and the journal
   before the transport sees it (`session.nim` `publish`), so after a Send that failed between
@@ -847,7 +849,7 @@ and the PR says so (§18).
 
 ## 15. What is not verified
 
-S1–S7 and S10 are built (§17), and S8, S9 and S11 are not. What is unverified, built or
+S1–S8 and S10 are built (§17), and S9 and S11 are not. What is unverified, built or
 planned:
 - **The audio facts came from a throwaway prototype on an Apple M5.** These are packet sizes,
   the varargs hazard, the null backend, encode and decode cost, and miniaudio compiled through
@@ -873,11 +875,21 @@ planned:
   transport sees it, so after a Send that fails between its parts the sender's own thread
   shows the note complete while the room may hold only its first part (`voice_live_test`
   §15 pins both views). A retry closes it; Discard instead makes the split permanent. S8's
-  draft surface can hide or warn about a draft whose note the sender's log already holds.
-- **This branch's UIs before S8 draw a note as an empty line** (§7). `coordinate_messages`
-  returns a note's row with an empty `body`, which today's RoomThread and the Nim UI draw as
-  an empty chat line under the author's name, as any older UI paired with this module would.
-  S8 and S7 should land in one push.
+  draft surface answers `too-large` by asking for Send again, which sends the same note; it
+  does not warn that the room may hold half of it, nor hide Discard then.
+- **A UI from before S8 draws a note as an empty line** (§7). `coordinate_messages` returns a
+  note's row with an empty `body`, which the RoomThread on `main` draws as an empty chat line
+  under the author's name, as any older UI paired with this module would. S8 (built) draws it
+  as a card; S8 and S7 should land in one push.
+- **S8 is seen only through the gallery, on a Mac, with no module.** The S8 fixtures
+  (`room-voice-forged`, `-notes`, `-record`, `-flow`) pass against the real `Main.qml` and the
+  generated `FakeBackend.qml`, offscreen with Qt 6.9.2's software renderer (icons draw blank
+  there) and both design systems, Basecamp 0.3.2's and the runner's; their voice rows,
+  `voiceJson`, `voiceResultJson` and `flowJson` are typed from the shapes the module's tests
+  pin, not recorded, since no runner records them until S9. No click has reached a real
+  `muster_module`: the C++ backend compiles into the `.lgx`, and the Nim backend is
+  type-checked only against stubs made from the `.rep` and `muster.lidl` (ui-nim builds on
+  Linux only). Neither UI has drawn a voice note from a real room, on a display or offscreen.
 - **The cost of store catch-up.** It returns each payload as a JSON byte array
   (`delivery.nim:309-315`), so a voice frame inside the 60 s lookback is re-fetched as several
   hundred KB of JSON per query. That should be measured before anything is added; a seen-frame
@@ -997,10 +1009,16 @@ Each slice's test is written and run red before its code (worker.md), and every 
   Until the operator decides (§10), `coordinate_proof` refuses a room holding a voice note.
   Test: `voice_live_test` on `SyntheticAudioIo` and `LocalTransport`, which holds §8's type
   rule (no float) in every state, and the marshalling probe's not-joined replies.
-- **S8 — The UI.** The `.rep` (both backends, ADR-019), `CardVoiceNote.qml`, the mic in the
-  composer, observer and kind labels, the regenerated gallery `FakeBackend.qml`, and the
-  unknown-kind fallback. A gallery fixture holds a forged `voice-note` body, and RoomThread
-  must draw it as plain text (§7).
+- **S8 — The UI (built).** The `.rep` (SLOTs `loadVoice`, `startVoiceRecording`,
+  `stopVoiceRecording`, `sendVoiceDraft`, `discardVoiceDraft`, `playVoiceNote(noteId)`,
+  `stopVoicePlayback`; PROPs `voiceJson`, `voiceResultJson`), both backends (ADR-019),
+  `CardVoiceNote.qml` (pure render from the row's `voice` field), the mic in the message row
+  and `RoomVoiceNote.qml` above it (the recording banner whoever started it, the draft with
+  Play, Send, Discard and §8's disclosure, the module's refusals and notes), Room's 250 ms
+  poll while not idle and `voice_status` on its 1 s tick, the voice words in FlowView and the
+  room map, the regenerated gallery `FakeBackend.qml`, and the unknown-kind fallback. The
+  gallery fixture `room-voice-forged` holds a forged `voice-note` body, and RoomThread draws
+  it as plain text (§7).
 - **S9 — End to end.** `scripts/voice-self-test.sh`: two offscreen runners, A sending from a
   generated WAV and B playing into a PCM sink, with a 1 kHz Goertzel check. Plus the autopilots
   in both backends and a `ui-parity.sh` entry.
@@ -1062,7 +1080,9 @@ Still open:
   `coordinate_reannounce` re-sends, or the module keeps a sent note's parts and re-sends a
   part no store query has returned;
 - **which room holds the draft** (§8). A draft is refused as `room-changed` in any room but its
-  own, and `voice_status` does not yet name that room, which S8's draft surface needs;
+  own, and `voice_status` does not yet name that room. S8's draft surface therefore shows a
+  draft in whichever room is open, and says so only when Send is refused (`room-changed`:
+  "This recording belongs to another room. Send it from there, or discard it.");
 - **for the operator: an older client in the room** (§10, "What still leaks", item 6). A member
   on a Muster from before voice notes (0.3.2 or earlier) serves every note's Opus to the
   modules loaded beside them, through `coordinate_graph` and `coordinate_proof`, and nothing

@@ -43,6 +43,15 @@ public:
     void fetchFile(const QString &fileId, const QString &folder, const QString &privately) override;
     void seedFile(const QString &fileId, const QString &on) override;
     void retractFile(const QString &fileId) override;
+
+    // Voice notes (docs/design/voice-notes.md §8): muster_module's voice_*; no audio here.
+    void loadVoice() override;
+    void startVoiceRecording() override;
+    void stopVoiceRecording() override;
+    void sendVoiceDraft() override;
+    void discardVoiceDraft() override;
+    void playVoiceNote(const QString &noteId) override;
+    void stopVoicePlayback() override;
     void previewLezSend(const QString &fromId, const QString &to, const QString &raw) override;
     void sendLez(const QString &fromId, const QString &to, const QString &raw) override;
 
