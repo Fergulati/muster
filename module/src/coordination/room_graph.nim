@@ -17,8 +17,11 @@
 ##    is the exception: an entry under voice/ carries a voice note's metadata alone, never
 ##    its half of the clip (docs/design/voice-notes.md §10), since any caller can read the
 ##    map (coordinate_graph; with the access policy off, any module). So no hosted method
-##    returns audio: coordinate_proof, whose proof would carry every value whole, refuses a
-##    room holding a voice note (voice-notes-present) until the operator decides (§10, §18).
+##    returns a note's audio from this member's view: coordinate_proof, whose proof would
+##    carry every value whole, refuses a room whose view holds a part of a note
+##    (voice-notes-present) until the operator decides (§10, §18). An entry under voice/ that
+##    is no note's part leaves with a proof whole, and so does junk that copies a note's bytes
+##    when this member's view holds none of that note's parts (§10, "What is left").
 ##  * An actor is named only where the log proves it: an author-signed kind's author
 ##    (authorship.nim), a driver-counted approval's signer, a binding's verified link.
 ##    An entry the fold refused (an uncounted approval, a substitute proposal) stays in
