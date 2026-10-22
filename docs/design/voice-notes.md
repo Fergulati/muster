@@ -1,8 +1,8 @@
 # Voice notes: a short recorded clip in the room, sealed like text, one fixed size on the wire
 
-Status: **proposed 2026-10-21 by an outside contributor; slices S1–S7 are built on this
-branch, S8–S11 are not.** This document is the first commit of a draft PR, so the maintainer
-can object to the wire format (§3–§5) before any code depends on it. There is no exo id yet
+Status: **proposed 2026-10-21 by an outside contributor; slices S1–S7 and S10 are built on
+this branch, S8, S9 and S11 are not.** This document is the first commit of a draft PR, so
+the maintainer can object to the wire format (§3–§5) before any code depends on it. There is no exo id yet
 (§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
 an id is assigned. A code path named below as new is **planned** unless its slice is built.
 Every file:line reference is to `main` at `67701f8`, except one marked "on this branch".
@@ -176,7 +176,7 @@ exported), seals it and sends `@[FrameData] & s.crypto.seal(encodeEvent(e))`
 nonce and a 16-byte MAC (`crypto/epoch_crypto.nim:144-147`). Nothing in `module/` pads
 anything today.
 
-**Planned (S4).** `publish(ev, padTo = 0)`. With `padTo > 0`, the event's JSON is followed by
+**Built (S4).** `publish(ev, padTo = 0)`. With `padTo > 0`, the event's JSON is followed by
 ASCII spaces up to exactly `padTo` bytes before sealing. `padTo = 0` is today's path, byte for
 byte, for every key but one:
 - **A `voice/` key is always padded to `VoiceFrameBytes`.** `publish` sets that pad itself
@@ -199,7 +199,9 @@ Why on the frame, not inside the value:
 
 Older clients read it unchanged. `decodeEvent` is `parseJson(toStr(b))` (`session.nim:82-83`).
 At the builder's Nim pin (2.2.4), the parser accepts trailing whitespace (5,000 spaces were
-tried) and refuses trailing garbage; this was checked while planning, outside the repo. So:
+tried, while planning) and refuses other trailing bytes, such as a letter or a `}`. It also
+takes a NUL as the end of its input and accepts anything after one. Nothing pads with NULs,
+and `session_pad_test` fails a NUL pad (`docs/labbook/voice-notes-audio-stack.md` §8). So:
 - no new frame kind;
 - no `room_journal` change: journal frames are opaque, with `MaxFrame` 16 MiB
   (`room_journal.nim:24`);
@@ -213,9 +215,14 @@ lands in the sender's own log and reaches nobody, and a failed send is logged on
 
 ## 5. Size budget
 
-These figures are arithmetic, not measured. The S4 and S5 tests measure the worst case. A
-60 s note is 2,880,000 samples. The encoder is flushed through its 312-sample lookahead, so by
-§3.2's count it is ceil((2,880,000 + 312) / 960) = 3,001 packets.
+The record's figures are arithmetic, and S1 holds them: `maxClipBytes` gives 126,119 B at
+60 s and 1,166 B at 500 ms (`voice_clip_test`), and a real 60 s encode stays within it
+(`voice_codec_test` §5). The JSON around a half is measured: `session_pad_test` puts the
+worst case below, a 63,060 B half with 8 heads, at 85,257 B, 4,855 B under the pad, and
+`probe_voice_fixed_size_stepper` sends 60 s notes with 8 heads in 90,153 B frames. Both run
+over `LocalTransport`, not the fleet (§15). A 60 s note is 2,880,000 samples. The encoder is
+flushed through its 312-sample lookahead, so by §3.2's count it is
+ceil((2,880,000 + 312) / 960) = 3,001 packets.
 
 | | Bytes |
 |---|---|
@@ -239,7 +246,7 @@ single frame bigger than anything the tree sends today.
 
 ## 6. The fold
 
-`reduceVoice(roomEvents(s))` (planned, `coordination/voice.nim`) is pure and order-free, and
+`reduceVoice(roomEvents(s))` (built, S5: `coordination/voice.nim`) is pure and order-free, and
 it never links libopus. It imports only the clip record's structural checks. Its rules:
 
 1. **Authentic only.** `roomEvents` has already dropped a part that is forged, unsigned,
@@ -315,7 +322,7 @@ The thread is `coordinate_messages`, which returns every message body on each 1 
 (`muster_module.nim:4582-4594`). Audio must never ride that. So a note is never a `message/`
 event, and there is no pointer message as `intent-ref` uses.
 
-Instead, a planned `threadRows(events)` merges `reduceMessages(events)` with one synthesized
+Instead, `threadRows(events)` (built, S5) merges `reduceMessages(events)` with one synthesized
 row per note, ordered by (ts, id). The row carries the note in a field of its own, `voice`,
 never in `body`. That field is metadata only, under 300 B:
 
@@ -410,7 +417,7 @@ is disclosed without an act"). Proposed wording, for S8:
 > Everyone in this room can play it. Your voice can identify you, here and outside this room.
 > The store node sees two sealed frames of one fixed size, and when.
 
-**The methods** (planned for `muster.lidl` in S3 and S7). Each one returns at once. Parameter
+**The methods** (built: in `muster.lidl` since S3 and S7). Each one returns at once. Parameter
 names avoid C++ keywords (`7480de8` renamed `private` for that reason), and every method
 declares a return type.
 
@@ -481,7 +488,7 @@ Elapsed time on screen comes from a QML clock. The module's cap is the one that 
 
 ## 9. Devices, threads and the build
 
-**The `AudioIo` seam** (planned, `module/src/audio/audio_io.nim`). It is built in the shape of
+**The `AudioIo` seam** (built, S2: `module/src/audio/audio_io.nim`). It is built in the shape of
 `Transport` and `BlobStore`, and no test mocks it (CLAUDE.md working agreements). Its
 implementations:
 - `SyntheticAudioIo`: deterministic PCM on a virtual clock, with a collecting sink. It is the
@@ -532,7 +539,8 @@ seven `logos_module_*` entry points and a constructor). So S7 does two things (b
   registered it (Apple's libc by `dladdr`, glibc by the DSO handle). That window, a recording
   or a playback in progress when the host unloads the plugin, is not tested (§15).
 
-**The build** (planned, S1–S3):
+**The build** (built, S1–S3; the traps found on the way are in
+`docs/labbook/voice-notes-audio-stack.md`):
 - **libopus** comes from nixpkgs as libsodium does: `codegen.nim.link += "opus"` and
   `nix.packages.runtime += "libopus"` (`module/metadata.json:55`, `:173`).
 - **miniaudio 0.11.23** comes in as a `codegen.nim.packages` fetch, pinned at
@@ -630,12 +638,13 @@ an equivocating later copy or a squatted note id, is no part in any of them.
 
 `voice_test` pins those rows field for field, the way `swarm_test` §8 pins FileShare's.
 
-**The claim** (planned for S10, under FS-9 and worded narrowly; credibility imperative):
+**The claim** (built, S10: `contracts/claims/registry.json`, step `open-room`, under FS-9 and
+worded narrowly; credibility imperative):
 
-> **A voice note's length does not show in its size.** Every voice note leaves as two sealed
-> frames of one fixed size, whatever its length, so a store node can tell that a voice note was
-> sent, to which room's topic and when, but not how long it is. It still sees the conversation
-> graph (the gap above).
+> **A voice note's length does not show in its size.** Muster sends every voice note as two
+> frames of one fixed size, whatever its length, each sealed under the room's epoch key as text
+> is. So a store node can tell that a voice note was sent, to which room's topic and when, but
+> not how long it is. It still sees the conversation graph (the gap above).
 
 Its test is `module/tests/probes/probe_voice_fixed_size_stepper.nim` (S5), which covers
 durations from 0.5 s to 60 s, 0, 1 or 8 heads, and two epochs. It also publishes the same note
@@ -691,15 +700,21 @@ sixth. Each stays true after this PR:
    `--access-policy enforce` on their machine (§13), closes it. It is put to the operator in
    §18.
 
-The S10 registry entries carry these as gaps unless the maintainer prefers them folded into
-existing entries:
-- "a voice can identify the speaker" (exposed; the party is everyone who plays the note);
-- "modules loaded beside Muster can record and send as you" (exposed; the party is the
-  co-resident modules);
-- "leaving re-keys nothing" (exposed; the party is a former member). It is a room-wide gap
-  that no entry names today;
-- "an older client in the room returns the audio over IPC" (exposed; the party is the modules
-  loaded beside an older member's Muster, on that member's machine).
+S10 carries four of these as gaps of their own in the registry (built, step `open-room`, each
+`exposed`), unless the maintainer prefers them folded into existing entries. Item 2 is the
+existing gap the claim names, and item 5 makes no claim:
+- "A voice can identify the speaker" (status `none`: masking a voice would mean altering the
+  audio, which voice notes never do; the party is everyone who plays the note);
+- "Modules loaded beside Muster can record and send as you" (`partial`: `--access-policy
+  enforce` with `infra/access-policy.json` ships in the host, off by default, and voice has
+  not run under it; the party is the co-resident modules);
+- "Leaving a room re-keys nothing" (`partial`: the key layer rotates on removal,
+  `EpochCrypto.removeMember`, and no room path calls it; the party is a former member). It
+  is a room-wide gap that no entry named before;
+- "An older Muster in the room hands voice notes to the modules beside it" (`partial`: a
+  member who runs this branch serves no audio, and nothing here reaches an older member's
+  code; the party is the modules loaded beside an older member's Muster, on that member's
+  machine).
 
 ## 11. macOS
 
@@ -817,7 +832,8 @@ and the PR says so (§18).
 
 ## 15. What is not verified
 
-S1–S7 are built (§17) and S8–S11 are not. What is unverified, built or planned:
+S1–S7 and S10 are built (§17), and S8, S9 and S11 are not. What is unverified, built or
+planned:
 - **The audio facts came from a throwaway prototype on an Apple M5.** These are packet sizes,
   the varargs hazard, the null backend, encode and decode cost, and miniaudio compiled through
   `{.compile.}`. None of them has run through the real `logos-module-builder` derivation, and
@@ -869,7 +885,9 @@ S1–S7 are built (§17) and S8–S11 are not. What is unverified, built or plan
   `coordinate_proof`, to any module loaded beside them. This PR cannot change that code, and
   no test here runs a 0.3.x client against a voice note: what it does is read from `main`'s
   source.
-- **The size budget** (§5) is arithmetic until S4 and S5 measure the worst case.
+- **The size budget** (§5) is measured in process only. The record's size is S1's arithmetic,
+  and the worst case's JSON and frames are measured over `LocalTransport` (S4, S5). No
+  90,153 B frame has crossed the fleet (above).
 - **The voice methods through a host** (S7). `voice_live_test` runs `VoiceRecorder` in
   process, on `SyntheticAudioIo`, `FileAudioIo` and miniaudio's null device, with two members
   over `LocalTransport`, and holds the rows `coordinate_messages` serves (`messagesJson`, §22)
@@ -971,8 +989,11 @@ Each slice's test is written and run red before its code (worker.md), and every 
 - **S9 — End to end.** `scripts/voice-self-test.sh`: two offscreen runners, A sending from a
   generated WAV and B playing into a PCM sink, with a 1 kHz Goertzel check. Plus the autopilots
   in both backends and a `ui-parity.sh` entry.
-- **S10 — The claim, docs, labbook and layout.** The protects claim and the gaps of §10, and the
-  CLAUDE.md layout.
+- **S10 — The claim, docs, labbook and layout (built).** The protects claim and four gaps of
+  §10 in `contracts/claims/registry.json`, with `ClaimsRegistry.qml` regenerated
+  (`ui/tools/gen-claims-qml.py`). Also `docs/labbook/voice-notes-audio-stack.md`, the CLAUDE.md
+  layout, and `module/tests/README.md`'s real-device gate. Not done: the plan's optional mock
+  of the mic and the voice card in `ui/prototype/desktop-v3.html`, left for S8.
 - **S11 — Checks on a Mac display, the opt-in device test, and the draft PR.** First, before
   anything relies on the `silent` refusal: under Basecamp 0.3.2, with a throwaway profile,
   does `logos_host` survive `voice_record_start`? If it does not, that goes back to the
@@ -1035,4 +1056,5 @@ Still open:
   a member runs);
 - whether to coarsen `voice_status`'s peak for co-resident callers (§13);
 - the exact disclosure wording on the draft surface (§8);
-- whether the gaps of §10 become new registry entries.
+- whether the gaps of §10 stay registry entries of their own, as S10 added them, or fold into
+  existing ones.

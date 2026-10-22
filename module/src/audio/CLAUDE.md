@@ -25,7 +25,7 @@ given (`MUSTER_VOICE_SINK`, the offscreen self-test) (§7, §9).
   comes from the `codegen.nim.packages` pin and is `{.compile.}`d from the `--path`, so no C is
   tracked (`scripts/check-no-cpp.py`).
 
-Rules:
+Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-audio-stack.md`):
 - The ctl functions stay `{.varargs.}`, every SET value a `cint`, every GET argument a
   `ptr cint`. A fixed-arity binding hands libopus whatever is on the stack on Apple arm64: in
   the prototype a silent 300000 bitrate (§3.1), in this build `OPUS_BAD_ARG`. Every setting is
