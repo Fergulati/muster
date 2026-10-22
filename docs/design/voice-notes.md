@@ -897,7 +897,7 @@ S1–S10 are built (§17), and S11 is not. What is unverified, built or planned:
   recorded: no runner has recorded them, since S9's self-test has not run (below). No click
   has reached a real `muster_module`: the C++ backend compiles into the `.lgx`, and the Nim backend is
   type-checked only against stubs made from the `.rep` and `muster.lidl` (ui-nim builds on
-  Linux only). Neither UI has drawn a voice note from a real room, on a display or offscreen.
+  Linux only), its voice autopilot run against a fake module (S9, below). Neither UI has drawn a voice note from a real room, on a display or offscreen.
 - **The cost of store catch-up.** It returns each payload as a JSON byte array
   (`delivery.nim:309-315`), so a voice frame inside the 60 s lookback is re-fetched as several
   hundred KB of JSON per query. That should be measured before anything is added; a seen-frame
@@ -954,17 +954,21 @@ S1–S10 are built (§17), and S11 is not. What is unverified, built or planned:
   `muster_ui` plugin and `logos-standalone-app` had built by then. So no note has crossed two
   runners on either UI, on `MUSTER_FLEET=local` or a fleet, and the `voice` entry of
   `ui-parity.sh` has not run. What did run, on darwin:
-  - the Nim autopilot, in a scratch harness that includes `ui-nim/app/backend.nim` against
-    stubs made from the `.rep` and `muster.lidl` and a fake module with §8's state machine
-    (not committed): on `9cc1005`'s backend no voice call and no `VOICE` line; with S9's,
-    Start, Stop and Send once each, a complete note from another member played once, and
-    never an arriving note, one's own, or a message whose body claims a note; four mutants
-    (no self check, no played set, no complete check, Play while one plays) each caught;
+  - the Nim autopilot, in `ui-nim/tests/autovoice/run.sh`, which compiles
+    `ui-nim/app/backend.nim` whole against stubs made from the `.rep` and `muster.lidl` and
+    a fake module with §8's state machine, and runs its timers in real time, with nim 2.2.12
+    from ui-nim's own nixpkgs pin. It was a scratch harness in S9 and is committed since
+    S9's review. On `9cc1005`'s backend: no voice call and no `VOICE` line. With S9's: Start,
+    Stop a second later and Send, once each; Play for each complete note from another
+    member, one at a time, once each, and never for an arriving note, one's own, or a
+    message whose body claims a note; a refused Play tried five times, no more. Six mutants
+    are each caught: no self check, no played set, no complete check, Play while one plays,
+    no limit on tries, and Stop not waiting `VOICE_SECS`;
   - the self-test's audio check, on the tone round-tripped through the shipping libopus
-    1.5.2 at §3.1's settings (1 kHz power 66.6 M of the source's 67.1 M, at most 2.1 at
-    500 Hz, 1.5 kHz and 3.1 kHz) and on sinks made to fail it (silence, one millisecond
-    short, a 1.5 kHz tone, a quarter of the amplitude, a 3.1 kHz tone added, a row arriving
-    or of another length);
+    1.5.2 at §3.1's settings (from 0.25 s to 2.75 s: 1 kHz power 66.6 M of the source's
+    67.1 M, at most 2.6 at 500 Hz, 1.5 kHz and 3.1 kHz) and on sinks made to fail it
+    (silence, one millisecond short, a 1.5 kHz tone, a quarter of the amplitude, a 3.1 kHz
+    tone added, a row arriving or of another length);
   - `scripts/lib/ui-build.sh`'s launch and cleanup with a stand-in runner: macOS has no
     `setsid`, and its `ps` has no session id, so before S9 a self-test launched nothing
     there and could leave a runner's children running;
@@ -972,11 +976,32 @@ S1–S10 are built (§17), and S11 is not. What is unverified, built or planned:
     that writes the autopilot's log lines for its role and that round-tripped tone as B's
     sink: SUCCESS, and FAIL for a sink one millisecond short, a quarter of the amplitude, a
     send delivery refused, C's note not refused, and A never sending; no process was left.
+    S9's review found four holes there, each now closed and each shown red on S9's script
+    and green on the fixed one, against the same stand-in: a refused frame whose result
+    came back before the UI logged the Send, and no send result at all, passed (the count
+    now starts at A's Stop and wants two accepted); C's Stop calling its draft not silent,
+    C's thread holding a note of its own, and, on macOS, C's refusal with no `detail`,
+    passed; and a `VOICE_SECS` of 2 failed whatever B heard, the filter's window being
+    fixed at 0.25 s to 2.25 s (it now ends 0.25 s before the note or the WAV does: 1 and 2
+    pass, and 0 or 2.5 is refused before anything launches).
 
-  The C++ autopilot compiles into the `.lgx` and has not run. The gallery fixtures of the
-  card's states and the message row's recording and draft, recorded by
-  `scripts/ui-screenshot.sh record scripts/voice-self-test.sh`, are not made: that needs a
-  runner, Xvfb and Qt's xcb platform, none of which this Mac has.
+  The C++ autopilot compiles into the `.lgx` and has not run.
+
+  **What the maintainer runs on Linux before S9 counts as done** (the PR stays a draft, and
+  this entry stays, until the transcripts exist): `make build && scripts/voice-self-test.sh`;
+  the same with `MUSTER_FLEET=local`; `make build-nim` and `MUSTER_UI=nim
+  scripts/voice-self-test.sh`; `scripts/ui-parity.sh voice` for each UI; and one red run,
+  the script against a runner built from `9cc1005` (no autopilot), which must FAIL with
+  "B never played A's note (sent: none".
+- **The voice gallery fixtures break the gallery's own rule.** `ui/tests/gallery/CLAUDE.md`
+  says fixture data is recorded, never hand-typed. S8's voice fixtures (`room-voice-notes`,
+  `-record`, `-refused`, `-flow`, `-forged`, and `room-map-voice`) are typed from the
+  module's shapes (above), and S9's recorded ones, the card complete, playing, arriving and
+  broken and the message row recording and holding a draft, are not made:
+  `scripts/ui-screenshot.sh record scripts/voice-self-test.sh` needs a runner, Xvfb and Qt's
+  xcb platform, none of which this Mac has. On Linux that recording's snapshots replace the
+  typed fixtures; a forged body, which no runner sends, is added to a recorded snapshot, and
+  the fixture says so. Until then the PR lists this as an open breach of that rule.
 - **The exit proc at unload** (§9). In that run `module unload muster_module` with a
   recording open on the null device took `logos_host` down with no crash report, and a
   reload answered idle; whether the exit proc ran then, rather than the process being ended
@@ -1063,21 +1088,26 @@ Each slice's test is written and run red before its code (worker.md), and every 
   it as plain text under its poster's name, with no voice card and no Play (§7).
 - **S9 — End to end (built, not run: §15).** `scripts/voice-self-test.sh`, in
   `fileshare-self-test.sh`'s shape: two offscreen runners in one room, each with a scratch
-  HOME. A records `VOICE_SECS` (3) seconds from a 3 s 1 kHz WAV the script writes
-  (`MUSTER_VOICE_SOURCE`) and sends; B plays the note into a PCM file (`MUSTER_VOICE_SINK`).
-  It passes when A logs the note it sent and delivery refused none of A's sends after it, B's
-  thread holds that note complete and B logs it playing then nothing playing, B's file holds
-  exactly the draft's samples with the 1 kHz tone (a Goertzel filter: at least half the
-  source's power, over 100 times that at 500 Hz, 1.5 kHz and 3.1 kHz), and no log has a QML
-  TypeError or ReferenceError. Then C joins on `MUSTER_VOICE_BACKEND=null`: its Send must be
-  refused `silent` and B must hold one note still (`VOICE_SILENT=0` skips C). The autopilot,
+  HOME. A records `VOICE_SECS` (3; a whole number, 1 or more, as both autopilots read it)
+  seconds from a 3 s 1 kHz WAV the script writes (`MUSTER_VOICE_SOURCE`) and sends; B plays
+  the note into a PCM file (`MUSTER_VOICE_SINK`). It passes when A logs the note it sent;
+  from A's Stop on, delivery accepted at least two of A's sends (the note's two frames,
+  whose results come back whenever they do) and refused none; B's thread holds that note
+  complete and B logs it playing then nothing playing; B's file holds exactly the draft's
+  samples with the 1 kHz tone (a Goertzel filter over the tone's part of the note: at least
+  half the source's power, over 100 times that at 500 Hz, 1.5 kHz and 3.1 kHz); and no log
+  has a QML TypeError or ReferenceError. Then C joins on `MUSTER_VOICE_BACKEND=null`: its
+  Stop must call the draft silent, its Send must be refused `silent` (on macOS with the
+  microphone note as `detail`), its own thread must hold no note of its own after the Send,
+  and B must hold one note still (`VOICE_SILENT=0` skips C). The autopilot,
   in both backends (ADR-019): `MUSTER_AUTOVOICE=<seconds>` is the mic's Start, Stop and Send
   once someone else is in the room; `MUSTER_AUTOVOICEPLAY=1` is the card's Play for a
   complete note another member sent, while nothing plays, a refused Play tried again up to
   five times; each tick logs `VOICE` (voice_status), `VOICE-NOTES` (the thread's `voice`
-  fields) and each call's `VOICE-RESULT`. The UIs still only trigger and poll. A `voice`
-  entry in `ui-parity.sh`, and `scripts/lib/ui-build.sh` launching and cleaning up on macOS
-  too.
+  fields) and each call's `VOICE-RESULT`. The UIs still only trigger and poll.
+  `ui-nim/tests/autovoice/run.sh` holds the Nim autopilot's decisions against a fake module,
+  on a Mac as on Linux. A `voice` entry in `ui-parity.sh`, which refuses a bash older than 4,
+  and `scripts/lib/ui-build.sh` launching and cleaning up on macOS too.
 - **S10 — The claim, docs, labbook and layout (built).** The protects claim and four gaps of
   §10 in `contracts/claims/registry.json`, with `ClaimsRegistry.qml` regenerated
   (`ui/tools/gen-claims-qml.py`). Also `docs/labbook/voice-notes-audio-stack.md`, the CLAUDE.md

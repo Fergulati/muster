@@ -2,22 +2,29 @@
 # Voice notes end to end through the real UI binary (docs/design/voice-notes.md, S9): no GUI,
 # no clicks, no microphone and no speaker. Two offscreen runners in one room on the delivery
 # fleet (MUSTER_FLEET, as every self-test), each with its own scratch HOME:
-#   A founds the room, admits B, and once B is in records VOICE_SECS seconds (3 by default)
-#     from a 3 s, 1 kHz WAV this script writes (MUSTER_VOICE_SOURCE, the module's FileAudioIo),
-#     then sends the draft: the mic's Start, Stop and Send (MUSTER_AUTOVOICE);
+#   A founds the room, admits B, and once B is in records VOICE_SECS seconds (3 by default; a
+#     whole number, 1 or more, as the autopilot reads it) from a 3 s, 1 kHz WAV this script
+#     writes (MUSTER_VOICE_SOURCE, the module's FileAudioIo), then sends the draft: the mic's
+#     Start, Stop and Send (MUSTER_AUTOVOICE);
 #   B sees the note in its thread and plays it (MUSTER_AUTOVOICEPLAY, the card's Play) into a
 #     raw PCM file (MUSTER_VOICE_SINK).
 # Passes when
-#   * A logs the note its Send sent, and the delivery node refused none of A's sends after it;
+#   * A logs the note its Send sent, and from A's Stop on the delivery node accepted at least
+#     two of A's sends (a note is two frames, one send each) and refused none. The count starts
+#     at the Stop, not the Send: a send's result comes back on delivery's thread whenever it
+#     does, and both UIs log the Send's answer only after re-reading voice_status;
 #   * B's thread holds that note, complete, and B logs it playing, then nothing playing;
 #   * B's file holds exactly the note's samples (its length at 48 samples a millisecond, s16)
-#     and the WAV's 1 kHz tone, found by a Goertzel filter: at least half the source's power
-#     at 1 kHz, and over 100 times the power at 500 Hz, 1.5 kHz and 3.1 kHz;
+#     and the WAV's 1 kHz tone, found by a Goertzel filter over the tone's part of the note
+#     (from 0.25 s to 0.25 s before the shorter of the note and the WAV): at least half the
+#     source's power at 1 kHz there, and over 100 times the power at 500 Hz, 1.5 kHz and
+#     3.1 kHz;
 #   * no log has a QML TypeError or ReferenceError.
 # Then a third runner, C, joins on MUSTER_VOICE_BACKEND=null (miniaudio's null device: all
-# zeros) and records and sends too. Its Send must be refused as silent (on macOS with the
-# module's microphone note as its detail), and B must never see a second note.
-# VOICE_SILENT=0 skips C.
+# zeros) and records and sends too. Its Stop must say the draft is silent, its Send must be
+# refused as silent (on macOS with a detail, the module's microphone note), its own thread
+# must hold no note of its own after the Send (a sender's fold shows its note at once, §8),
+# and B must never see a second note. VOICE_SILENT=0 skips C.
 #
 # The audio never leaves the module: the runners' UIs only trigger and poll voice_status
 # (§8). The WAV and the PCM live in the scratch dir, never in the tree.
@@ -25,6 +32,14 @@
 #   make build && scripts/voice-self-test.sh       # KEEP_LOGS=1 keeps the logs and the audio
 set -uo pipefail
 cd "$(dirname "$0")/.."
+SECS="${VOICE_SECS:-3}"
+SILENT_LEG="${VOICE_SILENT:-1}"
+# Both backends read MUSTER_AUTOVOICE as a whole number, and anything else as 0, which
+# records nothing; the module refuses a draft under 500 ms.
+case "$SECS" in
+  ''|*[!0-9]*) echo "VOICE_SECS must be a whole number of seconds, 1 or more, not '$SECS'"; exit 2 ;;
+esac
+[ "$SECS" -ge 1 ] || { echo "VOICE_SECS must be a whole number of seconds, 1 or more, not '$SECS'"; exit 2; }
 . scripts/lib/ui-build.sh
 ui_require_runner
 trap ui_cleanup EXIT
@@ -32,8 +47,6 @@ trap ui_cleanup EXIT
 D=$(mktemp -d)
 TOPIC="/muster/1/voice-$(date +%s)/proto"
 CFG=$(ui_fleet_config)
-SECS="${VOICE_SECS:-3}"
-SILENT_LEG="${VOICE_SILENT:-1}"
 # the backend's lines can reach the log Qt-quoted (\"key\":\"value\"): read them unquoted
 lg() { sed 's/\\"/"/g' "$1" 2>/dev/null; }
 # the JSON after the last "[muster_ui] <tag> " line of a log
@@ -98,9 +111,13 @@ def power(x, f, a, n):        # Goertzel: |X(f)|^2 over x[a:a+n], normalised by 
     k = 2 * math.cos(2 * math.pi * f / 48000); s1 = s2 = 0.0
     for v in x[a:a + n]: s1, s2 = v + k * s1 - s2, s1
     return (s1 * s1 + s2 * s2 - k * s1 * s2) / (n * n)
-a, n = 12000, 96000           # 0.25 s to 2.25 s: inside the tone, past the codec's start
-ref = power(src, 1000, a, n)
-p = {f: power(sink, f, a, n) for f in (1000, 500, 1500, 3100)} if len(sink) >= a + n else {}
+# From 0.25 s (past the codec's start) to 0.25 s before the tone ends, which is the note's end
+# or the WAV's, whichever comes first; n a whole number of 500 Hz periods (96 samples), so
+# 500 Hz, 1 kHz and 1.5 kHz each fit whole cycles and do not leak into one another.
+a = 12000
+n = (min(draft_ms * 48, len(src)) - 12000 - a) // 96 * 96
+ref = power(src, 1000, a, n) if n > 0 else 0
+p = {f: power(sink, f, a, n) for f in (1000, 500, 1500, 3100)} if n > 0 and len(sink) >= a + n else {}
 errs = []
 if len(raw) % 2: errs.append("an odd number of bytes")
 if len(sink) != draft_ms * 48: errs.append("%d samples, not the draft's %d ms x 48 = %d" % (len(sink), draft_ms, draft_ms * 48))
@@ -109,19 +126,22 @@ if state != "complete": errs.append("B's row is %s" % state)
 if not p: errs.append("too short for the window")
 elif p[1000] < 0.5 * ref: errs.append("1 kHz power %.0f, under half the source's %.0f" % (p[1000], ref))
 elif max(p[500], p[1500], p[3100]) * 100 > p[1000]: errs.append("1 kHz is not the peak: %r" % p)
-print(("ok " if not errs else "bad ") + "%d samples (%d ms) · 1 kHz power %.0f of the source's %.0f · 500 Hz %.1f, 1.5 kHz %.1f, 3.1 kHz %.1f%s" % (
-    len(sink), len(sink) // 48, p.get(1000, 0), ref, p.get(500, 0), p.get(1500, 0), p.get(3100, 0),
-    "" if not errs else " · " + "; ".join(errs)))
+print(("ok " if not errs else "bad ") + "%d samples (%d ms) · from %.2f s to %.2f s, 1 kHz power %.0f of the source's %.0f · 500 Hz %.1f, 1.5 kHz %.1f, 3.1 kHz %.1f%s" % (
+    len(sink), len(sink) // 48, a / 48000, (a + max(n, 0)) / 48000, p.get(1000, 0), ref,
+    p.get(500, 0), p.get(1500, 0), p.get(3100, 0), "" if not errs else " · " + "; ".join(errs)))
 EOF
 )
 echo "B's sink: $check"
 case "$check" in ok*) ;; *) ok=0 ;; esac
 
-# The delivery node refused none of A's sends after the note (each voice frame is one send)
-refused=$(lg "$D/A.log" | sed -n '/\[muster_ui\] VOICE-RESULT send /,$p' | grep -ac 'MUSTER-LP send/sub-result ok=0')
-accepted=$(lg "$D/A.log" | sed -n '/\[muster_ui\] VOICE-RESULT send /,$p' | grep -ac 'MUSTER-LP send/sub-result ok=1')
-echo "A's sends after the note: $accepted accepted, $refused refused"
-[ "$refused" = 0 ] || ok=0
+# The delivery node took both of the note's frames (each is one send) and refused none of A's
+# sends. Counted from A's Stop, which both UIs log before they call voice_draft_send: a send's
+# result comes back on delivery's thread whenever it does, often before the Send's own line.
+refused=$(lg "$D/A.log" | sed -n '/\[muster_ui\] VOICE-RESULT stop /,$p' | grep -ac 'MUSTER-LP send/sub-result ok=0')
+accepted=$(lg "$D/A.log" | sed -n '/\[muster_ui\] VOICE-RESULT stop /,$p' | grep -ac 'MUSTER-LP send/sub-result ok=1')
+echo "A's sends from its Stop on: $accepted accepted, $refused refused"
+[ "$accepted" -ge 2 ] && [ "$refused" = 0 ] \
+  || { echo "FAIL: delivery must accept at least the note's two frames and refuse none"; ok=0; }
 
 if [ "$ok" = 1 ] && [ "$SILENT_LEG" = 1 ]; then
   # C: the null device's zeros, refused at Send; nothing reaches B
@@ -136,10 +156,22 @@ if [ "$ok" = 1 ] && [ "$SILENT_LEG" = 1 ]; then
     csend=$(last 'VOICE-RESULT send' "$D/C.log")
     [ -n "$csend" ] && break
   done
-  sleep 5      # B's ticks, after C's Send
+  sleep 5      # C's and B's ticks, after C's Send
+  cstop=$(last 'VOICE-RESULT stop' "$D/C.log")
   notes=$(last VOICE-NOTES "$D/B.log")
-  echo "C's Stop: $(last 'VOICE-RESULT stop' "$D/C.log") · Send: ${csend:-none} · B's thread's notes: $notes"
+  # C's own thread after its Send: a note it had sent would be there at once, since the session
+  # logs each part before the transport sees it (voice-notes.md §8), however slow the fleet
+  cnotes=$(lg "$D/C.log" | sed -n '/\[muster_ui\] VOICE-RESULT send /,$p' | grep -a '\[muster_ui\] VOICE-NOTES ' \
+    | tail -1 | sed 's/.*\[muster_ui\] VOICE-NOTES //')
+  echo "C's Stop: ${cstop:-none} · Send: ${csend:-none} · C's thread's notes after it: ${cnotes:-none} · B's thread's notes: $notes"
+  printf '%s' "$cstop" | grep -q '"silent":true' || { echo "FAIL: C's Stop did not call its draft silent"; ok=0; }
   printf '%s' "$csend" | grep -q '"error":"silent"' || { echo "FAIL: C's Send was not refused as silent"; ok=0; }
+  # on macOS the refusal carries the module's microphone note (platformNote, §11); elsewhere none
+  if [ "$(uname -s)" = Darwin ]; then
+    printf '%s' "$csend" | grep -q '"detail":"[^"]' || { echo "FAIL: C's refusal has no detail on macOS"; ok=0; }
+  fi
+  [ -n "$cnotes" ] || { echo "FAIL: C logged no thread after its Send"; ok=0; }
+  case "$cnotes" in *'"self":true'*) echo "FAIL: C's thread holds a note of its own"; ok=0 ;; esac
   [ "$(printf '%s' "$notes" | grep -ao '"note":"[0-9a-f]*"' | sort -u | wc -l | tr -d ' ')" = 1 ] \
     || { echo "FAIL: B's thread does not hold exactly one note"; ok=0; }
 fi

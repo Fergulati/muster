@@ -17,6 +17,12 @@
 # plays into a file, no audio device (docs/design/voice-notes.md S9). The LEZ
 # testnet split (~25 min, real proofs) is not in the suite: run it by hand.
 set -uo pipefail
+# The suite's tables are associative arrays (bash 4). macOS's /bin/bash is 3.2, which fails
+# on them and, before this check, exited 0 having run nothing.
+[ "${BASH_VERSINFO[0]}" -ge 4 ] || {
+  echo "scripts/ui-parity.sh needs bash 4 or later, not $BASH_VERSION; on a Mac: nix shell nixpkgs#bash -c scripts/ui-parity.sh"
+  exit 2
+}
 cd "$(dirname "$0")/.."
 export MUSTER_UI="${MUSTER_UI:-cpp}"
 if [ "$MUSTER_UI" = dev ]; then
