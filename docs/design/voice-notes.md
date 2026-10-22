@@ -517,10 +517,14 @@ Elapsed time on screen comes from a QML clock. The module's cap is the one that 
 call was made in and where `voice_status` stood then (the recording's state, the note playing).
 Once another room opens, or `voice_status` moves on (the other recording ended, the note
 stopped playing), the answer is no longer shown; a refusal such as `busy` or `room-changed`
-describes a state that has gone. The gallery fixture `room-voice-refused` holds both. A
-refusal the person dismissed shows again when the next call is refused in the same words (the
-notice is keyed by the call), while a platform note, once dismissed, stays dismissed until its
-words change; the same fixture holds that too.
+describes a state that has gone. The gallery fixture `room-voice-refused` holds both. Both
+backends count their voice answers in `voiceResultSeq`, one more per answer, so an answer
+identical to the last one still reads as new: a real backend's second `silent` leaves
+`voiceResultJson` as it was. While a call is in flight (the count has not moved since it was
+made) the last answer is not shown, since it answered an earlier call. A refusal the person
+dismissed stays dismissed until a new answer arrives, and shows again if that answer refuses
+in the same words (the notice is keyed by the count); a platform note, once dismissed, stays
+dismissed until its words change. The same fixture holds these too.
 
 ## 9. Devices, threads and the build
 

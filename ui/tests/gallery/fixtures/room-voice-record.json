@@ -102,7 +102,8 @@
             "silent": false,
             "peak": 12000
           }
-        }
+        },
+        "voiceResultSeq": "1"
       }
     },
     {
@@ -301,7 +302,8 @@
         "voiceResultJson": {
           "error": "silent",
           "detail": "Basecamp 0.3.2 can't use the microphone on macOS yet: it lacks the microphone permission."
-        }
+        },
+        "voiceResultSeq": "2"
       }
     },
     {
@@ -316,6 +318,13 @@
         "voiceNotice",
         "text",
         "~Basecamp 0.3.2 can't use the microphone on macOS yet: it lacks the microphone permission."
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~The recording is silent"
       ]
     },
     {
@@ -349,7 +358,8 @@
           },
           "playing": null
         },
-        "voiceResultJson": "ok"
+        "voiceResultJson": "ok",
+        "voiceResultSeq": "3"
       }
     },
     {

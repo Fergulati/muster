@@ -1,5 +1,5 @@
 {
-  "about": "A voice refusal describes the state it was made in (docs/design/voice-notes.md §8): the module's busy, said when another caller started recording between two reads of voice_status, goes once voice_status moves on (that recording ended); a Send refused as room-changed goes once another room is open. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (no runner records one until S9). A refusal dismissed and then given again by the next call shows again, while a platform note once dismissed stays dismissed; a Play refused codec names the decoder, too-large asks for no second Send, and a word from the device or the encoder reads as plain words.",
+  "about": "A voice refusal describes the state it was made in (docs/design/voice-notes.md §8): the module's busy, said when another caller started recording between two reads of voice_status, goes once voice_status moves on (that recording ended); a Send refused as room-changed goes once another room is open. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (no runner records one until S9). A refusal dismissed stays hidden while the next call is in flight and shows again when that call's answer (voiceResultSeq one more) refuses in the same words, while a platform note once dismissed stays dismissed; while a call is in flight the last call's answer is not shown under its title; a Play refused codec names the decoder, too-large asks for no second Send, and a word from the device or the encoder reads as plain words.",
   "snapshot": "data/statement-proposed.json",
   "sizes": [
     "1440x900"
@@ -48,7 +48,8 @@
       "props": {
         "voiceResultJson": {
           "error": "busy"
-        }
+        },
+        "voiceResultSeq": "1"
       }
     },
     {
@@ -74,6 +75,58 @@
     },
     {
       "shot": "busy"
+    },
+    {
+      "click": "voiceNoticeDismiss"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "click": "voiceRecordButton"
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "busy"
+        },
+        "voiceResultSeq": "2"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "~already recording or playing"
+      ]
     },
     {
       "props": {
@@ -174,7 +227,8 @@
       "props": {
         "voiceResultJson": {
           "error": "room-changed"
-        }
+        },
+        "voiceResultSeq": "3"
       }
     },
     {
@@ -267,7 +321,8 @@
         "voiceResultJson": {
           "error": "silent",
           "detail": ""
-        }
+        },
+        "voiceResultSeq": "4"
       }
     },
     {
@@ -298,11 +353,29 @@
       "click": "voiceSendButton"
     },
     {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "wait": 300
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
       "props": {
         "voiceResultJson": {
           "error": "silent",
           "detail": ""
-        }
+        },
+        "voiceResultSeq": "5"
       }
     },
     {
@@ -324,10 +397,25 @@
       }
     },
     {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "title",
+        ""
+      ]
+    },
+    {
       "props": {
         "voiceResultJson": {
           "error": "codec"
-        }
+        },
+        "voiceResultSeq": "6"
       }
     },
     {
@@ -351,7 +439,8 @@
       "props": {
         "voiceResultJson": {
           "error": "too-large"
-        }
+        },
+        "voiceResultSeq": "7"
       }
     },
     {
@@ -405,7 +494,8 @@
       "props": {
         "voiceResultJson": {
           "error": "device-format"
-        }
+        },
+        "voiceResultSeq": "8"
       }
     },
     {
@@ -505,7 +595,8 @@
       "props": {
         "voiceResultJson": {
           "ok": true
-        }
+        },
+        "voiceResultSeq": "9"
       }
     },
     {

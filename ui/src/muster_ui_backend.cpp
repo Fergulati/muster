@@ -209,22 +209,29 @@ void MusterUiBackend::retractFile(const QString &fileId)
 
 // ── Voice notes (docs/design/voice-notes.md §8) ────────────────────────────────────
 // The module records, holds the draft, sends and plays; no audio crosses this backend in
-// either direction. Each action puts the module's answer in voiceResultJson and re-reads
-// voice_status, which also drives the module's voice pump.
+// either direction. Each action puts the module's answer in voiceResultJson, counts it in
+// voiceResultSeq, and re-reads voice_status, which also drives the module's voice pump.
 void MusterUiBackend::loadVoice()
 {
     setVoiceJson(modules().muster_module.voice_status());
 }
 
+void MusterUiBackend::voiceAnswer(const QString &answer)
+{
+    // the answer first, then the count: an answer identical to the last changes only the count
+    setVoiceResultJson(answer);
+    setVoiceResultSeq(QString::number(++m_voiceAnswers));
+}
+
 void MusterUiBackend::startVoiceRecording()
 {
-    setVoiceResultJson(modules().muster_module.voice_record_start());
+    voiceAnswer(modules().muster_module.voice_record_start());
     loadVoice();
 }
 
 void MusterUiBackend::stopVoiceRecording()
 {
-    setVoiceResultJson(modules().muster_module.voice_record_stop());
+    voiceAnswer(modules().muster_module.voice_record_stop());
     loadVoice();
 }
 
@@ -232,26 +239,26 @@ void MusterUiBackend::sendVoiceDraft()
 {
     const QString r = modules().muster_module.voice_draft_send();
     qInfo() << "[muster_ui] muster_module.voice_draft_send() ->" << r;
-    setVoiceResultJson(r);
+    voiceAnswer(r);
     loadVoice();
     loadMessages();     // the note's row, at once
 }
 
 void MusterUiBackend::discardVoiceDraft()
 {
-    setVoiceResultJson(modules().muster_module.voice_draft_discard());
+    voiceAnswer(modules().muster_module.voice_draft_discard());
     loadVoice();
 }
 
 void MusterUiBackend::playVoiceNote(const QString &noteId)
 {
-    setVoiceResultJson(modules().muster_module.voice_play(noteId));
+    voiceAnswer(modules().muster_module.voice_play(noteId));
     loadVoice();
 }
 
 void MusterUiBackend::stopVoicePlayback()
 {
-    setVoiceResultJson(modules().muster_module.voice_play_stop());
+    voiceAnswer(modules().muster_module.voice_play_stop());
     loadVoice();
 }
 

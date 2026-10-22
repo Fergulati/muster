@@ -330,18 +330,23 @@ Item {
     property string voiceOp: ""
     property string voiceOpTopic: ""
     property string voiceOpAt: ""
-    // how many voice calls this room has made: a refusal the person dismissed shows again when
-    // the next call is refused in the same words (RoomVoiceNote's notice is keyed by it)
-    property int voiceCalls: 0
+    // how many voice answers the backend has given (voiceResultSeq: one more per answer, one
+    // identical to the last too), and that count when this room made its last voice call.
+    // Until the count moves the call is in flight, and the last answer, to an earlier call,
+    // is not shown. RoomVoiceNote keys a dismissed refusal by the count: it stays dismissed
+    // until a new answer, and shows again if that answer refuses in the same words.
+    readonly property int voiceAnswers: backend ? (parseInt(String(backend.voiceResultSeq || "0"), 10) || 0) : 0
+    property int voiceCallAnswers: -1
+    readonly property bool voicePending: room.voiceCallAnswers >= 0 && room.voiceAnswers === room.voiceCallAnswers
     onVoiceAtChanged: if (room.voiceAt !== room.voiceOpAt) room.voiceOpAt = ""
     readonly property var voiceResult: {
-        if (room.voiceOpTopic !== room.topic || room.voiceOpAt !== room.voiceAt) return ({});
+        if (room.voicePending || room.voiceOpTopic !== room.topic || room.voiceOpAt !== room.voiceAt) return ({});
         var r = backend ? String(backend.voiceResultJson || "") : "";
         if (r.length === 0 || r === "ok") return ({});
         try { var o = JSON.parse(r); return (o && typeof o === "object") ? o : ({}); }
         catch (e) { return ({}); }
     }
-    function voiceCall(op) { room.voiceOp = op; room.voiceOpTopic = room.topic; room.voiceOpAt = room.voiceAt; room.voiceCalls++; }
+    function voiceCall(op) { room.voiceOp = op; room.voiceOpTopic = room.topic; room.voiceOpAt = room.voiceAt; room.voiceCallAnswers = room.voiceAnswers; }
     function startVoice() { if (!room.backend) return; room.voiceCall("record"); room.backend.startVoiceRecording(); }
     function stopVoice() { if (!room.backend) return; room.voiceCall("stop"); room.backend.stopVoiceRecording(); }
     function sendVoice() { if (!room.backend) return; room.voiceCall("send"); room.backend.sendVoiceDraft(); }

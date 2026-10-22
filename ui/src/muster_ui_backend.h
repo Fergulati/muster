@@ -140,4 +140,8 @@ private:
     void scheduleJoinRetry();
     bool m_joinRetrying = false;
     int  m_joinAttempts = 0;   // bounds the re-announce so an empty room doesn't loop forever
+    // A voice call's answer: voiceResultJson, then voiceResultSeq one more (§8 of
+    // docs/design/voice-notes.md), so the view can tell a new answer from the last one.
+    void voiceAnswer(const QString &answer);
+    qint64 m_voiceAnswers = 0;
 };

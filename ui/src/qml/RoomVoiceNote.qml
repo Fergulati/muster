@@ -264,9 +264,10 @@ ColumnLayout {
         objectName: "voiceNotice"
         visible: vn.noticeText.length > 0 && !dismissed
         dismissible: true
-        // a refusal answers one call: dismissed, it shows again when the next call is refused
-        // in the same words; a platform note is dismissed until its words change
-        occasion: vn.err.length > 0 ? String(vn.room.voiceCalls) : ""
+        // a refusal is one answer: dismissed, it stays hidden until a new answer arrives (while
+        // the next call is in flight Room shows no answer at all), and shows again if that
+        // answer refuses in the same words; a platform note is dismissed until its words change
+        occasion: vn.err.length > 0 ? String(vn.room.voiceAnswers) : ""
         tone: vn.err.length > 0 || String(vn.rec.error || "").length > 0 ? "error" : "info"
         title: vn.noticeTitle
         text: vn.noticeText

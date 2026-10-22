@@ -92,6 +92,7 @@ var
   joinAttempts = 0
   inviteAccepted = false
   lezFunding = false    ## MUSTER_AUTOLEZFUND is still funding: MUSTER_AUTOPAYSPLIT waits
+  voiceAnswers = 0      ## the voice answers so far, fed to voiceResultSeq
 
 # ── reads: each sets one PROP ───────────────────────────────────────────────────
 
@@ -152,8 +153,11 @@ proc loadVoiceDo(o: MusterUi, d: Done = nil) =
   ask mm.voice_statusAsync(proc (r: string) = o.setVoiceJson(r); fin(d, r))
 
 proc voiceDone(o: MusterUi, r: string, d: Done = nil) =
-  # A voice call's answer: voiceResultJson, then voice_status re-reads.
+  # A voice call's answer: voiceResultJson, then voiceResultSeq one more (an answer
+  # identical to the last changes only the count), then voice_status re-reads.
   o.setVoiceResultJson(r)
+  inc voiceAnswers
+  o.setVoiceResultSeq($voiceAnswers)
   o.loadVoiceDo(d)
 
 proc startVoiceRecordingDo(o: MusterUi, d: Done = nil) =
