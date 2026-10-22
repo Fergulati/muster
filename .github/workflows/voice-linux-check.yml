@@ -24,13 +24,54 @@ jobs:
         with:
           fetch-depth: 0
       - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      # On Linux run-suite.sh takes nim from PATH (only on macOS does it fetch one), and a
+      # GitHub runner has none: every test then fails in 0 s. Take nixpkgs' nim, from the same
+      # nixpkgs as the gcc, libsodium and libopus the suite builds on Linux, so its compiler
+      # links the glibc they were built against.
+      - name: Nim on PATH
+        shell: bash
+        run: |
+          NIM=""
+          for p in $(nix build nixpkgs#nim --no-link --print-out-paths); do
+            [ -x "$p/bin/nim" ] && NIM="$p"
+          done
+          [ -n "$NIM" ] || { echo "nixpkgs#nim has no bin/nim"; exit 1; }
+          echo "$NIM/bin" >> "$GITHUB_PATH"
+          "$NIM/bin/nim" --version
+          echo "cores: $(nproc)"
       - name: The voice and audio tests first
         shell: bash
-        run: module/tests/run-suite.sh voice audio session_pad
+        env:
+          OUT: ${{ runner.temp }}/suite-voice
+        run: JOBS="$(nproc)" module/tests/run-suite.sh voice audio session_pad
       - name: The whole suite
         if: always()
         shell: bash
-        run: module/tests/run-suite.sh
+        env:
+          OUT: ${{ runner.temp }}/suite-all
+        run: JOBS="$(nproc)" module/tests/run-suite.sh
+      # Each failing test's log tail in the job log, so a red run reads without the artifact.
+      - name: The failing tests' logs
+        if: failure()
+        shell: bash
+        run: |
+          for d in "$RUNNER_TEMP"/suite-voice "$RUNNER_TEMP"/suite-all; do
+            [ -f "$d/results" ] || continue
+            grep '^FAIL' "$d/results" | sort | awk '{print $2}' | head -40 | while read -r n; do
+              echo "::group::$(basename "$d") $n"
+              tail -n 60 "$d/$n.log" 2>/dev/null
+              echo "::endgroup::"
+            done
+          done
+      - name: Keep the suite's logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: suite-logs-${{ matrix.runs-on }}
+          path: |
+            ${{ runner.temp }}/suite-voice/
+            ${{ runner.temp }}/suite-all/
+          if-no-files-found: ignore
 
   selftest:
     name: voice self-test (runner, ubuntu-latest)
@@ -51,10 +92,15 @@ jobs:
         if: always()
         shell: bash
         run: MUSTER_FLEET=local KEEP_LOGS=1 scripts/voice-self-test.sh
+      # The self-test's scratch dir is mktemp -d, under the TMPDIR the nix action sets
+      # (runner.temp), not /tmp: its logs, the WAV A recorded from and the PCM B played into.
       - name: Keep the logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: voice-self-test-logs
-          path: /tmp/tmp.*/*.log
+          path: |
+            ${{ runner.temp }}/tmp.*/*.log
+            ${{ runner.temp }}/tmp.*/*.pcm
+            ${{ runner.temp }}/tmp.*/*.wav
           if-no-files-found: ignore
