@@ -43,6 +43,11 @@ pub fn image_id() -> ProgramId {
     msig_methods::MSIG_ID
 }
 
+/// The embedded program's image id, hex (its words little-endian, as risc0 prints a digest).
+pub fn image_id_hex() -> String {
+    image_id().iter().flat_map(|w| w.to_le_bytes()).map(|b| format!("{b:02x}")).collect()
+}
+
 pub struct Msig {
     pub program: AccountId,
     pub image: ProgramId,

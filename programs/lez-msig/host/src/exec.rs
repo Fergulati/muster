@@ -46,11 +46,16 @@ fn program_elf() -> lee::program::Program {
     program()
 }
 
-async fn proof_for(rpc: &str, m: &Msig, pre: &Account) -> Result<lee_core::MembershipProof, String> {
+/// The note's membership proof, and the commitment-set root it was read against: the root is
+/// what the proof commits to, so muster records it as an external read (invariant 10).
+async fn proof_for(rpc: &str, m: &Msig, pre: &Account) -> Result<(lee_core::MembershipProof, String), String> {
     let client = SequencerClientBuilder::default().build(rpc).map_err(|e| e.to_string())?;
     let c = Commitment::new(&m.account(), pre);
-    let (proofs, _root) = client.get_proofs_and_root(vec![c]).await.map_err(|e| format!("getProofsAndRoot: {e}"))?;
-    proofs.into_iter().next().flatten().ok_or("the chain holds no commitment for that note: it is stale or was never sent".into())
+    let (proofs, root) = client.get_proofs_and_root(vec![c]).await.map_err(|e| format!("getProofsAndRoot: {e}"))?;
+    let root = hex::encode(borsh::to_vec(&root).map_err(|e| e.to_string())?);
+    let proof = proofs.into_iter().next().flatten()
+        .ok_or_else(|| "the chain holds no commitment for that note: it is stale or was never sent".to_string())?;
+    Ok((proof, root))
 }
 
 async fn send(rpc: &str, tx: LeeTransaction) -> Result<String, String> {
@@ -70,9 +75,12 @@ async fn run(req: Value) -> Result<Value, String> {
         None => None,
         Some(b) => Some(borsh::from_slice(&b).map_err(|e| format!("pre: {e}"))?),
     };
-    let pre_with_proof = match &pre {
-        None => None,
-        Some(a) => Some((a.clone(), proof_for(&rpc, &m, a).await?)),
+    let (pre_with_proof, root) = match &pre {
+        None => (None, String::new()),
+        Some(a) => {
+            let (proof, root) = proof_for(&rpc, &m, a).await?;
+            (Some((a.clone(), proof)), root)
+        }
     };
     match mode {
         "exec" => {
@@ -85,7 +93,7 @@ async fn run(req: Value) -> Result<Value, String> {
             let post = post.ok_or("the proof's notes do not decrypt to the multisig's account")?;
             let hash = send(&rpc, LeeTransaction::PrivacyPreserving(tx)).await?;
             Ok(json!({"hash": hash, "post": hex::encode(borsh::to_vec(&post).unwrap()),
-                      "account": hex::encode(m.account().as_ref() as &[u8]), "proveMs": prove_ms}))
+                      "account": hex::encode(m.account().as_ref() as &[u8]), "root": root, "proveMs": prove_ms}))
         }
         "fund" => {
             let (pre, proof) = pre_with_proof.ok_or("fund needs the multisig's current note")?;
@@ -110,7 +118,7 @@ async fn run(req: Value) -> Result<Value, String> {
             let msg = lee::privacy_preserving_transaction::message::Message::from_circuit_output(vec![Nonce(nonce)], output);
             let ws = lee::privacy_preserving_transaction::witness_set::WitnessSet::for_message(&msg, receipt, &[&key]);
             let hash = send(&rpc, LeeTransaction::PrivacyPreserving(lee::privacy_preserving_transaction::PrivacyPreservingTransaction::new(msg, ws))).await?;
-            Ok(json!({"hash": hash, "post": hex::encode(borsh::to_vec(&post).unwrap())}))
+            Ok(json!({"hash": hash, "post": hex::encode(borsh::to_vec(&post).unwrap()), "root": root}))
         }
         other => Err(format!("unknown mode {other}")),
     }

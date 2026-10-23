@@ -7,6 +7,7 @@ description = "Builds the lez-msig guest program (methods/guest) and embeds its 
 
 [build-dependencies]
 risc0-build.workspace = true
+risc0-binfmt = "=3.0.4"
 
 [package.metadata.risc0]
 methods = ["guest"]
