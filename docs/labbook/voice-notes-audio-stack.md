@@ -273,10 +273,23 @@ way, each now in `src/audio/CLAUDE.md`:
   past which a start is refused `device-start-slow`, which is that cap working, so the test
   waits for earlier starts between rounds.
 
-Whether the fix holds on a real device (the start on its own thread, a prompt answered while
-it waits) has not run: `voice_device_e2e` now pumps until the start lands, and its
-microphone leg is the first real check. Basecamp's `logos_host` has no usage string, so
-whether it is asked at all is design §11's check, not this one.
+Whether the fix holds for a real microphone (the start on its own thread, a prompt answered
+while it waits) has not run: `voice_device_e2e` now pumps until the start lands, its speaker
+leg has run that way on Core Audio, and its microphone leg, which needs the person's consent,
+is the first real check. Basecamp 0.3.2's `logos_host` is never asked at all (observed later
+on 2026-10-22, design §11): tccd logged "Prompting policy for hardened runtime; service:
+kTCCServiceMicrophone requires entitlement com.apple.security.device.audio-input but it is
+missing for responsible=LogosBasecamp" and "Policy disallows prompt", `authValue=0`, so its
+capture gets zeros and its start waits on no one. The wait this section found is a
+shell launch's: the start thread and the 15 s bound guard hosts whose responsible app can
+prompt, and a future Basecamp that carries the entitlement and a usage string.
+
+**The fix's review found one more** (S2's review): a start let go while it initialised still
+called `ma_device_start` once `ma_device_init` returned, and only then did its thread stop it,
+so a microphone could come on for a moment after the room said the recording ended. The start
+thread now reads the let-go just before `ma_device_start` and starts nothing
+(`audio_io_null_test` §7). Which Core Audio call waits on a prompt is still not known: a wait
+inside `ma_device_start` itself would still turn the device on for a moment when answered.
 
 **The test's answer.** A watchdog thread in `voice_device_e2e` arms before each device call
 (since the fix: around the wait for a start to land, while the test pumps) and, past its
@@ -305,15 +318,17 @@ arguments".
 
 ## Not found out yet
 
-These are inferred, or wait on a host this was not built on. The design doc carries each one:
-- **The microphone under Basecamp's hardened runtime** (§11). `logos_host` has no
-  `com.apple.security.device.audio-input`, and `Info.plist` no `NSMicrophoneUsageDescription`.
-  Either capture delivers zeros, which Send refuses as `silent`, or TCC terminates
-  `logos_host`, or, as §9 above found outside Basecamp, the start waits on a prompt. S11
-  checks which, before anything relies on the refusal.
-- **A real microphone's capture.** §9's run got no frame, so no peak, RMS or codec round trip
-  from a real microphone exists yet. Once the prompt is answered:
+These are inferred, or wait on a host this was not built on. The design doc carries each one.
+(The microphone under Basecamp's hardened runtime, once here, is found out: `logos_host`
+survives `voice_record_start`, tccd disallows the prompt, and the capture is all zeros, which
+Send refuses as `silent`; design §11.)
+- **A real microphone's start on the start thread.** The microphone leg passed later on
+  2026-10-22, at `bbae7d8`, before the start thread (Core Audio, 48.37 frames a millisecond,
+  capped at exactly 96,000, a peak of -41.2 dBFS, the codec round trip keeping
+  96,000 samples), and has not run since. With the person's consent:
   `MUSTER_VOICE_REAL=mic module/tests/run-suite.sh e2e voice_device_e2e`.
+- **Which Core Audio call waits on a prompt** (§9 above): `ma_device_init` or
+  `ma_device_start`.
 - **Linux** (§12, §15): miniaudio's `dlopen` of `libpulse` and `libasound` from a portable
   `.lgx`, the AppImage and a nix-built runner (whose loader reads no `/etc/ld.so.cache`); the
   Linux plugin links; `libopus.so.0` bundled and resolved by each variant's RUNPATH.

@@ -111,9 +111,11 @@ const
     ## How long a device start may stay pending before the recorder gives up on it: past it
     ## the recording (or the playback) ends with StartSlow, and the start is let go, its
     ## thread closing the device if it ever starts. A working device starts in well under a
-    ## second; the one slow start seen is Core Audio waiting on a microphone prompt (S11), and
-    ## 15 s leaves a person time to read and answer one, while "Starting the microphone…"
-    ## does not stand for longer than someone would wait on it (voice-notes.md §8, §9).
+    ## second; the one slow start seen is Core Audio waiting on a microphone prompt (S11, a
+    ## test run from a shell), and 15 s leaves a person time to read and answer one, while
+    ## "Starting the microphone…" does not stand for longer than someone would wait on it.
+    ## Basecamp 0.3.2's logos_host is never prompted (tccd disallows it: no audio-input
+    ## entitlement), so there a start does not wait (voice-notes.md §8, §9, §11).
 
 type
   RecState* = enum

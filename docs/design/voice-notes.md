@@ -1,9 +1,11 @@
 # Voice notes: a short recorded clip in the room, sealed like text, one fixed size on the wire
 
 Status: **proposed 2026-10-21 by an outside contributor; slices S1–S10 are built on this
-branch. Of S11, the real-device test is built and has run in part (§17). S9's end-to-end
-self-test has not run yet; the module calls it makes have run twice, from one headless host
-to another in a room of three on the live fleet, with no UI (§15).** This document is
+branch. Of S11, the real-device test has run both its legs on this Mac, and the checks in
+Basecamp 0.3.2's own window have run: `logos_host` survives `voice_record_start`, and a note
+crossed from one profile to another (§11, §15, §17). S9's end-to-end self-test has not run
+yet; the module calls it makes have run twice from one headless host to another on the live
+fleet, with no UI (§15).** This document is
 the first commit of a draft PR. The wire format (§3–§5) is what S4–S10 are built on, so an
 objection to it now means reworking those slices (§18). There is no exo id yet
 (§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
@@ -499,6 +501,13 @@ time to read and answer one while "Starting the microphone…" does not stand lo
 would wait on it). Stop, Discard and close while a start is pending never wait on it: they let
 it go, and its thread closes whatever it opens if its start ever returns (§9).
 
+On macOS, in a person's Basecamp 0.3.2, no prompt is asked at all: its `logos_host` lacks the
+microphone entitlement, so tccd's policy disallows the prompt and the capture gets zeros (§11),
+and the start does not wait. The prompt that held a start was seen only where the app macOS
+holds responsible can prompt: a test run from a shell (§17 S11). So the start thread and the
+15 s bound guard such hosts, a shell or terminal launch, and a future Basecamp that carries the
+entitlement and a usage string, not Basecamp 0.3.2 as it ships.
+
 **The draft.** It lives in module memory only: never on disk, never over IPC. A crash loses
 it. There is one draft at a time. Nothing is posted without Send. The draft surface shows Play,
 Send, Discard and the disclosure lines first (material-and-disclosure.md §4, rule 2: "Nothing
@@ -648,15 +657,15 @@ index, writes zeros past the end and sets `done`. The pump then releases the dev
 
 **The start thread** (built since PR 340's review: `audio_io.spawnStart`, `MiniaudioIo`'s
 start). A device's start is the one device call that can wait on the person: on a Mac, Core
-Audio held a capture start while a microphone prompt stood unanswered (S11, §11). So no start
-runs on the module thread. `startCapture` and `startPlayback` make the start's job (the
-buffer, a reference to it, the context the io holds or a new one, the device's memory, all
-on C's heap) and hand it to a detached pthread, then return at once with the stream
+Audio held a capture start while a microphone prompt stood unanswered, in a test run from a
+shell (S11, §11); Basecamp 0.3.2's `logos_host` is never prompted, so its start does not wait
+(§8). So no start runs on the module thread. `startCapture` and `startPlayback` make the
+start's job (the buffer, a reference to it, the context the io holds or a new one, the device's
+memory, all on C's heap) and hand it to a detached pthread, then return at once with the stream
 `starting`. That thread runs `ma_context_init`, `ma_device_init`, the read-back (S1's rule:
-48 kHz mono s16, or `device-format`) and `ma_device_start`, and Nim does not own it, so it
-keeps the callback's rule (above): no GC allocation, no raise, no Defect, C's heap and atomics
-only. The two threads
-meet at one atomic by compare-and-swap:
+48 kHz mono s16, or `device-format`) and `ma_device_start`, and Nim does not own it, so it keeps
+the callback's rule (above): no GC allocation, no raise, no Defect, C's heap and atomics only.
+The two threads meet at one atomic by compare-and-swap:
 - the start thread, once its start returns: pending → running, or failed with its word;
 - the module thread, at Stop, Discard or close before then: pending → let go, and it forgets
   the start at once. The start thread's own swap then fails, so that thread finishes the job:
@@ -960,25 +969,33 @@ and `PlistBuddy`):
   `com.apple.security.device.audio-input`.
 - `Info.plist` has no `NSMicrophoneUsageDescription`.
 
-What follows from that is inferred, not tested. There are two possible outcomes, and nothing
-here says which one happens:
-- **Zero-filled buffers.** From Apple's hardened-runtime rules and OpenJDK bug JDK-8244951,
-  CoreAudio capture inside `logos_host` succeeds and delivers zeros, with no error and no
-  prompt. That precedent is weaker than it looks: JDK-8244951 is a command-line `java` run
-  from Terminal, so TCC charges the request to Terminal, an Apple app. `logos_host` is a
-  helper inside a third-party app whose `Info.plist` has no usage string, and that case does
-  not transfer.
-- **TCC terminates `logos_host`.** macOS can kill a process that asks for the microphone
-  without a usage description ("Termination Reason: Namespace TCC"). Then pressing Record
-  kills `logos_host` and every module in it, and the `silent` refusal below never runs.
+What happens, observed on this Mac on 2026-10-22 (Basecamp 0.3.2, macOS 26.5, Apple Silicon;
+throwaway profiles on `logos.dev`; the module at `bbae7d8`, before §9's start thread):
+- **Basecamp launched the way the Dock launches it** (`open -n -a`). Pressing the microphone
+  button, `logos_host` survived `voice_record_start`. No prompt appeared. tccd logged
+  "Prompting policy for hardened runtime; service: kTCCServiceMicrophone requires
+  entitlement com.apple.security.device.audio-input but it is missing for
+  responsible=LogosBasecamp", then "Policy disallows prompt", with `authValue=0`: macOS
+  charges the request to Basecamp, will not ask the person about it, and denies it. The
+  capture ran and every sample was zero (Send's `silent` takes a draft of at least 500 ms
+  whose samples are all exactly zero). The banner said "The microphone is on, but no sound
+  has reached it yet.", and Send showed "Nothing was sent. The recording is silent: no sound
+  reached the microphone." with the Basecamp 0.3.2 note of the decision below. So the
+  `silent` refusal is what a person sees, and nothing is posted.
+- **A profile launched from a shell under Claude Code** was charged to Claude Code
+  (`com.anthropic.claude-code`) instead, which is allowed the microphone, so it captured real
+  audio. A test launched from a terminal is therefore not what a person's Basecamp does: its
+  microphone is the permission of whatever app started the shell.
 
-S11's first macOS check settles it. Under Basecamp 0.3.2, with a throwaway profile, it calls
-`voice_record_start` and observes whether `logos_host` survives. It runs before anything
-relies on the `silent` refusal. If `logos_host` does not survive, that goes back to the
-operator, because it bears on the decision to keep the record button.
+Before that run this section inferred two outcomes, zero-filled buffers (from Apple's
+hardened-runtime rules and OpenJDK bug JDK-8244951) or TCC terminating `logos_host`, and said
+a launch from Terminal would not help. The first is what happens; the last was wrong, since a
+shell launch moves the request to another responsible app. Playback needs no permission.
 
-Launching Basecamp from Terminal does not help in either case, because `logos_host` itself is
-the hardened binary without the entitlement (also inferred). Playback needs no permission.
+Since Basecamp 0.3.2 is never prompted, its device start does not wait on a person. The start
+thread and the 15 s bound (§8, §9) guard the hosts whose responsible app can prompt: a shell
+or terminal launch, as below, and a future Basecamp that carries the entitlement and a usage
+string.
 
 The answer (decided):
 - **Keep the record button.**
@@ -991,22 +1008,25 @@ The answer (decided):
 Basecamp adds `com.apple.security.device.audio-input` to `logos_host`'s entitlements (and the
 app's), adds `NSMicrophoneUsageDescription` to `Info.plist`, and re-signs.
 
-**Outside Basecamp.** An unbundled, nix-built binary is charged to the app macOS holds
-responsible for it: the terminal app, or the app that started the shell (S11's run, §17,
-names the one it was there). macOS asks the person to grant that app the microphone, and
-Core Audio holds the device's start while it asks: in S11 the start had not returned after
-20 s, with the prompt unanswered. That the start returns once the person answers is inferred,
-since nobody answered. S11's opt-in microphone test runs only with that consent. Since PR
-340's review the module starts the device on a thread of its own (§9), so a prompt like that
-holds that thread only: `voice_record_start` answers at once, `voice_status` says
-`starting`, the room says "Starting the microphone…" and that nothing is recorded until it
-starts, and 15 s after the call the recording ends with `device-start-slow`, its start let
-go. If the person allows the microphone after that, the start returns and its own thread
-releases the device: if the prompt held `ma_device_init`, the device is never started; if it
-held `ma_device_start`, the device comes on for a moment and that thread stops it at once
-(§9; which call it holds is not known). Either way the next Record starts at once (inferred,
-as above: not seen with a real prompt). A start that never returns costs its thread and its
-buffer until the process ends, never the module thread.
+**Outside Basecamp, or Basecamp launched from a shell.** An unbundled, nix-built binary, and
+Basecamp started from a shell, is charged to the app macOS holds responsible for it: the
+terminal app, or the app that started the shell (S11's run, §17, names the one it was there).
+While that app's permission is undecided, macOS asks the person to grant it the microphone,
+and Core Audio holds the device's start while it asks: in S11's first run the start had not
+returned after 20 s, with the prompt unanswered. That the start returns once the person
+answers is inferred, since nobody answered it. Once the app is allowed, as Claude Code was on
+this Mac later that day, capture hears the microphone (above, and §17 S11's microphone leg).
+S11's opt-in microphone test runs only with the person's consent. Since PR 340's review the
+module starts the device on a thread of its own (§9), so a prompt like that holds that thread
+only: `voice_record_start` answers at once, `voice_status` says `starting`, the room says
+"Starting the microphone…" and that nothing is recorded until it starts, and 15 s after the
+call the recording ends with `device-start-slow`, its start let go. If the person allows the
+microphone after that, the start returns and its own thread releases the device: if the
+prompt held `ma_device_init`, the device is never started; if it held `ma_device_start`, the
+device comes on for a moment and that thread stops it at once (§9; which call it holds is not
+known). Either way the next Record starts at once (inferred, as above: not seen with a real
+prompt). A start that never returns costs its thread and its buffer until the process ends,
+never the module thread.
 
 ## 12. Linux
 
@@ -1089,10 +1109,11 @@ and the PR says so (§18).
 
 ## 15. What is not verified
 
-S1–S10 are built (§17). Of S11, the real-device test is built: its speaker leg passed on this
-Mac, and its microphone leg stopped at a permission prompt nobody answered (§17 S11). A note
-has crossed the live fleet twice, from one headless host to another in a room of three,
-outside Basecamp and with no UI (below). What is unverified, built or planned:
+S1–S10 are built (§17). Of S11, the real-device test is built and both its legs have passed
+on this Mac, its microphone leg at `bbae7d8`, before the start thread (§17 S11). A note has
+crossed the live fleet from one headless host to another, twice, outside Basecamp and with no
+UI, and from one Basecamp 0.3.2 profile to another in Basecamp's own window (below). What is
+unverified, built or planned:
 - **Some audio facts are still the prototype's** (a throwaway on an Apple M5): the cost of
   encoding and decoding 60 s (§3.1, §9), and the fixed-arity binding's wrong read-back
   (§3.1; in this build a fixed-arity mutant failed `OPUS_BAD_ARG` instead, labbook §1). The rest has run through the
@@ -1101,11 +1122,15 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   _ma_context_init`), `voice_codec_test` holds the 40 B packets on the shipping libopus
   1.5.2, and S7's `.lgx` ran the null backend in `logos_host` (below). None of it has run on
   Linux.
-- **Microphone capture under Basecamp's hardened runtime.** Neither outcome of §11 is
-  observed: zero-filled buffers, or TCC terminating `logos_host`. S11 checks this first. Real
-  capture anywhere without the person's grant is unobserved too, and so is real capture with
-  it: `voice_device_e2e`'s microphone leg got no frame, because the prompt went unanswered
-  (§17 S11).
+- **A real microphone in a person's Basecamp.** Observed on 2026-10-22 at `bbae7d8` (§11): in
+  Basecamp 0.3.2 launched as the Dock launches it, `logos_host` survives `voice_record_start`,
+  tccd disallows the prompt because the audio-input entitlement is missing ("Policy disallows
+  prompt", `authValue=0`), the capture is all zeros, and Send refuses it `silent` with the
+  Basecamp 0.3.2 note, posting nothing. So on macOS no person's Basecamp 0.3.2 records sound;
+  that waits on the upstream ask (§11). Real capture has run only where the responsible app is
+  allowed the microphone: `voice_device_e2e`'s microphone leg (§17 S11), and a Basecamp profile
+  launched from a shell under Claude Code (§11). None of it has run on §9's start thread, which
+  landed after.
 - **A device start held the module thread: fixed in this PR** (PR 340's review, its second
   should-fix; §18). On a Mac where the responsible app can prompt for the microphone (it has a
   usage string, and the permission is not decided), Core Audio's device start waited for the
@@ -1147,13 +1172,15 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
     1,994 ms after Start, Stop about a second after that);
   - the gallery fixture `room-voice-starting` (below).
 
-  What has not run: a real device's start on its start thread (`voice_device_e2e` now pumps
-  until a start lands, under its watchdog, and compiles; it has not been run since, so its
-  microphone leg, §17 S11, is the first real check of it), a prompt answered while a start
-  waits, any of it in a host (`logos_host`, Basecamp), the C++ autopilot's wait for
-  `recording` (it compiles into the `.lgx` and has not run), and an image unloaded while a
-  start is still blocked (§9). Whether `logos_host` under Basecamp, with no usage string, is
-  asked at all is §11's check.
+  What has not run: a real microphone's start on its start thread (`voice_device_e2e` pumps
+  until a start lands, under its watchdog; its speaker leg has run on the start thread, in
+  S2's review and again on its fixes, Core Audio's start landing and playing as before, but
+  its microphone leg, §17 S11, needs the person's consent and has not run since), a prompt
+  answered while a start waits, any of it in a host (`logos_host`, Basecamp), the C++
+  autopilot's wait for `recording` (it compiles into the `.lgx` and has not run), and an image
+  unloaded while a start is still blocked (§9). A person's Basecamp 0.3.2 is never asked
+  (§11: tccd disallows the prompt), so there a start does not wait at all; the start thread
+  matters where the responsible app can prompt (§8).
 - **A device past the end of its stream.** The cap and `done` are noticed by the voice pump
   alone (§9), so with nothing calling the module the microphone stays open past 60 s (a
   review probe on the null device: still capturing 63 s after the start, 2,880,000 frames,
@@ -1186,17 +1213,20 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   note's row with an empty `body`, which the RoomThread on `main` draws as an empty chat line
   under the author's name, as any older UI paired with this module would. S8 (built) draws it
   as a card; S8 and S7 should land in one push.
-- **S8 is seen only through the gallery, on a Mac, with no module.** The S8 fixtures
-  (`room-voice-forged`, `-notes`, `-record`, `-refused`, `-flow`, `-starting`, and
-  `room-map-voice`) pass
-  against the real `Main.qml` and the generated `FakeBackend.qml`, offscreen with Qt 6.9.2's
-  software renderer (icons draw blank there) and both design systems, Basecamp 0.3.2's and
-  the runner's; their voice rows, `voiceJson`, `voiceResultJson` and its count
-  `voiceResultSeq`, `flowJson` and the room map's voice entries are typed from the shapes the module's code and tests give, not
-  recorded: no runner has recorded them, since S9's self-test has not run (below). No click
-  has reached a real `muster_module`: the C++ backend compiles into the `.lgx`, and the Nim backend is
-  type-checked only against stubs made from the `.rep` and `muster.lidl` (ui-nim builds on
-  Linux only), its voice autopilot run against a fake module (S9, below). Neither UI has drawn a voice note from a real room, on a display or offscreen.
+- **S8 is seen through the gallery, on a Mac, with no module, and once in Basecamp's window.**
+  The S8 fixtures (`room-voice-forged`, `-notes`, `-record`, `-refused`, `-flow`, `-starting`,
+  and `room-map-voice`) pass against the real `Main.qml` and the generated `FakeBackend.qml`,
+  offscreen with Qt 6.9.2's software renderer (icons draw blank there) and both design systems,
+  Basecamp 0.3.2's and the runner's; their voice rows, `voiceJson`, `voiceResultJson` and its
+  count `voiceResultSeq`, `flowJson` and the room map's voice entries are typed from the shapes
+  the module's code and tests give, not recorded: no runner has recorded them, since S9's
+  self-test has not run (below). The C++ UI has reached a real `muster_module` in Basecamp
+  0.3.2's window, at `bbae7d8`: the microphone button of §11, and a note drawn and played
+  between two profiles (below). The Nim backend is type-checked only against stubs made from
+  the `.rep` and `muster.lidl` (ui-nim builds on Linux only), its voice autopilot run against a
+  fake module (S9, below), and it has drawn no note from a real room. What S2 and its review's
+  fixes added to the QML since (the `starting` banner, the not-started words) has run in the
+  gallery only.
 - **The cost of store catch-up.** It returns each payload as a JSON byte array
   (`delivery.nim:309-315`), so a voice frame inside the 60 s lookback is re-fetched as several
   hundred KB of JSON per query. That should be measured before anything is added; a seen-frame
@@ -1292,10 +1322,17 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
     thread still held one voice row.
 
   What it does not cover: no UI, so no QML, neither backend and no autopilot (it is not S9's
-  self-test, next entry); no Basecamp window, since the screen was locked, so S11's checks in
-  the window and whether `logos_host` survives `voice_record_start` under Basecamp 0.3.2 are
-  still open; no real microphone or speaker (`FileAudioIo` on A and B, the null device on
-  C); and C's own copy of A's note was not checked, only B's.
+  self-test, below); no Basecamp window, since the screen was locked then (the window's
+  checks ran later that day, next entry); no real microphone or speaker (`FileAudioIo` on A
+  and B, the null device on C); and C's own copy of A's note was not checked, only B's.
+- **A note between two Basecamp 0.3.2 profiles, in its own window (2026-10-22, at `bbae7d8`).**
+  Two throwaway profiles in one room on `logos.dev`, each with the C++ UI and its autopilot
+  (§17 S9). A's autopilot recorded the 1 kHz WAV and sent it; B's thread drew the card, and B's
+  autopilot played it into its sink: exactly 137,808 samples, 2,871 ms × 48, with the tone at
+  0.99 of the source's power. What it does not cover: a real microphone or speaker (the WAV
+  source and the PCM sink, `FileAudioIo`); the Nim UI; and everything since `bbae7d8`, S2's
+  start thread among it, so neither the `starting` state nor the autopilot's wait for
+  `recording` has run in a window.
 - **S9's self-test has not run.** `scripts/voice-self-test.sh` (§17) needs the standalone
   runner, and the runner does not build on this Mac. `BUILD_MEM= make build` on 2026-10-22
   (macOS 26.5, Apple Silicon, Command Line Tools and no Xcode; 1 h 28 min from cold) stopped
@@ -1305,8 +1342,9 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   `risc0-build-kernel` 2.0.1 panics "Could not build metal kernels". `libmuster_module`, the
   `muster_ui` plugin and `logos-standalone-app` had built by then. So no note has crossed two
   runners on either UI, on `MUSTER_FLEET=local` or a fleet, and the `voice` entry of
-  `ui-parity.sh` has not run. (A note did cross from one headless host to another, the entry
-  above: no runner, no UI and no autopilot, so not this test.) What did run, on darwin:
+  `ui-parity.sh` has not run. (A note did cross from one headless host to another, with no
+  runner, no UI and no autopilot, and between two Basecamp profiles, with the C++ UI and its
+  autopilot but no runner, the entries above: neither is this test.) What did run, on darwin:
   - the Nim autopilot, in `ui-nim/tests/autovoice/run.sh`, which compiles
     `ui-nim/app/backend.nim` whole against stubs made from the `.rep` and `muster.lidl` and
     a fake module with §8's state machine, and runs its timers in real time, with nim 2.2.12
@@ -1346,7 +1384,9 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
     script, `FAIL: B never played A's note (sent: ab12cd, played: 0)`, green on the new); and
     a `VOICE_SECS` past 60 could never fit the wait (now refused up front, as 61 is).
 
-  The C++ autopilot compiles into the `.lgx` and has not run.
+  The C++ autopilot ran in Basecamp's window at `bbae7d8` (above), before S2 made it wait
+  for the first `voice_status` that says `recording`; with that wait it compiles into the
+  `.lgx` and has not run.
 
   **What the maintainer runs on Linux before S9 counts as done** (the PR stays a draft, and
   this entry stays, until the transcripts exist): `make build && scripts/voice-self-test.sh`;
@@ -1496,10 +1536,13 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
 - **S11 — Checks on a Mac display, the opt-in device test, and the draft PR.** First, before
   anything relies on the `silent` refusal: under Basecamp 0.3.2, with a throwaway profile,
   does `logos_host` survive `voice_record_start`? If it does not, that goes back to the
-  operator (§11). Not checked yet: on 2026-10-22 the screen was locked, so neither this nor
-  any check in Basecamp's window ran. A headless run with three logosctl 0.3.2 hosts ran
-  instead (§15), twice: a note from A's WAV to B's sink over `logos.dev`, and C's null device
-  refused `silent` with the macOS note, in logosctl's `logos_host`, not Basecamp's.
+  operator (§11). Checked on 2026-10-22, at `bbae7d8`: it survives. tccd disallows the
+  microphone prompt for want of the entitlement, the capture is all zeros, and Send refuses
+  it `silent` with the macOS note (§11). In Basecamp's window a note also crossed from one
+  profile to another (§15). Earlier that day, with the screen locked, a headless run with three
+  logosctl 0.3.2 hosts ran instead (§15), twice: a note from A's WAV to B's sink over
+  `logos.dev`, and C's null device refused `silent` with the macOS note, in logosctl's
+  `logos_host`, not Basecamp's.
 
   **The device test (built): `voice_device_e2e`**, in run-suite's E2E list and gated behind
   `MUSTER_VOICE_REAL`. Without it, it prints a `SKIP` line and exits 0, and run-suite counts it
@@ -1525,7 +1568,9 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
     and the next leg still runs. Since the review's second should-fix a start returns at once
     and the device starts on a thread of its own (§9), so the test pumps until the start
     lands, and the watchdog times that (20 s), as it times a stop or close (10 s); a start
-    call that takes 100 ms or more to return fails the leg. Not run since that change.
+    call that takes 100 ms or more to return fails the leg. Since that change the speaker
+    leg has run on Core Audio, in S2's review (48.24 frames a millisecond) and again on its
+    fixes (48.15), each `done` after the 1,920-frame tail; the microphone leg has not.
 
   **Run on this Mac, 2026-10-22** (macOS 26.5.2, Apple Silicon, outside Basecamp, run from Claude
   Code in the Claude desktop app, with the person's consent; `MUSTER_VOICE_REAL=1`, then
@@ -1536,30 +1581,34 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
     back (40 ms), the same as the null device's: miniaudio's buffer and periods, not Core
     Audio's output latency, which is not measured. A second run, on the committed text, gave
     the same numbers but 127 ms.
-  - **The microphone leg got no frame.** macOS asked for the microphone and nobody answered:
-    it was the middle of the night. Core Audio held the device's start while it asked, so
-    `startCapture` had not returned after 20 s, and the watchdog ended the test. So there is
-    no peak, no RMS and no codec round trip from a real microphone yet. tccd's log charged the
-    request to Claude Code (`com.anthropic.claude-code`, its own `claude.app`, which the
-    Claude desktop app starts through its `disclaimer` helper), not to the Claude desktop
-    app: `AUTHREQ_PROMPTING` for `kTCCServiceMicrophone`, then no result. A minute later, a
-    preflight for the speaker run still read the permission as not decided (`authValue=1`).
-    The microphone leg was not run again. After that run its messages were reworded to name
-    Claude Code, and the cap's pace is now timed from the start's return; neither touches the
-    step where it stopped. Since the review the messages name the responsible app in general
-    terms, not one tool; a review re-run while that prompt still waited stalled the same way,
-    and tccd logged only a preflight for it, so the watchdog's log hint now reads the last hour.
+  - **The microphone leg's first run got no frame.** macOS asked for the microphone and nobody
+    answered: it was the middle of the night. Core Audio held the device's start while it
+    asked, so `startCapture` had not returned after 20 s, and the watchdog ended the test. So
+    that run had no peak, no RMS and no codec round trip from a real microphone. tccd's log
+    charged the request to Claude Code (`com.anthropic.claude-code`, its own `claude.app`,
+    which the Claude desktop app starts through its `disclaimer` helper), not to the Claude
+    desktop app: `AUTHREQ_PROMPTING` for `kTCCServiceMicrophone`, then no result. A minute
+    later, a preflight for the speaker run still read the permission as not decided
+    (`authValue=1`). It was not run again that night. After that run its messages were reworded
+    to name Claude Code, and the cap's pace is now timed from the start's return; neither
+    touches the step where it stopped. Since the review the messages name the responsible app
+    in general terms, not one tool; a review re-run while that prompt still waited stalled the
+    same way, and tccd logged only a preflight for it, so the watchdog's log hint now reads the
+    last hour.
   - **Before it, the same test on the null device** (a scratch mutant, not committed: the
     system backend swapped for null): with the backend checks in, both legs FAIL "backend
     Null not in @["Core Audio"]"; with them out, the microphone leg FAILs on its all-zero capture with
     the permission message, after every other check passed (48.13 frames a millisecond, capped
     at exactly 96,000 after 2,010 ms, 101 packets of 40 B, a 4,318 B record decoded back to
     96,000 samples), while its speaker leg passes.
+  - **The microphone leg passed later that day, at `bbae7d8`**, run with the person's consent
+    once the microphone was allowed: Core Audio read back as 48 kHz mono s16, 48.37 frames a
+    millisecond, capped at exactly 96,000 frames, a peak of -41.2 dBFS, and the codec round
+    trip kept 96,000 samples. That was before §9's start thread, so the leg has not run on it.
 
-  **To finish it:** answer the prompt, or grant Claude Code the microphone in System Settings >
-  Privacy & Security > Microphone, then run `MUSTER_VOICE_REAL=mic module/tests/run-suite.sh
-  e2e voice_device_e2e`. Linux has not run it (§12): PulseAudio, then ALSA, with no
-  permission prompt there.
+  **What is left:** the microphone leg on the start thread, with the person's consent
+  (`MUSTER_VOICE_REAL=mic module/tests/run-suite.sh e2e voice_device_e2e`). Linux has not run
+  it (§12): PulseAudio, then ALSA, with no permission prompt there.
 
 ## 18. Decisions
 
@@ -1591,17 +1640,21 @@ Asked of the maintainer (corpetty):
   acceptance criterion still names only `health()`, `propose()` and `status()`, so a voice
   regression now turns exo-526 red. Sign off on the wider oracle, or a voice spec's own probe
   takes these checks over once the epic has an exo id.
-- **A device start with no timeout** (§15): **done in this PR**, the way the review
-  preferred (its second should-fix). On a Mac where the responsible app can prompt, Core
-  Audio's device start waited for an unanswered permission prompt (S11), so the module thread
-  could wait with it, and every module call behind it. Now the device starts off the module
-  thread: `voice_record_start` and `voice_play` answer at once, `voice_status` says
-  `starting` until the device runs, a start that fails ends in its word, one still pending
-  15 s after the call ends in `device-start-slow` with its start let go, and Stop, Discard
-  and close never wait on a start (§8, §9). The maintainer may still object: to the bound
-  (15 s), to the word, to a start thread at all, or to keeping this beside §11's open check
-  of whether Basecamp's `logos_host` is asked at all. A real device's start on that thread
-  has not run (§15).
+- **A device start with no timeout** (§15): **done in this PR**, the way the review preferred
+  (its second should-fix). On a Mac where the responsible app can prompt, Core Audio's device
+  start waited for an unanswered permission prompt (S11), so the module thread could wait with
+  it, and every module call behind it. Now the device starts off the module thread:
+  `voice_record_start` and `voice_play` answer at once, `voice_status` says `starting` until
+  the device runs, a start that fails ends in its word, one still pending 15 s after the call
+  ends in `device-start-slow` with its start let go, and Stop, Discard and close never wait on
+  a start (§8, §9). Basecamp 0.3.2's `logos_host` is never prompted (§11: tccd's policy
+  disallows the prompt, since the entitlement is missing), so in a person's Basecamp 0.3.2 on
+  macOS a start does not wait at all. The start thread and the bound guard hosts whose
+  responsible app can prompt, a shell or terminal launch, where the wait was seen (S11), and a
+  future Basecamp that carries the entitlement and a usage string. The maintainer may still
+  object: to the bound (15 s), to the word, or to a start thread at all for a wait today's
+  Basecamp never has. A real microphone's start on that thread has not run: its test needs the
+  person's consent (§15).
 - **The Linux-only checks** (§15): who runs them? This PR is built on a Mac.
 - **Scope.** This PR regenerates the stale gallery `FakeBackend.qml`, which also pulls in
   FileShare's missing slots, and fixes the unknown-card fallback. The Nim backend's missing

@@ -112,8 +112,10 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   `module/tests/voice_device_e2e.nim` (S11), sits behind `MUSTER_VOICE_REAL`, in run-suite's
   E2E list, and skips without it. It prints a capture's peak and RMS and nothing else from the
   audio, writes no file, and plays digital silence unless `MUSTER_VOICE_REAL_AUDIBLE=1`. On
-  macOS a first capture start blocks while a microphone prompt stands unanswered (seen: still
-  not returned after 20 s; that it returns on an answer is inferred; the labbook, §9). The
+  macOS a first capture start blocks while a microphone prompt stands unanswered, where the
+  app macOS holds responsible can prompt, as for a test run from a shell (seen: still not
+  returned after 20 s; that it returns on an answer is inferred; the labbook, §9); Basecamp
+  0.3.2's `logos_host` is never prompted and captures zeros (voice-notes.md §11). The
   start now returns at once and blocks its start thread instead, so the test pumps until it
   lands, and a watchdog thread ends the test when it has not landed after 20 s, or a stop
   or close has not returned after 10 s.
