@@ -32,8 +32,10 @@
     # v0.39.1) is Basecamp 0.3.2's catalog release; its store catch-up keeps to the
     # store's 24 h query limit, where v0.3.0's is refused on every first launch
     # (exo-dcc.12). Same pin as module/flake.nix. Mapped to the module name
-    # `delivery_module` below.
-    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.2";
+    # `delivery_module` below. v0.3.3 since Muster 0.3.3: Logos Official also
+    # publishes it as delivery_module 0.4.0 (the same code, released under both numbers), which
+    # Basecamp installs by default, so metadata.json accepts >=0.3.2.
+    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.3";
     # The LEZ wallet (P-L3): muster_module calls lez_core over lp_* to send assets on
     # the zone, so it must be in the standalone runner's module set for
     # lp_client_create("lez_core") to resolve. lez_core 0.5.0, LEZ 0.3.0 (b89e5d2,

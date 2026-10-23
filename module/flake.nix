@@ -57,8 +57,10 @@
     # and its own store catch-up keeps to the store's 24 h query limit, where v0.3.0's
     # is refused on every first launch (exo-dcc.12). Mapped to the module name
     # `delivery_module` below so metadata.json#dependencies resolves it into the host
-    # module set.
-    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.2";
+    # module set. v0.3.3 since Muster 0.3.3: Logos Official also
+    # publishes it as delivery_module 0.4.0 (the same code, released under both numbers), which
+    # Basecamp installs by default, so metadata.json accepts >=0.3.2.
+    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.3";
     # The Logos Execution Zone wallet (P-L3): muster_module calls lez_core over lp_*
     # (src/wallet/lez_lp.nim) to send assets on the zone. lez_core 0.5.0, LEZ 0.3.0
     # (b89e5d2, exo-eb6.4): the testnet runs v0.3.0 since 2026-09-30, and 0.5.0 drops the
