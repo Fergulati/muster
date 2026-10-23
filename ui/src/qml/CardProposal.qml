@@ -518,21 +518,20 @@ ColumnLayout {
                     TextEdit { id: clip; visible: false; width: 0; height: 0 }
                     Timer { id: copiedReset; interval: 1500; onTriggered: copyLink.copied = false }
                 }
-                // Pay with Basecamp's own Monero Wallet: copy the address, then bring the
-                // wallet app up on its own view (basecamp.apps.launch), where the person
-                // sends. Monero Wallet 0.1.1 takes no address or amount from another app,
-                // so the two go across by hand; monero.accounts.manage, raised here before,
-                // opened the wallet's Settings tab instead. Muster still sends nothing and
-                // approves nothing (ADR-018); a prefilled Send waits on the wallet app.
+                // Pay with Basecamp's own Monero Wallet: ask it to fill its Send tab with the
+                // agreed address and amount (monero.wallet.send); the person checks them and
+                // sends there. A wallet without that intent (0.1.1) is brought up on its own
+                // view instead, and the two go across by hand. The address is copied either
+                // way. Muster still sends nothing and approves nothing (ADR-018).
                 ActionButton {
                     objectName: "cardXmrPayWithWallet"
-                    text: qsTr("Copy address, open Monero Wallet")
+                    text: qsTr("Pay with Monero Wallet")
                     onClicked: {
                         clip.text = String(xmrPayBox.pay.payTo || "");
                         clip.selectAll();
                         clip.copy();
                         xmrPayBox.walletAsked = true;
-                        cardRoot.presentMoneroWallet();
+                        cardRoot.presentMoneroWallet(String(xmrPayBox.pay.payTo || ""), cardRoot.eth(xmrPayBox.pay.amount));
                     }
                 }
                 ActionButton {
@@ -555,8 +554,11 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
                 // the steps always; the wallet's answer too when it did not simply open
                 text: {
-                    var steps = qsTr("The address is copied. Monero Wallet can't be filled in from here yet: in it, open Send, paste the address and enter exactly %1 XMR (Copy amount puts it on the clipboard). Send from there, then come back and press I paid.")
-                                .arg(cardRoot.eth(xmrPayBox.pay.amount));
+                    var steps = cardRoot.moneroWalletFilled
+                        ? qsTr("Monero Wallet's Send is filled in with %1's address and %2 XMR. Check both there, send, then come back and press I paid.")
+                              .arg(cardRoot.creditorName).arg(cardRoot.eth(xmrPayBox.pay.amount))
+                        : qsTr("The address is copied. If Monero Wallet's Send isn't filled in, paste the address there and enter exactly %1 XMR (Copy amount puts it on the clipboard). Send from there, then come back and press I paid.")
+                              .arg(cardRoot.eth(xmrPayBox.pay.amount));
                     var n = cardRoot.moneroWalletNote;
                     return (n.length > 0 && n.indexOf(qsTr("Monero Wallet is open")) !== 0 && n !== qsTr("Your Monero wallet is open."))
                            ? steps + "\n" + n : steps;
