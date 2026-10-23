@@ -2,10 +2,13 @@
 
 Status: **proposed 2026-10-21 by an outside contributor; slices S1–S10 are built on this
 branch. Of S11, the real-device test has run both its legs on this Mac, and the checks in
-Basecamp 0.3.2's own window have run: `logos_host` survives `voice_record_start`, and a note
-crossed from one profile to another (§11, §15, §17). S9's end-to-end self-test has not run
-yet; the module calls it makes have run twice from one headless host to another on the live
-fleet, with no UI (§15).** This document is
+Basecamp 0.3.2's own window have run, at `bbae7d8`, before §9's start thread: `logos_host`
+survives `voice_record_start`, macOS never asks for the microphone and denies it, so the
+capture is zeros and Send refuses it `silent` with the Basecamp 0.3.2 note, and a note
+crossed from one profile to another, drawn and played (§11, §15, §17). S9's two-runner
+self-test has not run yet, nor has the start thread in any host; the module calls the
+self-test makes have run twice from one headless host to another on the live fleet, with no
+UI (§15).** This document is
 the first commit of a draft PR. The wire format (§3–§5) is what S4–S10 are built on, so an
 objection to it now means reworking those slices (§18). There is no exo id yet
 (§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
@@ -1156,8 +1159,10 @@ and the PR says so (§18).
 S1–S10 are built (§17). Of S11, the real-device test is built and both its legs have passed
 on this Mac, its microphone leg at `bbae7d8`, before the start thread (§17 S11). A note has
 crossed the live fleet from one headless host to another, twice, outside Basecamp and with no
-UI, and from one Basecamp 0.3.2 profile to another in Basecamp's own window (below). What is
-unverified, built or planned:
+UI, and from one Basecamp 0.3.2 profile to another in Basecamp's own window, where the
+`silent` refusal of a capture of zeros was seen too (below; all of it at `bbae7d8`, before
+§9's start thread). Still not run: S9's two-runner self-test, the start thread in any host,
+and anything since `bbae7d8` in Basecamp's window. What is unverified, built or planned:
 - **Some audio facts are still the prototype's** (a throwaway on an Apple M5): the cost of
   encoding and decoding 60 s (§3.1, §9), and the fixed-arity binding's wrong read-back
   (§3.1; in this build a fixed-arity mutant failed `OPUS_BAD_ARG` instead, labbook §1). The rest has run through the
