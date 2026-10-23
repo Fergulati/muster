@@ -32,7 +32,10 @@
 # linux-amd64, as every published muster version does, so a release built on any other host
 # is refused; --local is open to every platform, e.g. for a Mac to test its own build.
 #
-# The catalogue publishes ONLY muster_module and muster_ui. Every dependency resolves from the
+# The catalogue publishes muster_module and muster_ui, and lez_msig_module (programs/lez-msig,
+# exo-e77): the private lez-msig's prover, an OPTIONAL dependency of muster_module, built for
+# linux-amd64 only and versioned on its own (programs/lez-msig/metadata.json). Every other
+# dependency resolves from the
 # official Logos catalogue, which Basecamp enables by default and searches alongside ours
 # (logos-package-downloader docs/spec.md, "Dependency Resolution"). Nothing here is signed.
 #
@@ -98,13 +101,17 @@ if [ -z "$LOCAL" ]; then
   esac
 fi
 # one platform: <package>-<version>-<platform>.lgx (every release before 0.3.1); several: the
-# official catalogue's <package>-<version>.lgx
-asset() { if [ "$PLATFORMS" = "${PLATFORMS%% *}" ]; then echo "$1-$VERSION-$PLATFORMS.lgx"; else echo "$1-$VERSION.lgx"; fi; }
+# official catalogue's <package>-<version>.lgx. The prover is linux-amd64 only, at its own version.
+MSIG_VERSION=$(ver programs/lez-msig/metadata.json)
+asset() {
+  if [ "$1" = lez_msig_module ]; then echo "$1-$MSIG_VERSION-linux-amd64.lgx"
+  elif [ "$PLATFORMS" = "${PLATFORMS%% *}" ]; then echo "$1-$VERSION-$PLATFORMS.lgx"; else echo "$1-$VERSION.lgx"; fi; }
+PACKAGES="muster_module muster_ui lez_msig_module"
 
 # The committed tree, never a working copy.
-if [ $ALLOW_DIRTY = 0 ] && [ -n "$(git status --porcelain -- module ui)" ]; then
-  echo "module/ or ui/ has uncommitted changes; commit them (the build reads the committed tree)" >&2
-  git status --short -- module ui >&2; exit 1
+if [ $ALLOW_DIRTY = 0 ] && [ -n "$(git status --porcelain -- module ui programs/lez-msig)" ]; then
+  echo "module/, ui/ or programs/lez-msig/ has uncommitted changes; commit them (the build reads the committed tree)" >&2
+  git status --short -- module ui programs/lez-msig >&2; exit 1
 fi
 COMMIT=$(git rev-parse HEAD)
 
@@ -156,16 +163,30 @@ UI=$(nix build "git+file://$ROOT?dir=ui#lgx-portable" "${SUB[@]}" --no-eval-cach
         --no-link --print-out-paths 2>"$WORK/build-ui.log" | tail -1) \
   || { echo "ui build failed; see $WORK/build-ui.log" >&2; exit 1; }
 fi
+# The prover, here in every mode: the workflow does not build it, and it builds only on
+# linux-amd64 (a --local test elsewhere goes without it).
+MSIG=""
+if [ "$(lgx_variant)" = linux-amd64 ]; then
+  echo "building lez_msig_module $MSIG_VERSION from $COMMIT"
+  MSIG=$(nix build "git+file://$ROOT?dir=programs/lez-msig#lgx-portable" "${SUB[@]}" --no-eval-cache \
+          --no-link --print-out-paths 2>"$WORK/build-msig.log" | tail -1) \
+    || { echo "lez_msig_module build failed; see $WORK/build-msig.log" >&2; exit 1; }
+elif [ -z "$LOCAL" ]; then
+  echo "a release carries lez_msig_module, which builds on linux-amd64 only; release from a linux-amd64 host" >&2; exit 1
+else
+  PACKAGES="muster_module muster_ui"
+fi
 
 # Each package's embedded manifest must carry the name and version the catalogue claims.
-for pair in "muster_module:$MOD" "muster_ui:$UI"; do
+for pair in "muster_module:$MOD" "muster_ui:$UI" ${MSIG:+"lez_msig_module:$MSIG"}; do
   pkg=${pair%%:*}; f=$(ls "${pair#*:}"/*.lgx | head -1)
   lgx verify "$f" >/dev/null
   got=$(lgx manifest "$f" --json | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m["name"], m["version"], " ".join(sorted(m.get("main", {}))))')
-  want="$pkg $VERSION $(tr ' ' '\n' <<<"$PLATFORMS" | sort | paste -sd' ' -)"
+  if [ "$pkg" = lez_msig_module ]; then want="$pkg $MSIG_VERSION linux-amd64"
+  else want="$pkg $VERSION $(tr ' ' '\n' <<<"$PLATFORMS" | sort | paste -sd' ' -)"; fi
   [ "$got" = "$want" ] || { echo "$f: manifest says '$got', expected '$want'" >&2; exit 1; }
   # No `declare -A` (bash 3.2 on macOS): a variable per package.
-  case $pkg in muster_module) SRC_MOD=$f ;; muster_ui) SRC_UI=$f ;; esac
+  case $pkg in muster_module) SRC_MOD=$f ;; muster_ui) SRC_UI=$f ;; lez_msig_module) SRC_MSIG=$f ;; esac
 done
 
 # 2. Where the files go.
@@ -183,8 +204,8 @@ else
   mkdir -p "$OUT"
 fi
 mkdir -p "$ASSETS"
-for pkg in muster_module muster_ui; do
-  case $pkg in muster_module) src=$SRC_MOD ;; muster_ui) src=$SRC_UI ;; esac
+for pkg in $PACKAGES; do
+  case $pkg in muster_module) src=$SRC_MOD ;; muster_ui) src=$SRC_UI ;; lez_msig_module) src=$SRC_MSIG ;; esac
   install -m 0644 "$src" "$ASSETS/$(asset "$pkg")"
 done
 
@@ -197,8 +218,9 @@ card = {
     "name": "muster",
     "displayName": "Muster",
     "description": "Muster: rooms where people agree on a payment, a bill split or a decision, "
-                   "then settle it. Publishes only muster_module and muster_ui; every dependency "
-                   "comes from the official Logos catalogue. Unsigned.",
+                   "then settle it. Publishes muster_module and muster_ui, and lez_msig_module (the "
+                   "private multisig's prover, optional, linux-amd64); every other dependency comes "
+                   "from the official Logos catalogue. Unsigned.",
     "homepage": "https://github.com/corpetty/muster/tree/main/catalog",
     "indexUrl": index_url,
     "trustedSigners": [],
@@ -207,7 +229,7 @@ open(path, "w").write(json.dumps(card, indent=2) + "\n")
 EOF
 python3 "$TOOL" validate-repo "$OUT/logos-repo.json" >/dev/null
 
-# 4. The index: add this release's two packages (a release keeps every earlier version;
+# 4. The index: add this release's packages (a release keeps every earlier version;
 #    a local index starts empty). Versions dedupe on (version, rootHash), so re-running a
 #    release is a no-op, and a rebuild that changed the bytes of a published version shows
 #    up as a second entry for it, which `validate` reports.
@@ -220,7 +242,7 @@ open(sys.argv[1], "w").write(json.dumps(idx, indent=2) + "\n")
 EOF
 fi
 PAIRS=()
-for pkg in muster_module muster_ui; do
+for pkg in $PACKAGES; do
   PAIRS+=(--with-local "$URL_BASE/$(asset "$pkg")" "$ASSETS/$(asset "$pkg")")
 done
 python3 "$TOOL" add "$OUT/index.json" --fetch none "${PAIRS[@]}"
@@ -231,14 +253,14 @@ python3 "$TOOL" list "$OUT/index.json"
 python3 - "$OUT/index.json" <<'EOF'
 import json, sys
 names = {p["name"] for p in json.load(open(sys.argv[1]))["packages"]}
-extra = names - {"muster_module", "muster_ui"}
+extra = names - {"muster_module", "muster_ui", "lez_msig_module"}
 if extra:
     sys.exit(f"index lists packages that are not ours: {sorted(extra)}")
 EOF
 
 echo
 echo "commit $COMMIT, version $VERSION"
-for pkg in muster_module muster_ui; do
+for pkg in $PACKAGES; do
   echo "  $(sha256_of "$ASSETS/$(asset "$pkg")")  $ASSETS/$(asset "$pkg")"
 done
 if [ -n "$LOCAL" ]; then
@@ -252,7 +274,7 @@ cat <<EOF
 Nothing is published. To publish $TAG:
   1. gh release create $TAG --repo corpetty/muster --target $COMMIT \\
        --title "Muster $VERSION" --notes "Muster $VERSION for Basecamp (${PLATFORMS// /, }). Install: docs/runbooks/install-from-catalogue.md" \\
-       $ASSETS/$(asset muster_module) $ASSETS/$(asset muster_ui)
+       $(for p in $PACKAGES; do printf '%s ' "$ASSETS/$(asset "$p")"; done)
   2. check each asset downloads:  curl -sSfLI $URL_BASE/$(asset muster_ui) | head -1
   3. git add catalog/index.json catalog/icons && git commit (Tested-Behavior trailer), PR to main.
 Basecamp reads $REPO_URL from main.
