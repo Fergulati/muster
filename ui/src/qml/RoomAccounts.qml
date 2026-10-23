@@ -77,6 +77,14 @@ Item {
             if (acc.accounts[i] && acc.accounts[i].family === "lez.msig") return acc.accounts[i];
         return null;
     }
+    // base units → LEZ as an exact decimal string (9 decimals), never through a float
+    function lezText(base) {
+        var t = String(base || "0").replace(/^0+(?=[0-9])/, "");
+        if (!/^[0-9]+$/.test(t)) return "?";
+        while (t.length < 10) t = "0" + t;
+        var whole = t.slice(0, t.length - 9), frac = t.slice(t.length - 9).replace(/0+$/, "");
+        return frac.length > 0 ? whole + "." + frac : whole;
+    }
     // LEZ in base units (9 decimals), "" for anything else
     function lezBase(text) {
         var t = String(text || "").trim();
@@ -1008,7 +1016,7 @@ Item {
                              ? qsTr("Proposals from this room go elsewhere: propose from this multisig to read it.")
                              : "⚠ " + String(parent.st.error) + (parent.st.detail ? " — " + String(parent.st.detail) : ""))
                           : parent.st.epoch !== undefined
-                          ? qsTr("Vault %1 LEZ  ·  %2 of %3  ·  settings v%4  ·  %5 queued").arg(Number(parent.st.balance || 0) / 1e9)
+                          ? qsTr("Vault %1 LEZ  ·  %2 of %3  ·  settings v%4  ·  %5 queued").arg(acc.lezText(parent.st.balance))
                                 .arg(parent.st.config ? parent.st.config.threshold : "?")
                                 .arg(parent.st.config ? parent.st.config.members.length : "?")
                                 .arg(parent.st.epoch).arg((parent.st.queue || []).length)
@@ -1078,7 +1086,7 @@ Item {
                             objectName: "msigQueued"
                             Layout.fillWidth: true
                             text: qsTr("Queued: proposal #%1, runs from %2").arg(modelData.nonce)
-                                  .arg(new Date(Number(modelData.etaMs)).toLocaleString())
+                                  .arg(new Date(Number(modelData.etaMs)).toLocaleString(Qt.locale(), Locale.ShortFormat))
                             color: Theme.palette.textSecondary
                             font.pixelSize: MusterStyle.caption
                             wrapMode: Text.WordWrap

@@ -891,13 +891,21 @@ ColumnLayout {
         readonly property var m: cardRoot.msig || ({})
         readonly property var a: (cardRoot.msig && cardRoot.msig.action) ? cardRoot.msig.action : ({})
         function abbr(h) { h = String(h || ""); return h.length > 16 ? h.slice(0, 8) + "…" + h.slice(-6) : h; }
+        // base units → LEZ as an exact decimal string (9 decimals), never through a float
+        function lez(base) {
+            var t = String(base || "0").replace(/^0+(?=[0-9])/, "");
+            if (!/^[0-9]+$/.test(t)) return "?";
+            while (t.length < 10) t = "0" + t;
+            var whole = t.slice(0, t.length - 9), frac = t.slice(t.length - 9).replace(/0+$/, "");
+            return frac.length > 0 ? whole + "." + frac : whole;
+        }
         LogosText {
             objectName: "cardMsigAction"
             Layout.fillWidth: true
             wrapMode: Text.WrapAnywhere
             text: parent.m.error ? "⚠ " + String(parent.m.error)
                 : parent.a.kind === "transfer"
-                  ? qsTr("Pays %1 LEZ to %2").arg(Number(parent.a.amount) / 1e9).arg(String(parent.a.to))
+                  ? qsTr("Pays %1 LEZ to %2").arg(parent.lez(parent.a.amount)).arg(String(parent.a.to))
                 : parent.a.kind === "call"
                   ? qsTr("Calls program %1 with %2 accounts and instruction %3").arg(String(parent.a.program))
                         .arg((parent.a.rows || []).length).arg(String(parent.a.data))
@@ -919,7 +927,7 @@ ColumnLayout {
             visible: !parent.m.error
             text: qsTr("Proposal #%1 · settings v%2 · expires %3 · id %4")
                   .arg(String(parent.m.nonce)).arg(String(parent.m.epoch))
-                  .arg(new Date(Number(parent.m.expiresMs)).toLocaleString())
+                  .arg(new Date(Number(parent.m.expiresMs)).toLocaleString(Qt.locale(), Locale.ShortFormat))
                   .arg(parent.abbr(parent.m.proposalId))
             color: Theme.palette.textSecondary
             font.family: MusterStyle.mono

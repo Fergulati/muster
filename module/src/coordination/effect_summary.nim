@@ -134,11 +134,11 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     var p: msigbytes.MsigProposal
     try: p = msigbytes.decodeProposal(hexToBytes(j{"proposal"}.getStr()))
     except CatchableError: return EffectSummary(kind: "unknown", text: "a LEZ multisig proposal that does not decode")
-    let tail = "  ·  nonce " & $p.nonce & ", epoch " & $p.epoch
+    let tail = "  ·  proposal #" & $p.nonce
     case p.action.kind
     of msigbytes.akTransfer:
       let to = msigbytes.hexOf(p.action.to)
-      return EffectSummary(kind: "payment", amount: $p.action.amount, unit: "base units", to: to,
+      return EffectSummary(kind: "payment", amount: inDecimals($p.action.amount, 9), unit: "LEZ", to: to,
         text: "a LEZ multisig payment: " & inDecimals($p.action.amount, 9) & " LEZ → " & short(to) & tail)
     of msigbytes.akCall:
       let prog = msigbytes.hexOf(p.action.program)

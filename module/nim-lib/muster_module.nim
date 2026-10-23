@@ -591,10 +591,14 @@ proc myIds(): seq[string] =
   let ks = moduleKeystore()
   @[toHex(ks.encIdentity().toBytes()).toLowerAscii()] & myNames()
 
+proc msigMemberOf(who: string): string   ## forward — the room identity an msig:<key> approval key is bound to
+
 proc memberName(who: string, mine: seq[string]): string =
   ## The one name for a member on every surface (exo-221): "you", the contact alias, or
-  ## one short id — the card, the approval slots and the room history all ask this.
-  contactBook().memberLabel(who, mine)
+  ## one short id — the card, the approval slots and the room history all ask this. A
+  ## lez-msig approval key is named as the member the room bound it to (exo-0d3).
+  let m = (if who.startsWith(ContributorPrefix): msigMemberOf(who) else: "")
+  contactBook().memberLabel((if m.len > 0: m else: who), mine)
 
 proc musterIdentity(): string =
   ## The module's persistent coordination identity (FS-4, two-identity model,
@@ -3820,6 +3824,16 @@ proc msigMyNames(): seq[string] =
         let ck = hexToBytes(parseJson(a.config){"createKey"}.getStr())
         result.add ContributorPrefix & msigbytes.hexOf(moduleKeystore().lezMemberKey(msigLabel(ck)))
   except CatchableError: discard
+
+proc msigMemberOf(who: string): string =
+  ## The room identity whose ceremony join proved this approval key (lmsig/<ck>/key/<who>,
+  ## author-signed and signed by the key itself); "" when no ceremony in the room binds it.
+  if gSession == nil or not who.startsWith(ContributorPrefix): return ""
+  let key = who[ContributorPrefix.len .. ^1].toLowerAscii()
+  for c in ceremonies(gSession.roomEvents(), gSession.topic):
+    for id, k in c.keys:
+      if k == key: return id
+  ""
 
 var gMsigCreated = initTable[string, tuple[hash: string, at: float]]()   ## create key → the Create this member sent
 var gMsigPumpAt = 0.0
