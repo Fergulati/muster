@@ -114,6 +114,11 @@ fn main() {
         queue: vec![Queued { nonce: 12, proposal_id: [0x77; 32], eta_ms: 1_700_003_600_000, expires_ms: 1_800_000_000_000 }],
     };
     out.push(entry("state", &borsh::to_vec(&state).unwrap()));
+    // a private note as a member decrypts it: the program's shard (the state) and the vault
+    let note = lee_core::account::Account { nonce: lee_core::account::Nonce(0x0102_0304), ..Default::default() }
+        .with_shard(program, borsh::to_vec(&state).unwrap().try_into().unwrap())
+        .with_shard(lee_core::native_token::NATIVE_TOKEN_PROGRAM_ID, lee_core::native_token::encode_balance(3_800));
+    out.push(entry("note", &borsh::to_vec(&note).unwrap()));
     out.push(format!("    \"aux\": \"{}\"", hx(&aux)));
     println!("{{\n  \"source\": \"programs/lez-msig/host/src/bin/msig_vectors.rs\",\n  \"vectors\": {{\n{}\n  }}\n}}", out.join(",\n"));
 }

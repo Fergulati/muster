@@ -28,7 +28,9 @@ fn health_derive_and_a_private_create_as_a_job() {
     assert_eq!(d["account"].as_str().unwrap().len(), 64, "{d}");
     assert_eq!(j(m.derive("nope".into()))["error"], "bad-request");
     assert_eq!(j(m.exec(json!({"program": program}).to_string()))["error"], "bad-request");
-    assert_eq!(j(m.fund(json!({}).to_string()))["error"], "refused", "fund is development only");
+    assert_eq!(j(m.fund(json!({}).to_string()))["error"], "bad-request");
+    assert_eq!(j(m.send(json!({"rpc": "http://127.0.0.1:1", "message": "00", "proof": "00", "witnesses": []}).to_string()))["error"],
+               "failed", "an unreadable message is refused before anything is sent");
 
     let Ok(rpc) = std::env::var("MSIG_LIVE_RPC") else {
         eprintln!("live part skipped: set MSIG_LIVE_RPC and MSIG_LIVE_PROGRAM");

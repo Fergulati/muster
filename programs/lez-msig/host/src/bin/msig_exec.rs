@@ -12,9 +12,12 @@
 //!         membership proof for `pre` (null for Create, an Init) and sent. `post` is the new
 //!         note in plaintext, as a member decrypts it. Muster carries it, sealed, in the room,
 //!         so every member can execute next without scanning the chain.
-//!   {"mode":"fund","rpc","program","gms","createKey","pre","payerSecret","payerNonce","amount"}
-//!       → {"hash","post"}: DEVELOPMENT ONLY. A shield from a public account whose secret is
-//!         passed in. A member's real deposit is signed in their own wallet.
+//!   {"mode":"fund","rpc","program","gms","createKey","pre","payerKey","payerNonce","amount"}
+//!       → {"sign","payer","message","proof","post","account","root","proveMs"}: a deposit from
+//!         the payer's public account, proved but not sent. The payer signs `sign` (BIP-340 over
+//!         the message's hash) in their own keystore; nothing here holds a key.
+//!   {"mode":"send","rpc","message","proof","witnesses":[{"signature","publicKey"}]} → {"hash"}:
+//!         a proved message sent with its signatures, each checked first.
 //! Errors: {"error","detail"}. A refusal the program makes surfaces as its MsigError code at
 //! proving time, before anything is sent (RFP U.7).
 //!

@@ -10,7 +10,9 @@ module lez_msig_module {
 
   method exec(request_json: tstr) -> tstr description "{rpc, program, gms, createKey, pre (the multisig's current note, Account borsh hex, or null for Create), op (msig_core::Instruction borsh hex)} -> {job} at once. In the background it reads pre's membership proof from rpc, proves the program over the private note, and sends it; job(id) then answers {hash, post (the new note), account, root, proveMs}. One proof at a time: another exec while one runs answers {error: \"busy\"}."
 
-  method fund(request_json: tstr) -> tstr description "DEVELOPMENT ONLY, refused unless the module runs with LEZ_MSIG_DEV_FUND=1: a shield into the multisig from a public account whose secret is in the request ({rpc, program, gms, createKey, pre, payerSecret, payerNonce, amount}). The same job shape as exec."
+  method fund(request_json: tstr) -> tstr description "A deposit into the multisig's vault from a member's public account, proved but not sent: {rpc, program, gms, createKey, pre, payerKey (the payer's x-only public key), payerNonce, amount} -> {job}; job(id) then answers {sign (the message hash the payer signs, BIP-340), payer, message, proof, post, account, root, proveMs}. The payer signs in their own keystore and send() carries the signature back; no key comes here."
+
+  method send(request_json: tstr) -> tstr description "{rpc, message, proof, witnesses: [{signature, publicKey}]} -> {hash}: a proved message, signed elsewhere, sent. Each signature is checked against the message first, and a bad one answers {error: \"failed\", detail: \"bad-signature: ...\"}."
 
   method job(job_id: tstr) -> tstr description "{job, state: proving | done | failed, startedMs, and when done the mode's answer, when failed {error, detail}}. Only the module that submitted the job may read it; an unknown id answers {error: \"unknown-job\"}."
 

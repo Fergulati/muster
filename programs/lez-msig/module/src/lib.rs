@@ -4,7 +4,8 @@
 //! writes its own copy). The work itself is `msig_host::exec::exec_request`, the same function the
 //! `msig_exec` CLI runs.
 //!
-//! It holds no key. The group secret arrives with each request and lives only in its job, and a
+//! It holds no key: a deposit's payer signs in their own keystore and `send` carries the
+//! signature back. The group secret arrives with each request and lives only in its job, and a
 //! job's answer (the multisig's decrypted note) is readable only by the caller that submitted it
 //! and dropped by `forget`. A proof takes minutes, so `exec` answers at once with a job id; one
 //! proof runs at a time, on its own thread, and `job_done` wakes the caller.
@@ -51,10 +52,13 @@ impl LezMsigModule for LezMsigModuleImpl {
     }
 
     fn fund(&mut self, request_json: String) -> String {
-        if std::env::var("LEZ_MSIG_DEV_FUND").as_deref() != Ok("1") {
-            return err("refused", "fund is for development only: run the module with LEZ_MSIG_DEV_FUND=1");
-        }
         self.submit("fund", request_json)
+    }
+
+    fn send(&mut self, request_json: String) -> String {
+        let Ok(mut req) = serde_json::from_str::<Value>(&request_json) else { return err("bad-request", "not JSON") };
+        req["mode"] = json!("send");
+        jobs::run_now(req).to_string()
     }
 
     fn job(&mut self, job_id: String) -> String {

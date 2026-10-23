@@ -10,7 +10,8 @@ use std::time::Instant;
 
 use common::transaction::LeeTransaction;
 use key_protocol::key_management::group_key_holder::GroupKeyHolder;
-use lee::{PrivateKey, PublicKey};
+use lee::privacy_preserving_transaction::{message::Message as PpMessage, witness_set::WitnessSet as PpWitnessSet};
+use lee::PublicKey;
 use lee_core::{
     account::{Account, AccountId, Nonce, ProgramShardSelector},
     Commitment,
@@ -66,6 +67,9 @@ async fn send(rpc: &str, tx: LeeTransaction) -> Result<String, String> {
 
 async fn run(req: Value) -> Result<Value, String> {
     let mode = req.get("mode").and_then(Value::as_str).unwrap_or("exec");
+    if mode == "send" {
+        return send_signed(&req).await;
+    }
     let m = msig_of(&req)?;
     if mode == "derive" {
         return Ok(json!({"account": hex::encode(m.account().as_ref() as &[u8])}));
@@ -96,11 +100,15 @@ async fn run(req: Value) -> Result<Value, String> {
                       "account": hex::encode(m.account().as_ref() as &[u8]), "root": root, "proveMs": prove_ms}))
         }
         "fund" => {
+            // a deposit into the vault: a native transfer from the payer's public account,
+            // proved here and signed by the payer's own key, which never comes here. The answer
+            // carries the message's hash to sign; `send` carries the signature back.
             let (pre, proof) = pre_with_proof.ok_or("fund needs the multisig's current note")?;
-            let key = PrivateKey::try_new(h32(&req, "payerSecret")?).map_err(|e| format!("payerSecret: {e:?}"))?;
-            let payer = AccountId::from(&PublicKey::new_from_private_key(&key));
+            let payer_key = PublicKey::try_new(h32(&req, "payerKey")?).map_err(|e| format!("payerKey: {e:?}"))?;
+            let payer = AccountId::from(&payer_key);
             let amount: u128 = req.get("amount").and_then(Value::as_str).ok_or("missing amount")?.parse().map_err(|e| format!("amount: {e}"))?;
             let nonce: u128 = req.get("payerNonce").and_then(Value::as_str).unwrap_or("0").parse().map_err(|e| format!("payerNonce: {e}"))?;
+            let t = Instant::now();
             let (output, receipt) = lee::execute_and_prove(
                 lee::ProvingInput {
                     shard_selectors: vec![ProgramShardSelector::native_balance(payer), ProgramShardSelector::native_balance(m.account())],
@@ -113,17 +121,43 @@ async fn run(req: Value) -> Result<Value, String> {
                 },
                 &lee::privacy_preserving_transaction::circuit::ProgramWithDependencies::native(),
             )
-            .map_err(|e| format!("proving the shield: {e:?}"))?;
-            let post = m.decrypt_post(&output).ok_or("the shield's notes do not decrypt to the multisig's account")?;
-            let msg = lee::privacy_preserving_transaction::message::Message::from_circuit_output(vec![Nonce(nonce)], output);
-            let ws = lee::privacy_preserving_transaction::witness_set::WitnessSet::for_message(&msg, receipt, &[&key]);
-            let hash = send(&rpc, LeeTransaction::PrivacyPreserving(lee::privacy_preserving_transaction::PrivacyPreservingTransaction::new(msg, ws))).await?;
-            Ok(json!({"hash": hash, "post": hex::encode(borsh::to_vec(&post).unwrap()), "root": root}))
+            .map_err(|e| format!("proving the deposit: {e:?}"))?;
+            let prove_ms = t.elapsed().as_millis();
+            let post = m.decrypt_post(&output).ok_or("the deposit's notes do not decrypt to the multisig's account")?;
+            let msg = PpMessage::from_circuit_output(vec![Nonce(nonce)], output);
+            Ok(json!({"sign": hex::encode(msg.hash()), "payer": hex::encode(payer.as_ref() as &[u8]),
+                      "message": hex::encode(borsh::to_vec(&msg).map_err(|e| e.to_string())?),
+                      "proof": hex::encode(borsh::to_vec(&receipt).map_err(|e| e.to_string())?),
+                      "post": hex::encode(borsh::to_vec(&post).unwrap()),
+                      "account": hex::encode(m.account().as_ref() as &[u8]), "root": root, "proveMs": prove_ms}))
         }
         other => Err(format!("unknown mode {other}")),
     }
 }
 
+
+/// A proved message, signed by its signers elsewhere, sent: {rpc, message, proof,
+/// witnesses: [{signature, publicKey}]} → {hash}. Every signature is checked against the
+/// message's hash before anything is sent.
+async fn send_signed(req: &Value) -> Result<Value, String> {
+    let rpc = req.get("rpc").and_then(Value::as_str).ok_or("missing rpc")?;
+    let msg: PpMessage = borsh::from_slice(&bytes(req, "message")?.ok_or("missing message")?).map_err(|e| format!("message: {e}"))?;
+    let proof: lee::privacy_preserving_transaction::circuit::Proof =
+        borsh::from_slice(&bytes(req, "proof")?.ok_or("missing proof")?).map_err(|e| format!("proof: {e}"))?;
+    let mut sigs = Vec::new();
+    for w in req.get("witnesses").and_then(Value::as_array).ok_or("missing witnesses")? {
+        let sig = bytes(w, "signature")?.ok_or("missing signature")?;
+        let value: [u8; 64] = sig.try_into().map_err(|_| "a signature is 64 bytes".to_string())?;
+        let pk = PublicKey::try_new(h32(w, "publicKey")?).map_err(|e| format!("publicKey: {e:?}"))?;
+        sigs.push((lee::Signature { value }, pk));
+    }
+    let ws = PpWitnessSet::from_raw_parts(sigs, proof);
+    if !ws.signatures_are_valid_for(&msg) {
+        return Err("bad-signature: a witness does not sign this message".into());
+    }
+    let hash = send(rpc, LeeTransaction::PrivacyPreserving(lee::privacy_preserving_transaction::PrivacyPreservingTransaction::new(msg, ws))).await?;
+    Ok(json!({"hash": hash}))
+}
 
 /// Run one request; never panics on input: a bad request or a refusal is {"error","detail"}.
 pub async fn exec_request(req: Value) -> Value {
