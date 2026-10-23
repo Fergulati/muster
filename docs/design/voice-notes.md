@@ -1903,8 +1903,9 @@ Asked of the maintainer (corpetty):
   room's view the room's banner says it, beside the strip, so a room's view shows both. The
   claims registry's gap "Modules loaded beside Muster can record and send as you"
   says what it covers and what it does not: Muster's view not running, a person not looking,
-  a recording started and sent between two reads, and who started it or for which room, which
-  `voice_status` does not say. Seen in the gallery only. The maintainer may still object to
+  a recording started and sent between two reads, who started it or for which room, which
+  `voice_status` does not say, and a draft held, or a note or the draft played aloud, since
+  the strip is for the microphone only. Seen in the gallery only. The maintainer may still object to
   its words or its place, or to a room's view showing the strip and the room's banner both,
   each with its own Stop and Discard (gallery `room-voice-starting`), which this PR keeps.
 - **The Linux-only checks** (§12, §15). This PR is built on a Mac. On Linux the maintainer
