@@ -188,13 +188,21 @@ fi
 # 3. Run. Each test gets its own log and a PASS/FAIL line; the summary reads those. A test
 # that exits 0 having run nothing, because its gate is closed, says so on a line of its own
 # starting "SKIP <name>:" (voice_device_e2e without MUSTER_VOICE_REAL), and is counted SKIP.
+# Only a gated test may skip: one in the E2E list above. Any other test that prints that line
+# FAILs, saying so, since a skip there would hide a test that never ran (PR 340's review).
+E2E_LIST=" ${E2E[*]} "
 run_one() {
   local f="$1" n; n=$(basename "$f" .nim)
   local t0=$SECONDS
   # shellcheck disable=SC2086  # TEST_ARGS is deliberately word-split
   if timeout "$TEST_TIMEOUT" nim r "${FLAGS[@]}" "$f" ${TEST_ARGS:-} >"$OUT/$n.log" 2>&1; then
     if grep -q "^SKIP $n:" "$OUT/$n.log"; then
-      echo "SKIP $n $((SECONDS - t0))s  ($(grep -m1 "^SKIP $n:" "$OUT/$n.log" | cut -d: -f2- | cut -d. -f1 | cut -c2-))" | tee -a "$OUT/results"
+      case "$E2E_LIST" in
+        *" $n "*)
+          echo "SKIP $n $((SECONDS - t0))s  ($(grep -m1 "^SKIP $n:" "$OUT/$n.log" | cut -d: -f2- | cut -d. -f1 | cut -c2-))" | tee -a "$OUT/results" ;;
+        *)
+          echo "FAIL $n $((SECONDS - t0))s  (it printed \"SKIP $n:\", but only a gated test in run-suite.sh's E2E list may skip: $OUT/$n.log)" | tee -a "$OUT/results" ;;
+      esac
     else
       echo "PASS $n $((SECONDS - t0))s" | tee -a "$OUT/results"
     fi
@@ -202,7 +210,7 @@ run_one() {
     echo "FAIL $n $((SECONDS - t0))s  ($OUT/$n.log)" | tee -a "$OUT/results"
   fi
 }
-export -f run_one; export OUT TEST_TIMEOUT TEST_ARGS="${TEST_ARGS:-}"
+export -f run_one; export OUT TEST_TIMEOUT E2E_LIST TEST_ARGS="${TEST_ARGS:-}"
 export FLAGS_STR; FLAGS_STR=$(printf '%q ' "${FLAGS[@]}")
 run_one_q() { eval "FLAGS=($FLAGS_STR)"; run_one "$1"; }
 export -f run_one_q

@@ -157,7 +157,9 @@ only the person can grant.
 So the real-device test, `voice_device_e2e` (S11), is in run-suite's E2E list and gated
 behind `MUSTER_VOICE_REAL`. It runs by name only, never by default, and its microphone leg
 only with the person's consent. Without `MUSTER_VOICE_REAL` it prints a `SKIP` line and
-exits 0, and the runner counts it as skipped, not passed.
+exits 0, and the runner counts it as skipped, not passed. Only a test in the runner's E2E list
+may skip: any other test that prints a `SKIP <name>:` line FAILs, with a message saying so, so
+a skip cannot hide a test that never ran.
 
 ```bash
 MUSTER_VOICE_REAL=1 module/tests/run-suite.sh e2e voice_device_e2e         # both legs

@@ -1546,7 +1546,9 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
 
   **The device test (built): `voice_device_e2e`**, in run-suite's E2E list and gated behind
   `MUSTER_VOICE_REAL`. Without it, it prints a `SKIP` line and exits 0, and run-suite counts it
-  as skipped. It opens `MiniaudioIo` on the system backend through the `AudioIo` seam, with
+  as skipped. Only a test in that list may skip: since PR 340's review run-suite fails any
+  other test that prints such a line, saying so, since a skip there would hide a test that
+  never ran. It opens `MiniaudioIo` on the system backend through the `AudioIo` seam, with
   no mock (`module/tests/README.md` has the details):
   - **The microphone leg** (`MUSTER_VOICE_REAL=mic`, or `1`), only with the person's consent.
     It captures 2 s. The stream must read back as 48 kHz mono s16, frames must arrive at 48 a
