@@ -3821,7 +3821,7 @@ proc msigMyNames(): seq[string] =
         result.add ContributorPrefix & msigbytes.hexOf(moduleKeystore().lezMemberKey(msigLabel(ck)))
   except CatchableError: discard
 
-var gMsigCreated = initTable[string, string]()   ## create key → the Create this member sent (hash)
+var gMsigCreated = initTable[string, tuple[hash: string, at: float]]()   ## create key → the Create this member sent
 var gMsigPumpAt = 0.0
 
 proc msigTick() =
@@ -3853,10 +3853,12 @@ proc msigTick() =
                              signers: r.state.config.members.mapIt(msigbytes.hexOf(it.key)),
                              threshold: int(r.state.config.threshold), config: configJsonOf(acct))
         gSession.publishAuthored(ks, accountDiscloseEvent(ra, me))
-      elif c.createKey notin gMsigCreated:
+      elif c.createKey notin gMsigCreated or epochTime() - gMsigCreated[c.createKey].at > 60.0:
+        # not on chain yet: send Create, and again if a minute passes with nothing there (an
+        # unfunded account's transaction, or one the sequencer dropped, lands nothing)
         let ins = MsigInstruction(kind: ikCreate, zone: hexToBytes(c.zone), config: configOf(c))
         let sent = chain.sendMsig(msigShards(program, a, ins), envelopePublic(ck, ins))
-        if sent.ok: gMsigCreated[c.createKey] = sent.hash
+        if sent.ok: gMsigCreated[c.createKey] = (sent.hash, epochTime())
     except CatchableError: discard              # an unreachable sequencer: try again next tick
 
 proc musterLezMsigOpen(specJson: string): string =

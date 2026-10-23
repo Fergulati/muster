@@ -1468,6 +1468,70 @@ void MusterUiBackend::onContextReady()
                     }
                     qInfo().noquote() << "[muster_ui] FILESHARE" << fileShareJson() << "result=" << fileShareResultJson();
                 }
+                // lez-msig self-test (exo-0d3): MUSTER_AUTOMSIG_OPEN=<M> opens a creation
+                // ceremony once someone else is in the room — the accounts panel's "Create a
+                // LEZ multisig" — and every runner's module joins it on its own tick; the
+                // opener's creates it on chain and discloses it. MUSTER_AUTOMSIG_PAY=<to>:<amount>
+                // proposes that payment once the vault holds the amount (the panel's "Propose
+                // this payment"); MUSTER_AUTOMSIG_APPROVE approves every lez-msig intent this
+                // member has not (the card's Approve); MUSTER_AUTOMSIG_SETTLE settles each once
+                // it is executable (the card's Settle on-chain). Logged each tick as MSIG.
+                const QString msigOpenK = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_OPEN"));
+                const QString msigPay = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_PAY"));
+                const bool msigApprove = !qgetenv("MUSTER_AUTOMSIG_APPROVE").isEmpty();
+                const bool msigSettle = !qgetenv("MUSTER_AUTOMSIG_SETTLE").isEmpty();
+                if (!msigOpenK.isEmpty() || !msigPay.isEmpty() || msigApprove || msigSettle) {
+                    static bool msigOpened = false, msigProposed = false, msigPolicySet = false;
+                    static QSet<QString> msigApproved, msigSettled;
+                    static bool msigPayerLogged = false;
+                    if (!msigPayerLogged) {   // the account this member sends (and pays) from
+                        msigPayerLogged = true;
+                        qInfo().noquote() << "[muster_ui] MSIG payer" << modules().muster_module.lez_member_account("0");
+                    }
+                    loadLezMsig();
+                    if (!msigOpenK.isEmpty() && !msigOpened && membersJson().contains("\"self\":false")) {
+                        msigOpened = true;
+                        lezMsigOpen(QString::fromUtf8(QJsonDocument(QJsonObject{{"threshold", msigOpenK.toInt()}})
+                                                          .toJson(QJsonDocument::Compact)));
+                    }
+                    QString msigAccount;
+                    for (const auto &c : QJsonDocument::fromJson(lezMsigCeremoniesJson().toUtf8()).array())
+                        if (!c.toObject().value("account").toString().isEmpty())
+                            msigAccount = c.toObject().value("account").toString();
+                    if (!msigAccount.isEmpty() && !msigPolicySet) {
+                        msigPolicySet = true;
+                        setPolicy("lez-msig@" + msigAccount);
+                        qInfo().noquote() << "[muster_ui] MSIG account" << msigAccount << "policy ->" << policyJson();
+                    }
+                    if (!msigPay.isEmpty() && !msigProposed && msigPolicySet) {
+                        const QStringList pay = msigPay.split(':');
+                        const QJsonObject st = QJsonDocument::fromJson(lezMsigStateJson().toUtf8()).object();
+                        if (pay.size() == 2 && st.contains("balance")
+                            && st.value("balance").toString().toDouble() >= pay[1].toDouble()) {
+                            msigProposed = true;
+                            lezMsigPropose(QString::fromUtf8(QJsonDocument(QJsonObject{
+                                {"kind", "transfer"}, {"to", pay[0]}, {"amount", pay[1]}}).toJson(QJsonDocument::Compact)));
+                            qInfo().noquote() << "[muster_ui] MSIG proposed ->" << lezMsigProposeJson();
+                        }
+                    }
+                    for (const auto &v : QJsonDocument::fromJson(intentsJson().toUtf8()).array()) {
+                        const QJsonObject it = v.toObject();
+                        if (it.value("effect").toObject().value("effect").toString() != "lez-msig") continue;
+                        const QString id = it.value("id").toString();
+                        if (msigApprove && !it.value("approvedByMe").toBool() && !msigApproved.contains(id)) {
+                            msigApproved.insert(id);
+                            contributeInRoom(id, QString(), QString());
+                            qInfo().noquote() << "[muster_ui] MSIG approved" << id << "->" << contributeJson();
+                        }
+                        if (msigSettle && it.value("state").toString() == "executable" && !msigSettled.contains(id)) {
+                            msigSettled.insert(id);
+                            submitInRoom(id);
+                            qInfo().noquote() << "[muster_ui] MSIG settle" << id << "->" << roomSubmitJson();
+                        }
+                        qInfo().noquote() << "[muster_ui] MSIG intent" << id << it.value("state").toString();
+                    }
+                    qInfo().noquote() << "[muster_ui] MSIG ceremonies" << lezMsigCeremoniesJson() << "state" << lezMsigStateJson();
+                }
                 qInfo() << "[muster_ui] SELFTEST pending=" << pendingJson()
                         << "members=" << membersJson()
                         << "intents=" << intentsJson();
