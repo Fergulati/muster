@@ -314,6 +314,9 @@ class MusterUi
     // A deposit into a PRIVATE lez-msig's vault from this member's own LEZ account (exo-efa):
     // amount in base units. Lands on lezMsigFundJson ({job, amount, payer} or {error, detail}).
     SLOT(void lezMsigFund(const QString &account, const QString &amount))
+    // Read a private lez-msig's newest note from the chain (exo-abc). Lands on
+    // lezMsigRecoverJson ({job} or {error, detail}).
+    SLOT(void lezMsigRecover(const QString &account))
     SLOT(void loadLezMsig())
     // The information-flow view (coordinate_flow, exo-002.5): who could see what,
     // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
@@ -436,6 +439,7 @@ class MusterUi
     PROP(QString lezMsigOpenJson="{}" READONLY)
     PROP(QString lezMsigProposeJson="{}" READONLY)
     PROP(QString lezMsigFundJson="{}" READONLY)
+    PROP(QString lezMsigRecoverJson="{}" READONLY)
     PROP(QString lezMsigStateJson="{}" READONLY)
     // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
     // observer matrix + per-action rows; the store node is always present (FS-9).

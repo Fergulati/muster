@@ -286,9 +286,17 @@ Every member reads the multisig from the newest note. No one scans the chain, an
 the room holds no copy. A member holding the GMS checks the disclosed address through the
 prover's `derive`; to the rest of the room it reads as unknown.
 
+**Recovery (built, exo-abc).** A member who landed a transaction may go away before sealing
+its note. The prover's `scan` then reads every block's private actions and decrypts the
+multisig's notes with the group's viewing key; the newest is the state, because each spends the
+one before. The finding member seals it into the room like any other note. It starts by itself
+when a private settlement fails, and a member can start it ("Read it from the chain";
+`lez_msig_recover`). It sends nothing.
+
+A payment's credit to a public payee is a deferred public effect, so it can land a block after
+the multisig's note. Muster judges the multisig by its note and never by the payee's balance.
+
 What is not built:
-- **Recovery** when the member who landed a transaction disappears before sealing its note:
-  the others would scan the chain with the group's viewing key.
 - **Real proving from a room.** The room flow has run in dev mode only
   (`module/tests/lez_msig_private_e2e.nim`). Real proving is measured in §10.
 

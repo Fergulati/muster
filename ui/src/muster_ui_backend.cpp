@@ -997,6 +997,16 @@ void MusterUiBackend::lezMsigFund(const QString &account, const QString &amount)
     loadLezMsig();
 }
 
+void MusterUiBackend::lezMsigRecover(const QString &account)
+{
+    // lez_msig_recover → {job}, or {error, detail}: the module reads the newest note from
+    // the chain with the group's viewing key, and it is sealed to every member.
+    const QString r = modules().muster_module.lez_msig_recover(account.trimmed());
+    qInfo() << "[muster_ui] lez_msig_recover" << account << "->" << r;
+    setLezMsigRecoverJson(asObjectJson(r, "job"));
+    loadLezMsig();
+}
+
 void MusterUiBackend::loadLezMsig()
 {
     setLezMsigCeremoniesJson(modules().muster_module.lez_msig_ceremonies());

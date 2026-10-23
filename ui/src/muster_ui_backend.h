@@ -118,6 +118,7 @@ public:
     void lezMsigOpen(const QString &specJson) override;
     void lezMsigPropose(const QString &actionJson) override;
     void lezMsigFund(const QString &account, const QString &amount) override;
+    void lezMsigRecover(const QString &account) override;
     void loadLezMsig() override;
     void loadFlow() override;
     void loadGraph(const QString &roomTopic) override;

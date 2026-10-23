@@ -104,7 +104,7 @@
         "coordinate_accounts",
         "coordinate_disclose_account"
       ],
-      "ui": "The accounts panel's create form; the private choice is not on screen yet.",
+      "ui": "The accounts panel's \"Create a private M-of-N LEZ multisig\"; the vault's \"Put in from my account\" and \"Read it from the chain\". Seen on a display (two runners): create, deposit, approve, settle.",
       "invariants": [
         2,
         4,
@@ -235,8 +235,7 @@
         }
       ],
       "unverified": [
-        "Run in dev mode only (RISC0_DEV_MODE); real proving is benchmarked in programs/lez-msig/BENCHMARKS.md but not driven from a room yet.",
-        "If the member whose transaction landed goes away before sealing its note, the others must recover it by scanning the chain with the group's viewing key; that recovery is not built."
+        "Run in dev mode only (RISC0_DEV_MODE); real proving is benchmarked in programs/lez-msig/BENCHMARKS.md but not driven from a room yet."
       ],
       "try": []
     },
@@ -282,7 +281,7 @@
         "lez_msig_fund",
         "lez_msig_state"
       ],
-      "ui": "Not on screen yet: lez_msig_fund is hosted.",
+      "ui": "The private vault's \"Put in from my account\".",
       "invariants": [
         3,
         8
@@ -418,13 +417,21 @@
           "evidence": [
             "module/tests/lez_msig_private_e2e.nim"
           ]
+        },
+        {
+          "what": "a stale note, when the member whose transaction landed never sealed the new one into the room",
+          "why": "the proof cannot be made over a spent note; the member's client reads the newest note from the chain with the group's viewing key (lez_msig_recover, also started by itself on that failure) and seals it in",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
         }
       ],
       "hosted": [
         "coordinate_propose_lez_msig",
         "coordinate_contribute",
         "coordinate_submit",
-        "lez_msig_state"
+        "lez_msig_state",
+        "lez_msig_recover"
       ],
       "ui": "The same card and Settle on-chain as the public posture.",
       "invariants": [

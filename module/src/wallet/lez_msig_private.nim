@@ -27,6 +27,7 @@ type
   PrivJob = object
     n: int                        ## the note this transaction makes
     fund: bool
+    scan: bool                    ## a read of the newest note from the chain, sending nothing
     txHash, failed: string
     post: seq[byte]
     applied: bool
@@ -86,6 +87,19 @@ proc sendOp*(c: MsigPrivate, op: seq[byte]): MsigSent =
   r["op"] = %hexOf(op)
   c.submitted(c.prover.submit(r), fund = false)
 
+proc recover*(c: MsigPrivate, fromBlock = 1'u64): MsigSent =
+  ## Read the newest note from the chain, for when the member whose transaction landed went
+  ## away before sealing its note into the room (exo-abc): the prover decrypts every private
+  ## action from `fromBlock` on with the group's viewing key. Followed like any job; once done
+  ## its note becomes the state and `onNote` hands it to the room. Sends nothing.
+  var r = c.request("scan")
+  r["from"] = % $fromBlock
+  let a = c.prover.submit(r)
+  if a.hasKey("error"): return MsigSent(ok: false, error: a{"error"}.getStr() & ": " & a{"detail"}.getStr())
+  let id = "job:" & a{"job"}.getStr()
+  c.jobs[id] = PrivJob(n: c.noteN + 1, scan: true)
+  MsigSent(ok: true, hash: id)
+
 proc fund*(c: MsigPrivate, amount: UInt128): MsigSent =
   ## A deposit into the vault from this member's own public LEZ account.
   if c.note.len == 0: return MsigSent(ok: false, error: "the multisig is not created yet")
@@ -112,7 +126,7 @@ method included*(c: MsigPrivate, hash: string): bool =
   if not hash.startsWith("job:"): return procCall MsigLive(c).included(hash)
   if hash notin c.jobs: return false
   var j = c.jobs[hash]
-  if j.failed.len > 0: return true
+  if j.failed.len > 0 or (j.scan and j.applied): return true
   if j.txHash.len == 0:
     let id = hash[4 .. ^1]
     let a = c.prover.job(id)
@@ -120,6 +134,15 @@ method included*(c: MsigPrivate, hash: string): bool =
     of "proving": return false
     of "done":
       j.post = unz(a{"post"}.getStr())
+      if j.scan:
+        # nothing was sent: the note the chain holds, or none newer than the room's
+        c.prover.forget(id)
+        j.applied = true
+        c.jobs[hash] = j
+        if a{"found"}.getBool() and j.post.len > 0 and j.post != c.note:
+          c.learn(max(j.n, c.noteN + 1), j.post)
+          if c.onNote != nil: c.onNote(c.noteN, j.post, a{"hash"}.getStr())
+        return true
       if j.fund:
         var h: array[32, byte]
         let sign = unz(a{"sign"}.getStr())

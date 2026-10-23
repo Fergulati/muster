@@ -27,7 +27,7 @@ use lee_core::{
     native_token::NATIVE_TOKEN_PROGRAM_ID,
     program::ProgramId,
     Commitment, EncryptionScheme, Identifier, MembershipProof, NullifierWitness, PrivacyPreservingCircuitOutput,
-    PrivateWitness, SharedSecretKey, WitnessKind, DUMMY_COMMITMENT_HASH,
+    PrivateAction, PrivateWitness, SharedSecretKey, WitnessKind, DUMMY_COMMITMENT_HASH,
 };
 pub use msig_core;
 use msig_core::{Instruction, Key, Outflow, State};
@@ -172,10 +172,17 @@ impl Msig {
     /// The multisig's new plaintext account from a private execution's output, found by
     /// decrypting each note with the PDA's viewing key and matching its commitment.
     pub fn decrypt_post(&self, output: &PrivacyPreservingCircuitOutput) -> Option<Account> {
+        self.decrypt_actions(&output.private_actions)
+    }
+
+    /// The multisig's account among a transaction's private actions, as a member decrypts it;
+    /// None when none of them is the multisig's. This is how a member reads a note from the
+    /// chain when no one carried it into the room (exo-abc).
+    pub fn decrypt_actions(&self, actions: &[PrivateAction]) -> Option<Account> {
         let keys = self.keys.as_ref()?;
         let vsk = &keys.viewing_secret_key;
         let a = self.account();
-        output.private_actions.iter().find_map(|action| {
+        actions.iter().find_map(|action| {
             let ss = SharedSecretKey::decapsulate(&action.encrypted_post_state.epk, &vsk.d, &vsk.z)?;
             let (_, account) = EncryptionScheme::decrypt(&action.encrypted_post_state.ciphertext, &ss, &action.nullifier)?;
             (action.commitment == Commitment::new(&a, &account)).then_some(account)

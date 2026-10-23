@@ -1267,7 +1267,14 @@ proc lezPump() =
         if f.status == fsFinal:
           p.session.publish(finalEvent(p.intentId, chainRef = chainRef))
           outcome = "final"
-        elif f.status == fsFailed: outcome = "failed: " & f.detail
+        elif f.status == fsFailed:
+          outcome = "failed: " & f.detail
+          # a private lez-msig's proof fails on a note the chain has already spent, which is
+          # what a note that never reached the room looks like: read the newest from the chain
+          # (it sends nothing), so a retry proves over it (exo-abc)
+          if p.settle of LezMsigSettlement:
+            let acct = LezMsigSettlement(p.settle).msigAccountOf()
+            if acct.isSome and acct.get.private: discard musterLezMsigRecover(acct.get.accountId)
     except CatchableError:
       discard                          # an unreachable sequencer: try again next tick
     let own = (if p.kind == lpSettle and p.settle != nil: p.settle.watchDeadlineS() else: 0.0)   # a time lock (exo-0d3)
@@ -3901,7 +3908,7 @@ proc msigMemberOf(who: string): string =
 
 var gMsigCreated = initTable[string, tuple[hash: string, at: float]]()   ## create key → the Create this member sent
 var gMsigPumpAt = 0.0
-var gMsigFunds: seq[tuple[ck, job: string, at: float]]   ## private deposits this member sent, until they land
+var gMsigFunds: seq[tuple[ck, job: string, at: float]]   ## private deposits and recoveries this member started, until they finish
 
 proc msigPrivateTick(c: MsigCeremony, ks: Keystore, me: string) =
   ## A private ceremony this member opened (exo-efa): Create through the prover, then, once
@@ -4183,6 +4190,31 @@ proc musterLezMsigFund(account, amount: string): string =
     gMsigFunds.add (ck: msigbytes.hexOf(la.createKey), job: sent.hash, at: epochTime())
     gMsigStateCache.del(acct)
     $(%*{"job": sent.hash, "amount": $n, "payer": msigbytes.hexOf(pc.payer())})
+  except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
+
+proc musterLezMsigRecover(account: string): string =
+  ## A PRIVATE lez-msig's newest note, read from the chain by the lez_msig_module with the
+  ## group's viewing key, for when the member whose transaction landed went away before
+  ## sealing its note into the room (exo-abc). Sends nothing; once found, the note is sealed to
+  ## every member like any other.
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  var acct = account.strip()
+  if acct.len == 0:
+    let (k, a) = splitPolicy(gCoordKind)
+    if k != "lez-msig": return $(%*{"error": "not-a-lez-msig-policy"})
+    acct = a
+  let (found, a) = findAccount(roomAccounts(), acct)
+  if not found or a.family != LezMsigFamily: return $(%*{"error": "unknown-account"})
+  let (ok, la, detail) = lezMsigAccountOf(a.chain, a.address, a.config)
+  if not ok: return $(%*{"error": "does-not-derive", "detail": detail})
+  if not la.private: return $(%*{"error": "public", "detail": "a public multisig is read from the chain as it is"})
+  try:
+    let pc = msigPrivFor(la.chain, la.program, la.createKey)
+    let sent = pc.recover()
+    if not sent.ok: return $(%*{"error": "refused", "detail": sent.error})
+    gMsigFunds.add (ck: msigbytes.hexOf(la.createKey), job: sent.hash, at: epochTime())
+    gMsigStateCache.del(acct)
+    $(%*{"job": sent.hash})
   except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
 
 proc settlementFor(drv: Driver): Settlement =

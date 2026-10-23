@@ -134,6 +134,10 @@ Rectangle {
                     lezMsigPropose: details.room.lezMsigPropose
                     lezMsigState: details.room.lezMsigState
                     lezMsigFund: details.room.lezMsigFund
+                    lezMsigRecover: details.room.lezMsigRecover
+                    onLezMsigRecoverRequested: function (account) {
+                        if (details.room.backend) details.room.backend.lezMsigRecover(account);
+                    }
                     onLezMsigFundRequested: function (account, amount) {
                         if (details.room.backend) details.room.backend.lezMsigFund(account, amount);
                     }

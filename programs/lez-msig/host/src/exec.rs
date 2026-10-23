@@ -74,6 +74,9 @@ async fn run(req: Value) -> Result<Value, String> {
     if mode == "derive" {
         return Ok(json!({"account": hex::encode(m.account().as_ref() as &[u8])}));
     }
+    if mode == "scan" {
+        return scan(&req, &m).await;
+    }
     let rpc = req.get("rpc").and_then(Value::as_str).ok_or("missing rpc")?.to_string();
     let pre: Option<Account> = match bytes(&req, "pre")? {
         None => None,
@@ -135,6 +138,39 @@ async fn run(req: Value) -> Result<Value, String> {
     }
 }
 
+
+/// The multisig's newest note, read from the chain: every block from `from` (default 1) to
+/// the tip, each privacy-preserving transaction's private actions decrypted with the group's
+/// viewing key. A later one supersedes an earlier, since each spends the one before. For a
+/// member whose room lost a note (its sender went away before sealing it in), exo-abc.
+/// → {found, post, block, hash, scanned}.
+async fn scan(req: &Value, m: &Msig) -> Result<Value, String> {
+    const STEP: u64 = 100;
+    let rpc = req.get("rpc").and_then(Value::as_str).ok_or("missing rpc")?;
+    let client = SequencerClientBuilder::default().build(rpc).map_err(|e| e.to_string())?;
+    let tip = client.get_last_block_id().await.map_err(|e| format!("getLastBlockId: {e}"))?;
+    let mut at: u64 = req.get("from").and_then(Value::as_str).and_then(|s| s.parse().ok()).unwrap_or(1).max(1);
+    let mut found: Option<(Account, u64, String)> = None;
+    while at <= tip {
+        let end = (at + STEP - 1).min(tip);
+        let blocks = client.get_block_range(at, end).await.map_err(|e| format!("getBlockRange {at}..{end}: {e}"))?;
+        for b in blocks {
+            for tx in &b.body.transactions {
+                if let LeeTransaction::PrivacyPreserving(pp) = tx {
+                    if let Some(a) = m.decrypt_actions(&pp.message().private_actions) {
+                        found = Some((a, b.header.block_id, hex::encode(tx.hash().as_ref() as &[u8])));
+                    }
+                }
+            }
+        }
+        at = end + 1;
+    }
+    Ok(match found {
+        Some((a, block, hash)) => json!({"found": true, "post": hex::encode(borsh::to_vec(&a).unwrap()),
+                                         "block": block.to_string(), "hash": hash, "scanned": tip.to_string()}),
+        None => json!({"found": false, "scanned": tip.to_string()}),
+    })
+}
 
 /// A proved message, signed by its signers elsewhere, sent: {rpc, message, proof,
 /// witnesses: [{signature, publicKey}]} → {hash}. Every signature is checked against the

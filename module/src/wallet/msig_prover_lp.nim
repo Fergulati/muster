@@ -38,7 +38,7 @@ proc call(p: LpMsigProver, meth: string, arg: string): JsonNode =
 method derive*(p: LpMsigProver, req: JsonNode): JsonNode = p.call("derive", $req)
 method submit*(p: LpMsigProver, req: JsonNode): JsonNode =
   let mode = req{"mode"}.getStr("exec")
-  p.call((if mode == "fund": "fund" else: "exec"), $req)
+  p.call((if mode in ["fund", "scan"]: mode else: "exec"), $req)
 method job*(p: LpMsigProver, id: string): JsonNode = p.call("job", id)
 method forget*(p: LpMsigProver, id: string) = discard p.call("forget", id)
 method send*(p: LpMsigProver, req: JsonNode): JsonNode = p.call("send", $req)

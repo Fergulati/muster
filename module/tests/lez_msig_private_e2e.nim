@@ -19,7 +19,11 @@
 ##      new balance from the note Carol sealed;
 ##   5. the chain's copy of that transaction names no member key and no approval;
 ##   6. a payment the vault cannot cover is refused while proving: nothing is sent;
-##   7. below threshold, nothing reaches the prover.
+##   7. below threshold, nothing reaches the prover;
+##   8. a lost note: Carol settles a payment but her note never reaches the room. Alice reads the
+##      stale note, recovers the newest from the chain with the group's viewing key, and seals it
+##      into the room; Bob reads it there;
+##   9. the recovered note is spendable: a further payment settles from it.
 
 import std/[os, json, strutils, sequtils, times, options, httpclient]
 import stint
@@ -157,7 +161,7 @@ proc propose(i: int, action: MsigAction): string =
   id
 proc approve(i: int, id: string) =
   let res = liveContribute(sessions[i], kss[i], roomDriverFor, id, "", "", bindCtx(), uint64(epochTime()))
-  doAssert not res.startsWith("refused") and not res.startsWith("unknown"), res
+  doAssert not res.startsWith("refused") and not res.startsWith("unknown"), "approve " & $i & ": " & res
   pollAll()
 proc contributionsOf(id: string): seq[SettleContribution] =
   for e in r.alice.roomEvents():
@@ -177,7 +181,8 @@ proc settleAndWatch(i: int, id: string): tuple[f: Finality, txRef: TxRef] =
     result.f = st.watch(result.txRef)
     if result.f.status == fsFinal:
       # the room records the transaction's hash, never the prover's job id
-      doAssert st.chainRefOf(result.txRef).len == 64 and st.chainRefOf(result.txRef) == chains[i].txHashOf(result.txRef.id)
+      doAssert st.chainRefOf(result.txRef).len == 64 and st.chainRefOf(result.txRef) == chains[i].txHashOf(result.txRef.id),
+        "chainRefOf: " & st.chainRefOf(result.txRef)
     if result.f.status != fsPending or epochTime() > until: return
     sleep(2000)
 
@@ -188,7 +193,7 @@ let (f, payRef) = settleAndWatch(2, pay)
 doAssert f.status == fsFinal, $f
 doAssert payRef.id.startsWith("job:")
 doAssert chains[2].txHashOf(payRef.id).len == 64, "the room records the transaction's hash, never the job"
-doAssert rpc.getAccount(recipient).balance == before + 1200.u128, "the program paid the recipient"
+waitFor("the payee credited " & "1200", proc(): bool = rpc.getAccount(recipient).balance == before + 1200.u128, 60)   # a deferred public effect
 for i in 0 .. 2: chains[i].refresh(i)
 doAssert chains[0].readMsig(a).balance == 3800.u128 and not chains[0].readMsig(a).state.nonceFree(0),
   "Alice reads the payment from the note Carol sealed"
@@ -212,7 +217,7 @@ let tooMuch = propose(0, MsigAction(kind: akTransfer, to: recipient, amount: 1_0
 approve(1, tooMuch)
 let (f6, _) = settleAndWatch(0, tooMuch)
 doAssert f6.status == fsFailed and "while proving" in f6.detail, $f6
-doAssert rpc.getAccount(recipient).balance == before + 1200.u128
+waitFor("the payee credited " & "1200", proc(): bool = rpc.getAccount(recipient).balance == before + 1200.u128, 60)   # a deferred public effect
 echo "6. more than the vault holds: refused while proving, nothing sent (", f6.detail[0 ..< min(70, f6.detail.len)], "…) OK"
 
 # ── 7. below threshold ────────────────────────────────────────────────────────
@@ -220,5 +225,34 @@ let lone = propose(0, MsigAction(kind: akTransfer, to: recipient, amount: 7.u128
 let (_, loneAsm) = settleBy(0, lone)
 doAssert not loneAsm.ok and loneAsm.error == "insufficient-signatures", loneAsm.error
 echo "7. one approval of two: nothing reaches the prover (", loneAsm.detail, ") OK"
+
+# ── 8. a lost note, recovered from the chain ───────────────────────────────────
+let lost = propose(1, MsigAction(kind: akTransfer, to: recipient, amount: 300.u128))
+approve(0, lost)
+let carolOnNote = chains[2].onNote
+chains[2].onNote = nil                                    # Carol goes away before sealing her note
+let (f8, _) = settleAndWatch(2, lost)
+doAssert f8.status == fsFinal, $f8
+chains[2].onNote = carolOnNote
+waitFor("the payee credited " & "1500", proc(): bool = rpc.getAccount(recipient).balance == before + 1500.u128, 60)   # a deferred public effect
+chains[0].refresh(0)
+doAssert chains[0].readMsig(a).balance == 3800.u128, "Alice's room still carries the old note: " & $chains[0].readMsig(a).balance
+block:
+  let sent = chains[0].recover()
+  doAssert sent.ok, sent.error
+  waitFor("the scan", proc(): bool = chains[0].included(sent.hash))
+  doAssert chains[0].failure(sent.hash) == "", chains[0].failure(sent.hash)
+doAssert chains[0].readMsig(a).balance == 3500.u128, "the chain's newest note: 3500"
+chains[1].refresh(1)
+doAssert chains[1].readMsig(a).balance == 3500.u128, "Bob reads the recovered note in the room"
+echo "8. a note that never reached the room: recovered from the chain by the group's viewing key, sealed in OK"
+
+# ── 9. the recovered note is spendable ───────────────────────────────────────
+let after = propose(0, MsigAction(kind: akTransfer, to: recipient, amount: 100.u128))
+approve(1, after)
+let (f9, _) = settleAndWatch(1, after)
+doAssert f9.status == fsFinal, $f9
+waitFor("the payee credited " & "1600", proc(): bool = rpc.getAccount(recipient).balance == before + 1600.u128, 60)   # a deferred public effect
+echo "9. a payment settles from the recovered note OK"
 
 echo "lez_msig_private_e2e: all passed"

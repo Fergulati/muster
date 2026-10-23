@@ -16,6 +16,8 @@
 //!       → {"sign","payer","message","proof","post","account","root","proveMs"}: a deposit from
 //!         the payer's public account, proved but not sent. The payer signs `sign` (BIP-340 over
 //!         the message's hash) in their own keystore; nothing here holds a key.
+//!   {"mode":"scan","rpc","program","gms","createKey","from"?} → {"found","post","block","hash","scanned"}:
+//!         the multisig's newest note, read from the chain with the group's viewing key.
 //!   {"mode":"send","rpc","message","proof","witnesses":[{"signature","publicKey"}]} → {"hash"}:
 //!         a proved message sent with its signatures, each checked first.
 //! Errors: {"error","detail"}. A refusal the program makes surfaces as its MsigError code at

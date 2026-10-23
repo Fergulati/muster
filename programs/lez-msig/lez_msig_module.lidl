@@ -14,6 +14,8 @@ module lez_msig_module {
 
   method send(request_json: tstr) -> tstr description "{rpc, message, proof, witnesses: [{signature, publicKey}]} -> {hash}: a proved message, signed elsewhere, sent. Each signature is checked against the message first, and a bad one answers {error: \"failed\", detail: \"bad-signature: ...\"}."
 
+  method scan(request_json: tstr) -> tstr description "{rpc, program, gms, createKey, from? (a block id, default 1)} -> {job} at once; job(id) then answers {found, post (the multisig's newest note, Account borsh hex), block, hash, scanned}. Reads every block to the tip and decrypts each private action with the group's viewing key; for a member whose room never received the newest note. Shares the one-at-a-time slot with exec and fund."
+
   method job(job_id: tstr) -> tstr description "{job, state: proving | done | failed, startedMs, and when done the mode's answer, when failed {error, detail}}. Only the module that submitted the job may read it; an unknown id answers {error: \"unknown-job\"}."
 
   method forget(job_id: tstr) -> tstr description "Drop a finished job, its decrypted note included. {ok: true}."

@@ -19,7 +19,7 @@ type
 method derive*(p: MsigProver, req: JsonNode): JsonNode {.base.} =
   %*{"error": "unavailable", "detail": "no prover"}
 method submit*(p: MsigProver, req: JsonNode): JsonNode {.base.} =
-  ## {mode: exec | fund, …} → {job} at once, or {error, detail}.
+  ## {mode: exec | fund | scan, …} → {job} at once, or {error, detail}.
   %*{"error": "unavailable", "detail": "no prover"}
 method job*(p: MsigProver, id: string): JsonNode {.base.} =
   ## {state: proving | done | failed, …the mode's answer} or {error}.

@@ -556,6 +556,10 @@ method watch*(s: LezMsigSettlement, txRef: TxRef): Finality =
       return Finality(status: fsPending, detail: "executing the queued action")
     Finality(status: fsFailed, detail: "the program refused it (included; nothing changed)")
 
+proc msigAccountOf*(s: LezMsigSettlement): Option[LezMsigAccount] =
+  ## The multisig this settlement acted for, once it assembled.
+  if s.driver != nil: some(s.driver.account) else: none(LezMsigAccount)
+
 proc chainRefOf*(s: LezMsigSettlement, r: TxRef): string =
   ## What the settlement is looked up by outside the room: the transaction's hash. A private
   ## multisig's submit answers with the prover's job ("job:<id>"); its hash is known only once

@@ -1226,6 +1226,11 @@ proc lezMsigFundImpl(o: MusterUi, account, amount: string) =
     info "lez_msig_fund " & qs(account) & " " & qs(amount) & " -> " & qs(r)
     o.setLezMsigFundJson(asObjectJson(r, "job"))
     o.loadLezMsigDo())
+proc lezMsigRecoverImpl(o: MusterUi, account: string) =
+  ask mm.lez_msig_recoverAsync(account.strip(), proc (r: string) =
+    info "lez_msig_recover " & qs(account) & " -> " & qs(r)
+    o.setLezMsigRecoverJson(asObjectJson(r, "job"))
+    o.loadLezMsigDo())
 proc loadLezMsigImpl(o: MusterUi) = o.loadLezMsigDo()
 proc loadWalletSummaryImpl(o: MusterUi) = o.loadWalletSummaryDo()
 proc loadFlowImpl(o: MusterUi) = o.loadFlowDo()

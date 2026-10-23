@@ -70,10 +70,12 @@ Item {
     property var lezMsigOpen: ({})
     property var lezMsigPropose: ({})
     property var lezMsigFund: ({})
+    property var lezMsigRecover: ({})
     property var lezMsigState: ({})
     signal lezMsigOpenRequested(string specJson)
     signal lezMsigProposeRequested(string account, string actionJson)
     signal lezMsigFundRequested(string account, string amount)
+    signal lezMsigRecoverRequested(string account)
     readonly property var msigAccount: {
         for (var i = 0; i < acc.accounts.length; ++i)
             if (acc.accounts[i] && acc.accounts[i].family === "lez.msig") return acc.accounts[i];
@@ -1075,6 +1077,29 @@ Item {
                         text: qsTr("Put in from my account")
                         variant: LogosButton.Variant.Secondary
                         onClicked: acc.lezMsigFundRequested(String(acc.msigAccount.id), base)
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: parent.st.private === true
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        objectName: "msigRecoverNote"
+                        Layout.fillWidth: true
+                        text: acc.lezMsigRecover && acc.lezMsigRecover.error
+                              ? "⚠ " + String(acc.lezMsigRecover.error) + (acc.lezMsigRecover.detail ? " — " + String(acc.lezMsigRecover.detail) : "")
+                              : acc.lezMsigRecover && acc.lezMsigRecover.job
+                              ? qsTr("Reading the multisig from the chain on this device…")
+                              : qsTr("Looks out of date? Each member shares the newest state after their transaction lands; if one did not, read it from the chain.")
+                        color: acc.lezMsigRecover && acc.lezMsigRecover.error ? Theme.palette.error : Theme.palette.textSecondary
+                        font.pixelSize: MusterStyle.caption
+                        wrapMode: Text.WordWrap
+                    }
+                    ActionButton {
+                        objectName: "msigRecover"
+                        text: qsTr("Read it from the chain")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.lezMsigRecoverRequested(String(acc.msigAccount.id))
                     }
                 }
                 LogosText {

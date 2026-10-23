@@ -55,6 +55,10 @@ impl LezMsigModule for LezMsigModuleImpl {
         self.submit("fund", request_json)
     }
 
+    fn scan(&mut self, request_json: String) -> String {
+        self.submit("scan", request_json)
+    }
+
     fn send(&mut self, request_json: String) -> String {
         let Ok(mut req) = serde_json::from_str::<Value>(&request_json) else { return err("bad-request", "not JSON") };
         req["mode"] = json!("send");
