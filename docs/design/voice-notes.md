@@ -1079,12 +1079,15 @@ that is not part of this PR, ran the suite on both arches and S9's voice self-te
   that failed, `room_graph_scale_test`, failed on its own timing beside the other tests and
   passed alone. It linked 1.6.1 too. Run 40030788377 ran it at `08dfcb3` on both arches. Its
   first test step, the voice and audio tests (`run-suite.sh voice audio session_pad`), passed
-  on each. On `ubuntu-24.04-arm` the whole suite then gave 284 of 285, four at a time, and
-  the one that failed was `room_graph_scale_test` again, on its own timing (its folds took
-  4,021 ms against a bound of 4,000), and it passed alone, as the workflow re-runs it;
-  `ubuntu-latest`'s module suite job was still running when this was written. The arm job's
-  log gives each test's PASS line only, and gh could not fetch the other's while it ran
-  (404), so which libopus `voice_codec_test` §1 printed there is not read.
+  on each. The whole suite then gave 284 of 285 on each, four at a time, and the one that
+  failed was `room_graph_scale_test` again, on its own timing (its folds took 4,021 ms on
+  `ubuntu-24.04-arm` and 5,658 ms on `ubuntu-latest`, against a bound of 4,000), and it
+  passed alone, as the workflow re-runs it, its folds taking 1,497 ms and 1,197 ms there.
+  On this Mac, alone, three runs each, its folds took 554–605 ms on this branch and 555–562
+  ms on `main` (`67701f8`), and the whole `reduceRoomGraph` 617–646 ms and 590–592 ms, about
+  6% slower; `main` has not run on those runners. `voice_codec_test` §1 printed `libopus 1.5.2,
+  preskip 312` on both arches (read from the run's kept logs), so the suite links the
+  shipping 1.5.2 on Linux too.
 - **The package loads.** In the fork's `lgx variants` run (39776903474), `linux-amd64` carries
   `libopus.so.0` beside the plugin with RPATH `$ORIGIN`, and `ldd` resolves every library the
   plugin needs, libopus from the package itself, against the Qt in Basecamp 0.3.2's AppImage.
@@ -1229,7 +1232,7 @@ unverified, built or planned:
   _ma_context_init`), `voice_codec_test` holds the 40 B packets on the shipping libopus
   1.5.2, and S7's `.lgx` ran the null backend in `logos_host` (below). On Linux it has run
   in the module suite, the maintainer's (x86_64) and the fork's CI's (both arches) on libopus
-  1.6.1 at `bbae7d8`, and the fork's CI's again at `08dfcb3`, its libopus not read; and in
+  1.6.1 at `bbae7d8`, and the fork's CI's again at `08dfcb3`, on the shipping 1.5.2; and in
   the package's load (§12).
 - **A real microphone in a person's Basecamp.** Observed on 2026-10-22 at `bbae7d8` (§11): in
   Basecamp 0.3.2 launched as the Dock launches it, `logos_host` survives `voice_record_start`,
@@ -1310,8 +1313,8 @@ unverified, built or planned:
   only `libm.so.6` and `libc.so.6`, at `GLIBC_2.2.5` to `GLIBC_2.29`, with RUNPATH the pin's
   glibc; a test links libc and libm itself (Nim's `std/math`, which `strutils` imports, passes
   `-lm`), so the gcc's glibc is the one loaded. That is read and evaluated. The fork's CI ran
-  the voice and audio tests at `08dfcb3` on both arches, and they passed (§12), but the
-  version `voice_codec_test` §1 printed there is not read yet.
+  the voice and audio tests at `08dfcb3` on both arches, and they passed, `voice_codec_test`
+  §1 printing `libopus 1.5.2` on each (§12).
 - **Delivery of two 90,153 B frames:**
   - over the live fleet, past the headless runs on `logos.dev` (below; the last two with
     `publishTogether`, which sends the two back to back) and the `logos.dev` leg of S9's
@@ -1655,9 +1658,8 @@ unverified, built or planned:
     in Basecamp 0.3.2's AppImage. `linux-arm64` is not named there;
   - the module suite on Linux since the review: its libopus (above), and the run-suite rule
     that only a test in the E2E list may skip (§17 S11). The fork's CI ran it at `08dfcb3`:
-    on `ubuntu-24.04-arm` 284 of 285 passed, `room_graph_scale_test` failing on its timing
-    and passing alone, and `ubuntu-latest`'s job was still running when this was written;
-    which libopus either linked is not read (§12).
+    on both arches 284 of 285 passed, `room_graph_scale_test` failing on its timing and
+    passing alone, and `voice_codec_test` linked libopus 1.5.2 (§12).
 
 ## 16. Invariants, checked
 
@@ -1940,8 +1942,8 @@ Asked of the maintainer (corpetty):
   (PulseAudio, then ALSA), Record and Play inside Basecamp's AppImage, the Nim UI's runner and
   its self-test (`make build-nim`, then `MUSTER_UI=nim scripts/voice-self-test.sh`),
   `scripts/ui-parity.sh voice` for either UI, S9's red run, the Nim UI's `contract_test`,
-  `grade-specs.sh`, and `linux-arm64`'s plugin links (§15). Which libopus the suite has
-  linked there since the review is not read (§12).
+  `grade-specs.sh`, and `linux-arm64`'s plugin links (§15). Since the review the suite links
+  the shipping libopus 1.5.2 there, read at `08dfcb3` on both arches (§12).
 - **Scope.** This PR regenerates the stale gallery `FakeBackend.qml`, which also pulls in
   FileShare's missing slots, and fixes the unknown-card fallback. The Nim backend's missing
   FileShare autopilot and FileShare's absence from `ui-parity.sh` are left for a separate PR.

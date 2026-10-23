@@ -208,8 +208,8 @@ at; psbt strips only the ends.
   the gcc's libc and libm itself (Nim's `std/math` passes `-lm`) before libopus's RUNPATH is
   read. Read off cache.nixos.org's copy of the ELF and evaluated for `x86_64-linux` (the pin's
   `libopus.out` is `39jlnb9v…-libopus-1.5.2.drv`). The fork's CI ran the voice and audio
-  tests at `08dfcb3` on both arches, and they passed; run-suite's code links the pin there,
-  but which libopus they loaded is not read yet (design §12).
+  tests at `08dfcb3` on both arches, and they passed, `voice_codec_test` §1 printing
+  `libopus 1.5.2, preskip 312` on each (design §12).
   `scripts/grade-specs.sh` took nixpkgs' libopus for exo-526's host probe until the final
   check of the review's fixes; it takes the pin's too now, read by the same
   `module/tools/builder-nixpkgs.sh` as `run-suite.sh` (for `x86_64-linux`, `mzksc9fp…-libopus-1.5.2`
