@@ -55,6 +55,7 @@ Item {
     onViewChanged: {
         if (view === "room" && backend) backend.loadAccount();
         root.noteSeen();            // leaving or opening a room marks it read (exo-773)
+        if (view === "room") root.micAnswer = ({});   // the room's banner speaks there
     }
 
     // Enter a room by topic: join it in the module, then show the room surface.
@@ -555,6 +556,42 @@ Item {
     }
     readonly property string micState: String(root.voiceRec.state || "idle")
     readonly property bool micOn: root.micState === "starting" || root.micState === "recording"
+    onMicOnChanged: if (root.micOn) root.micAnswer = ({});   // a new recording: the last answer is over
+    // What the strip's own Stop or Discard got back, said on the page it was pressed on. In a
+    // room's view the room's banner says it, through the room's own calls; on any other page
+    // nothing did, and the strip just went. A recording kept or discarded is said once, in
+    // the toast; a refusal (a Stop while the microphone was still starting, a start that
+    // failed) stays in the strip's place until it is dismissed, the microphone comes on
+    // again, or a room's view opens. The call's answer is the first one after it
+    // (Room.voiceAnswers moves), as the room reads its own.
+    property string micOp: ""
+    property int micOpAnswers: -1
+    property var micAnswer: ({})
+    function micCall(op) {
+        root.micAnswer = ({});
+        root.micOp = op;
+        root.micOpAnswers = roomSurface.voiceAnswers;
+        if (op === "stop") roomSurface.stopVoice(); else roomSurface.discardVoice();
+    }
+    Connections {
+        target: roomSurface
+        function onVoiceAnswersChanged() {
+            if (root.micOp.length === 0 || roomSurface.voiceAnswers === root.micOpAnswers) return;
+            var op = root.micOp;
+            root.micOp = "";
+            if (root.view === "room") return;
+            var o = ({});
+            try { o = JSON.parse(String(root.backend ? (root.backend.voiceResultJson || "") : "")); }
+            catch (e) { o = ({}); }          // "ok", Discard's answer, is not JSON
+            var err = String((o && o.error) || "");
+            if (err.length === 0) {
+                newsToast.show(op === "stop" ? qsTr("Stopped. The recording is kept, unsent: you send it from its room.")
+                                             : qsTr("Discarded. Nothing was sent."));
+                return;
+            }
+            root.micAnswer = ({ op: op, error: err, detail: String(o.detail || ""), seq: roomSurface.voiceAnswers });
+        }
+    }
     function micClock(ms) {
         var s = Math.floor(Math.max(0, Number(ms) || 0) / 1000);
         return Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
@@ -629,27 +666,51 @@ Item {
                     font.pixelSize: MusterStyle.caption
                 }
             }
-            // through the room, so its answer shows there as if pressed in the room's banner
+            // through the room, so in a room's view its answer shows there as if pressed in
+            // the room's banner; on any other page, here (micAnswer)
             ActionButton {
                 objectName: "voiceIndicatorStop"
                 compact: true
                 text: qsTr("Stop")
-                onClicked: roomSurface.stopVoice()
+                onClicked: root.micCall("stop")
             }
             ActionButton {
                 objectName: "voiceIndicatorDiscard"
                 compact: true
                 quiet: true
                 text: qsTr("Discard")
-                onClicked: roomSurface.discardVoice()
+                onClicked: root.micCall("discard")
             }
         }
+    }
+    // the strip's refusal, in its place, on a page with no room view
+    InlineNotice {
+        id: micNotice
+        objectName: "voiceIndicatorAnswer"
+        readonly property string err: String(root.micAnswer.error || "")
+        visible: !root.micOn && root.view !== "room" && micNotice.err.length > 0 && !micNotice.dismissed
+        anchors.top: voiceIndicator.bottom
+        anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
+        anchors.right: parent.right
+        anchors.topMargin: visible ? Theme.spacing.medium : 0
+        anchors.leftMargin: Theme.spacing.large
+        anchors.rightMargin: Theme.spacing.large
+        height: visible ? implicitHeight : 0
+        z: 5
+        dismissible: true
+        // a refusal is one answer: dismissed, it stays hidden until a new one
+        occasion: String(root.micAnswer.seq || "")
+        tone: "error"
+        text: micNotice.err.length === 0 ? ""
+            : MusterStyle.voiceRefusalWords(micNotice.err, String(root.micAnswer.op || ""))
+              + (String(root.micAnswer.detail || "").length > 0 ? " " + String(root.micAnswer.detail) : "")
     }
 
     // Every surface fills this, beside the sidebar (or under the strip), below the microphone.
     Item {
         id: contentArea
-        anchors.top: voiceIndicator.bottom
+        anchors.top: micNotice.visible ? micNotice.bottom : voiceIndicator.bottom
+        anchors.topMargin: micNotice.visible ? Theme.spacing.medium : 0
         anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
         anchors.right: parent.right
         anchors.bottom: parent.bottom

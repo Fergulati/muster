@@ -231,39 +231,8 @@ ColumnLayout {
     readonly property var result: vn.room.voiceResult || ({})
     readonly property string err: String(vn.result.error || "")
     readonly property string detail: String(vn.result.detail || "")
-    function refusalWords(e, op) {
-        var play = op === "play" || op === "stopPlay";
-        if (e === "not-joined") return qsTr("Join the room first.");
-        if (e === "busy") return qsTr("Something is already recording or playing. Stop it first.");
-        // Play decodes, Start encodes: the module says codec for either
-        if (e === "codec")
-            return play ? qsTr("The voice decoder could not start on this device.") : qsTr("The voice encoder could not start on this device.");
-        if (e === "no-device")
-            return play ? qsTr("No speaker was found on this device.") : qsTr("No microphone was found on this device.");
-        if (e === "device-format")
-            return play ? qsTr("The speaker would not play sound in the form voice notes use.")
-                        : qsTr("The microphone would not record in the form voice notes use.");
-        if (e === "device-start-slow")
-            return play ? qsTr("The speaker took too long to start. Try again in a moment.")
-                        : qsTr("The microphone took too long to start. If you were asked whether to allow it, answer that, then try again.");
-        if (e === "not-started") return qsTr("Nothing was recorded: the microphone had not started yet.");
-        if (e === "not-recording") return qsTr("Nothing is recording.");
-        if (e === "no-draft") return qsTr("There is no recording to send or play.");
-        if (e === "too-short") return qsTr("Too short to send: record at least half a second.");
-        if (e === "silent") return qsTr("The recording is silent: no sound reached the microphone.");
-        if (e === "room-changed") return qsTr("This recording belongs to another room. Send it from there, or discard it.");
-        if (e === "too-large") return qsTr("It was too large to send. Discard it and record it again.");
-        if (e === "unknown-note") return qsTr("That voice note is not in this room.");
-        if (e === "incomplete") return qsTr("That voice note has not fully arrived yet.");
-        // the module says broken for parts that disagree, a record that fails its checks, and
-        // a clip the decoder refuses: words true of each
-        if (e === "broken") return qsTr("That voice note can't be played: it arrived damaged.");
-        // any other word is the device's or the encoder's: what failed, in words, and the
-        // module's own word after it, for a report
-        return play ? qsTr("The speaker did not work (%1).").arg(e)
-             : op === "record" ? qsTr("The microphone did not work (%1).").arg(e)
-             : qsTr("It did not work (%1).").arg(e);
-    }
+    // the module's words for a voice call's refusal, as Main's microphone strip says them too
+    function refusalWords(e, op) { return MusterStyle.voiceRefusalWords(e, op); }
     readonly property string noticeTitle: vn.err.length === 0 ? ""
         : vn.room.voiceOp === "send" ? qsTr("Nothing was sent.")
         : vn.room.voiceOp === "record" ? qsTr("Recording did not start.")

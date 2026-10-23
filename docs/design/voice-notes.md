@@ -1121,8 +1121,15 @@ nothing here reaches that code (§10, "What still leaks", item 6).
   page (Home, Settings, Contacts, Learn, the Wallet, any room) says "Muster is using the
   microphone", or "Muster is starting the microphone…", with the time, Stop and Discard, and
   "If you did not start it, press Discard." Its Stop and Discard go through the room's own
-  calls, so their answers show in the room as the banner's would. In a room's view the
-  room's banner (`RoomVoiceNote.qml`) shows as well. What it does not cover:
+  calls, so in a room's view their answers show in the room's banner (`RoomVoiceNote.qml`),
+  which shows there as well. On any other page the answer is said where the button was
+  pressed (since the final check of PR 340's review fixes found that nothing said it, and the
+  strip just went): a recording kept ("Stopped. The recording is kept, unsent: you send it
+  from its room.") or discarded ("Discarded. Nothing was sent.") once, in the toast; a
+  refusal, such as a Stop while the microphone was still starting ("Nothing was recorded:
+  the microphone had not started yet."), in the strip's place, in the room banner's words
+  (`MusterStyle.voiceRefusalWords`, which both now read), until it is dismissed, the
+  microphone comes on again, or a room's view opens. What it does not cover:
   - Muster's view not running: headless `logoscore`, a host that has not loaded Muster's
     view, and, in Basecamp, whether Muster's view keeps running while another app's view is
     in front is not checked;
@@ -1134,7 +1141,8 @@ nothing here reaches that code (§10, "What still leaks", item 6).
   - a draft held, or a note or the draft played aloud: the strip is for the microphone only.
 
   The operating system's own microphone indicator still shows, where capture works. The
-  strip is seen in the gallery only (`home-voice-indicator`, and `room-voice-record` for a
+  strip, and what its Stop and Discard say off a room's view, are seen in the gallery only
+  (`home-voice-indicator`, and `room-voice-record` for a
   room), against the generated fake backend: no runner or Basecamp window has shown it.
 - **The real fix** is `--access-policy enforce` with `muster_module`'s allowed callers set to
   `muster_ui` (`docs/basecamp-access-policy.md`, `infra/access-policy.json`), or Basecamp's
@@ -1293,7 +1301,8 @@ Basecamp's window. What is unverified, built or planned:
   the `.rep` and `muster.lidl` (ui-nim builds on Linux only), its voice autopilot run against a
   fake module (S9, below), and it has drawn no note from a real room. What S2 and its review's
   fixes added to the QML since (the `starting` banner, the not-started words), and the strip
-  above every page and the poll's new cadence (§8, §13), have run in the gallery only.
+  above every page, what its Stop and Discard say on a page with no room view, and the
+  poll's new cadence (§8, §13), have run in the gallery only.
 - **The cost of store catch-up.** It returns each payload as a JSON byte array
   (`delivery.nim:309-315`), so a voice frame inside the 60 s lookback is re-fetched as several
   hundred KB of JSON per query. That should be measured before anything is added; a seen-frame
@@ -1621,8 +1630,9 @@ reading of the logs (§15). How it reads them now is held red and green with no 
   while a draft was held), the voice words in FlowView and the room map, the regenerated
   gallery `FakeBackend.qml`, and the unknown-kind fallback. Since that review `Main.qml` reads
   `voice_status` every second on every page, room or none, and shows the microphone in a
-  strip above every page while it starts or records, with Stop and Discard (§13; gallery
-  `home-voice-indicator`). The
+  strip above every page while it starts or records, with Stop and Discard, whose answers
+  on a page with no room view are said there: the toast for a recording kept or discarded, a
+  notice in the strip's place for a refusal (§13; gallery `home-voice-indicator`). The
   gallery fixture `room-voice-forged` holds a forged `voice-note` body, and RoomThread draws
   it as plain text under its poster's name, with no voice card and no Play (§7).
 - **S9 — End to end (built; the self-test ran on the fork's Linux CI at `bbae7d8` and failed
@@ -1795,11 +1805,14 @@ Asked of the maintainer (corpetty):
   global recording indicator in `Main.qml` would close most of it"). `Main.qml` reads
   `voice_status` every second on every page, room or none, and while it says `starting` or
   `recording` a strip above every page says Muster is using the microphone, with Stop and
-  Discard. The claims registry's gap "Modules loaded beside Muster can record and send as you"
+  Discard; on a page with no room view what they got back is said there (§13), and in a
+  room's view the room's banner says it, beside the strip, so a room's view shows both. The
+  claims registry's gap "Modules loaded beside Muster can record and send as you"
   says what it covers and what it does not: Muster's view not running, a person not looking,
   a recording started and sent between two reads, and who started it or for which room, which
   `voice_status` does not say. Seen in the gallery only. The maintainer may still object to
-  its words or its place.
+  its words or its place, or to a room's view showing the strip and the room's banner both,
+  each with its own Stop and Discard (gallery `room-voice-starting`), which this PR keeps.
 - **The Linux-only checks** (§15): who runs them? This PR is built on a Mac.
 - **Scope.** This PR regenerates the stale gallery `FakeBackend.qml`, which also pulls in
   FileShare's missing slots, and fixes the unknown-card fallback. The Nim backend's missing
