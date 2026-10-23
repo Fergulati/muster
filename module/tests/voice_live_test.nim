@@ -97,6 +97,10 @@
 ##      buffers counted) and stops the device it started; a start that fails: idle, error and
 ##      ready.capture no-device, the buffer freed at once; one still pending at StartBoundMs:
 ##      device-start-slow, let go
+##  29c. Discard and close after the device's start returned (run or failed) but before any
+##      read saw it, the recorder still starting: idle at once, the io finishing the start on
+##      the module thread, the buffer freed at once; on the null device its running device
+##      and context released too
 ##  30. the same for Play: playing names the note, starting, at 0 ms; released, it plays to
 ##      done as before; Stop lets it go; a failure says no-device in ready.playback; past the
 ##      bound device-start-slow
@@ -1126,6 +1130,51 @@ block:
   echo "29b. Stop (not-started), Discard and close while the start is held answer at once, idle, the start ",
        "thread freeing the buffer once it returns; a start that fails: idle, error and ready.capture ",
        "no-device; one past ", StartBoundMs, " ms: device-start-slow, let go OK"
+
+# ── 29c. Discard and close after the start returned, before any read saw it ──────────
+# The device's start returned (it runs, or it failed) but no pump has seen it, so the
+# recorder is still `starting`: Discard and close drop a starting recording without pumping
+# first. The io finds no start to let go and finishes it on the module thread: idle at once,
+# the buffer freed at once (no start thread holds it any more), a running device closed.
+# On SyntheticAudioIo with a gate, and on miniaudio's null device, whose start thread leaves
+# a running device behind.
+block:
+  for dev in ["synthetic", "synthetic-failed", "null"]:
+    for how in ["discard", "close"]:
+      let what = dev & " " & how
+      let base = liveAudioBuffers()
+      let vc = VirtualClock()
+      let g = (if dev == "null": StartGate(nil) else: newStartGate())
+      var net: Thread[Net]
+      if g != nil: createThread(net, netMain, Net(g: g, ms: 1_500))
+      let io: AudioIo = (if dev == "null": AudioIo(newMiniaudioIo(abNull))
+                         else: AudioIo(newSyntheticAudioIo(sine(1000.0, Second), vc.clock, g)))
+      let a = newVoiceRecorder(io, vc.clock)
+      doAssert a.recordStart(aliceS).ck.ok, what
+      doAssert io.starting, what & ": the device starts on a thread of its own"
+      if g != nil:
+        doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000), what
+        g.releaseStart(if dev == "synthetic-failed": "no-device" else: "")
+      doAssert waitStarts(2_000), what & ": the start returned"
+      doAssert io.starting, what & ": no read has seen it, so the recorder still says starting"
+      let t = getMonoTime()
+      case how
+      of "discard": doAssert a.draftDiscard() == "ok"
+      else: doAssert a.close() == "ok"
+      doAssert msSince(t) < 100, what & " answers at once"
+      doAssert io.stream == asIdle and not io.starting, what & ": the io is idle"
+      if dev == "null":
+        doAssert MiniaudioIo(io).backendName == "", what & ": the device and its context released"
+      doAssert liveAudioBuffers() == base, what & ": the buffer freed at once: " & $(liveAudioBuffers() - base) & " left"
+      let st = a.status()
+      doAssert st["recording"]["state"].getStr() == "idle" and st["recording"]["error"].getStr() == "", what & ": " & $st
+      doAssert a.recordStop().ck.err == "not-recording", what
+      if g != nil:
+        doAssert g.startsStopped == 0, what & ": nothing left for a start thread to stop"
+        joinThread(net)
+        freeStartGate(g)
+  echo "29c. Discard and close after the device's start returned, before any read saw it: idle at once, ",
+       "the module thread finishing the start, the buffer freed at once, the null device's closed OK"
 
 # ── 30. voice_play answers at once; the note plays when the device starts ────────────
 block:

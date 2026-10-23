@@ -117,11 +117,13 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   (libopus; `run-suite.sh` links the builder pin's on macOS, the .lgx's 1.5.2, and nixpkgs'
   beside libsodium on Linux; `MUSTER_OPUS` picks another; §1 prints the version),
   `module/tests/audio_io_test.nim` (the seam with no device; §7–§9 a start held by a
-  `StartGate`: let go, failed, the in-flight cap, the buffers counted),
+  `StartGate`: stopped after the pump saw it run, let go, returned before any pump saw it
+  (§8b), failed, the in-flight cap, the buffers counted),
   `module/tests/audio_io_null_test.nim` (miniaudio's null device thread, its starts on the
-  start thread, §6 stopping and closing 80 of them at once; `run-suite.sh` puts the pin's
-  checkout on `--path`), `module/tests/voice_device_e2e.nim` (the real devices,
-  gated, above), and `module/tests/voice_live_test.nim` (the recorder over
+  start thread, §6 stopping and closing 80 of them at once, §6b stopping and closing ones that
+  returned before any pump; `run-suite.sh` puts the pin's checkout on `--path`),
+  `module/tests/voice_device_e2e.nim` (the real devices, gated, above), and
+  `module/tests/voice_live_test.nim` (the recorder over
   `SyntheticAudioIo`, `FileAudioIo` and the null device, two members over `LocalTransport`).
   `probes/probe_return_marshalling_host.nim` (exo-526) builds the whole module into a host,
   so it links libopus (`opusTokens`, `MUSTER_OPUS_LIB`) and compiles miniaudio from the

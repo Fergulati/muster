@@ -3,10 +3,12 @@
 ## FileAudioIo (a 48 kHz mono s16 WAV source, a raw PCM sink). Both move samples through
 ## `captureInto` / `playFrom`, the procs the miniaudio device callback runs, so the cap,
 ## `capped`, the peak and `done` are held here on a clock the test owns, and (§7–§9) a start
-## held on its start thread by a StartGate: let go, failed, the in-flight cap. The real device
-## thread runs in audio_io_null_test. Pure Nim: no libopus, no miniaudio.
+## held on its start thread by a StartGate: stopped after the pump saw it run (§7), let go
+## before it returned (§8), stopped after it returned but before any pump saw it (§8b),
+## failed, the in-flight cap (§9). The real device thread runs in audio_io_null_test. Pure
+## Nim: no libopus, no miniaudio.
 
-import std/[monotimes, os]
+import std/[monotimes, os, strutils]
 import ../src/audio/[audio_io, voice_clip]
 
 proc ramp(n: int): seq[int16] =
@@ -374,6 +376,52 @@ block:
     freeStartGate(g)
 echo "8. stop, close or a failure while held: idle at once; the start thread frees the buffer and stops ",
      "what it started once its start returns; a failure reported once OK"
+
+# 8b. The third order: the start returned, run or failed, before any pump saw it, then a stop
+#     or a close. Its start thread swapped pending to running (or failed) and is gone, and the
+#     io still says `starting`, since only the pump settles a start. A stop or a close then
+#     finds nothing to let go (letGo is false), so the module thread finishes the job itself:
+#     the io is idle at once, the job's reference to the buffer is let go (the caller's free is
+#     then the last one), nothing is reported later, and the start thread stopped nothing.
+#     §7 is a stop after the pump saw the start run; §8, one before the start returned.
+block:
+  for fail in ["", "no-device"]:
+    for how in ["stop-capture", "stop-playback", "close-capture", "close-playback"]:
+      let what = how & (if fail.len > 0: " after a failed start" else: "")
+      let base = liveAudioBuffers()
+      let vc = VirtualClock()
+      let g = newStartGate()
+      var net: Thread[Net]
+      createThread(net, netMain, Net(g: g, ms: 1_500))
+      let io = newSyntheticAudioIo(ramp(4_800), vc.clock, g)
+      let buf = newAudioBuffer(4_800)
+      let play = how.endsWith("playback")
+      if play: doAssert buf.loadPlayback(ramp(4_800)) == 4_800
+      doAssert (if play: io.startPlayback(buf) else: io.startCapture(buf)) == ""
+      doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000), what
+      g.releaseStart(fail)
+      doAssert waitStarts(1_000), what & ": the start returned"
+      doAssert io.starting and io.stream == (if play: asPlayback else: asCapture),
+               what & ": no pump has seen it, so the io still says starting"
+      doAssert liveAudioBuffers() == base + 1, what
+      let t = getMonoTime()
+      case how
+      of "stop-capture": doAssert io.stopCapture() == ""
+      of "stop-playback": doAssert io.stopPlayback() == ""
+      else: doAssert io.close() == ""
+      doAssert msSince(t) < 100, what & " returns at once"
+      doAssert io.stream == asIdle and not io.starting and io.buffer == nil, what & ": idle"
+      vc.advance(100)
+      doAssert io.pump() == "", what & ": a start the stop finished reports nothing later"
+      doAssert buf.written == (if play: 4_800 else: 0), what & ": nothing captured"
+      freeAudioBuffer(buf)
+      doAssert liveAudioBuffers() == base, what & ": the module thread finished the start: buffers left " &
+               $(liveAudioBuffers() - base)
+      doAssert g.startsStopped == 0, what & ": a start that returned is not stopped by its thread"
+      joinThread(net)
+      freeStartGate(g)
+echo "8b. a start that returned, run or failed, before any pump, then a stop or a close: idle at once, ",
+     "the module thread finishes it, every buffer freed, nothing reported later OK"
 
 # 9. No more than MaxStartsInFlight starts wait at once: past it a start is refused,
 #    `device-start-slow`, so a caller cannot pile up threads behind a start that never returns.

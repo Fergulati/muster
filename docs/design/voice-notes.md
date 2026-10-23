@@ -656,14 +656,27 @@ meet at one atomic by compare-and-swap:
   frees the rest.
 
 The voice pump settles a running start (the io takes the context and the device) or a failed
-one (its word, once; nothing is left open) on the module thread. So nothing is freed twice or
-used after its free, whichever side finishes last, and a start that never returns holds its
-own job, buffer and thread, never the module thread. At most four starts wait at once
-(`MaxStartsInFlight`); past them a start is refused `device-start-slow`, so no caller can
-pile up threads behind a start that never returns. `audio_io_test` §7–§9 hold this on
-`SyntheticAudioIo` with a held start, and `audio_io_null_test` §6 on miniaudio's null
-device: 80 starts each stopped or closed at once, every one let go before its start
-returned, every buffer freed.
+one (its word, once; nothing is left open) on the module thread. A Stop, Discard or close that
+comes after the start returned but before any pump saw it finds nothing to let go, so the
+module thread finishes the start itself, as the pump would, and closes a device it left
+running. Whoever loses the swap never touches the job again, so exactly one side finishes it,
+and a start that never returns holds its own job, buffer and thread, never the module thread.
+At most four starts wait at once (`MaxStartsInFlight`); past them a start is refused
+`device-start-slow`, so no caller can pile up threads behind a start that never returns.
+
+The tests hold each of the three orders, every buffer freed in each:
+- **The pump saw the start run, then a stop**: `audio_io_test` §7.
+- **A stop or close before the start returned**, the start let go and finished by its own
+  thread: `audio_io_test` §8 on `SyntheticAudioIo` with a held start (run or failed), and
+  `audio_io_null_test` §6 on miniaudio's null device, 80 starts each stopped or closed at once,
+  every one let go before its start returned.
+- **The start returned, then a stop or close before any pump saw it**, finished by the module
+  thread: `audio_io_test` §8b (run or failed), `audio_io_null_test` §6b (the module thread
+  closes the device the start left running, so frames stop at once), and `voice_live_test`
+  §29c (Discard and close while the recorder still says `starting`).
+
+The tests do not race the two threads at the swap itself: each order is set up one at a time.
+That a swap lost by a hair is still safe rests on the compare-and-swap (`audio_io.nim`).
 
 **Device lifetime.** A device is opened lazily, by `voice_record_start` or `voice_play`, on its
 start thread, and released at the first pump after its stream ends (below). With the access
@@ -1092,6 +1105,13 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
   - `audio_io_null_test` §6 on miniaudio's null device thread: 80 starts each stopped or
     closed at once, 80 of them let go before their start returned, every buffer freed; and
     §1–§4 pumping until the start lands before they read the device back;
+  - added by the slice's review, for the order §6 never reached (a start that returned before
+    any pump saw it, then a stop, Discard or close): `audio_io_test` §8b, `audio_io_null_test`
+    §6b and `voice_live_test` §29c (§9). Each was run against two mutants in a scratch copy:
+    `SyntheticAudioIo` no longer finishing such a start (§8b red, "buffers left 1"; §29c red,
+    "the buffer freed at once: 1 left"), and `MiniaudioIo` forgetting it instead of settling
+    it (§6b red, the context not kept by the stop; §29c red on the null device, "1 left");
+    green on the code as it is;
   - the host probe (`probe_return_marshalling_host`): its `voice_status` and the six voice
     methods as before, with no room joined;
   - `ui-nim/tests/autovoice/run.sh`, against a fake module whose recording is `starting`

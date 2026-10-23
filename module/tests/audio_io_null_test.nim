@@ -218,3 +218,43 @@ block:
   echo "   slowest start-then-stop: ", slowest, " ms; ", letGo, " of 80 let go before their start returned"
 echo "6. start thread: stop and close right after a start never wait, nothing leaks; the context ",
      "moves with the start OK"
+
+# 6b. §6's other order: the start returned before any pump saw it, then a stop or a close. On
+#     the null device every start in §6 was let go, so the module thread's half of this order
+#     never ran there. Here each start is waited out (waitStarts) with no pump: its thread has
+#     swapped pending to running and gone, the device runs, frames move, and the io still says
+#     `starting`. The stop finds nothing to let go, so the module thread settles the start (the
+#     io takes the context and the device) and closes the device: frames stop moving at once,
+#     a stop keeps the context its start made and a close releases it, and every buffer is
+#     freed, since no start thread holds one any more.
+block:
+  doAssert waitStarts(2_000)
+  let base = liveAudioBuffers()
+  for how in ["stop", "close"]:
+    for play in [false, true]:
+      let what = how & (if play: " playback" else: " capture")
+      let io = newMiniaudioIo(abNull)
+      let buf = newAudioBuffer(2 * ClipRate)              # 2 s: still moving when stopped
+      if play: doAssert buf.loadPlayback(newSeq[int16](buf.cap)) == buf.cap
+      let moved = proc (): int = (if play: buf.readIndex else: buf.written)
+      doAssert (if play: io.startPlayback(buf) else: io.startCapture(buf)) == ""
+      doAssert waitStarts(2_000), what & ": the start returned"
+      doAssert io.starting and io.backendName == "", what & ": no pump has seen it"
+      let ms = waitUntil(proc (): bool = moved() > 0, 1_000)
+      doAssert moved() > 0, what & ": the device ran no frame within " & $ms & " ms"
+      let t = getMonoTime()
+      if how == "stop": doAssert (if play: io.stopPlayback() else: io.stopCapture()) == ""
+      else: doAssert io.close() == ""
+      doAssert msSince(t) < 100, what & " took " & $msSince(t) & " ms"
+      doAssert io.stream == asIdle and not io.starting, what & ": idle"
+      doAssert io.backendName == (if how == "stop": "Null" else: ""),
+               what & ": a stop keeps the context its start made, a close releases it: '" & io.backendName & "'"
+      let m = moved()
+      sleep(50)
+      doAssert moved() == m, what & ": the device still runs: " & $m & " then " & $moved()
+      doAssert io.close() == "" and io.backendName == ""
+      freeAudioBuffer(buf)
+      doAssert liveAudioBuffers() == base, what & ": buffers left " & $(liveAudioBuffers() - base)
+  echo "   each start returned before the stop: the module thread settled it and closed its device"
+echo "6b. a start that returned before any pump, then a stop or a close: the device closed at once, ",
+     "the context kept by a stop, every buffer freed OK"
