@@ -9,6 +9,8 @@
 //!
 //! Nothing here touches a network: `msig_host::rpc` (later) and the tests bring the chain.
 
+pub mod exec;
+
 use std::collections::{HashMap, HashSet};
 
 use key_protocol::key_management::{group_key_holder::GroupKeyHolder, secret_holders::PrivateKeyHolder};
