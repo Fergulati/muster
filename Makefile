@@ -99,10 +99,11 @@ build:
 	@# The relock still runs first to keep ui/flake.lock current for a direct `nix build`, and
 	@# to surface the dirty-tree WARN (a git+file input cannot lock from uncommitted state —
 	@# commit first, or the build uses the last COMMITTED tree).
-	@cd $(UI) && $(CAPPED) nix flake update muster_module $(CACHE) 2>&1 | grep -q "not writing lock file" \
+	@cd $(UI) && $(CAPPED) nix flake update muster_module lez_msig_module $(CACHE) 2>&1 | grep -q "not writing lock file" \
 	  && echo "WARN: muster_module NOT relocked (uncommitted changes in the git tree) — the runner builds the last COMMITTED module rev; commit first to pick up module edits" || true
 	cd $(UI) && $(CAPPED) nix build 'path:.#runner' $(CACHE) --no-eval-cache \
 	  --override-input muster_module "git+file://$(CURDIR)?dir=module" \
+	  --override-input lez_msig_module "git+file://$(CURDIR)?dir=programs/lez-msig" \
 	  --out-link $(CURDIR)/.run/runner \
 	  || $(CAP_KILLED)
 

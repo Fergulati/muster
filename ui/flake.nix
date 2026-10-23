@@ -59,6 +59,11 @@
     # 0.3.2 bundles the same 3.0.2 (7548f41). Same pin as module/flake.nix; muster_ui does
     # not call it.
     logos-storage-module.url = "github:logos-co/logos-storage-module/7548f41ae189917d58c37f0fb6d3a2700b99f59b";
+    # lez-msig's prover (exo-efa, exo-e77): a private lez-msig's transactions are proved by
+    # lez_msig_module, a Rust module in this repo (programs/lez-msig). muster_module calls it
+    # over lp_* (src/wallet/msig_prover_lp.nim), so it rides the runner's module set. This
+    # tree's copy, as muster_module is; `make build` overrides it with an absolute path.
+    lez_msig_module.url = "git+file:../?dir=programs/lez-msig";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
