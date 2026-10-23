@@ -15,6 +15,7 @@
 ##   frost/<cid>/join/<who>               a FROST ceremony join
 ##   intent/<id>/part/<part>/<step>       a part report (exo-a90.2): the value's "author"
 ##   intent/<id>/proposer/<who>           who proposed the intent (exo-770)
+##   lmsig/<ck>/key/<who>                 a member's lez-msig approval key (exo-0d3)
 ##   xmsig/<cid>/join/<who>               a Monero multisig setup join (exo-dcc.34.2)
 ##   xmsig/<cid>/kex/<r>/<who>            that member's wallet's round r of the key exchange
 ##   intent/<id>/xsync|xtx/<who>/<i>/<n> a Monero multisig spend's sync data or transaction
@@ -130,6 +131,7 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
     if p[0] == "account" and p[2] == "disclose": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "frost" and p[2] == "join": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "intent" and p[2] == "proposer": return (true, (if p.len >= 4: p[3] else: ""))
+    if p[0] == "lmsig" and p[2] == "key": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "xmsig" and p[2] == "join": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "xmsig" and p[2] == "kex": return (true, (if p.len >= 5: p[4] else: ""))
     if p[0] == "intent" and p[2] in ["xsync", "xtx"]: return (true, (if p.len >= 4: p[3] else: ""))

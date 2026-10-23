@@ -7,7 +7,7 @@
 ## Held byte for byte to tests/vectors/lez-msig/vectors.json, which the program's host
 ## generates (programs/lez-msig/host/src/bin/msig_vectors.rs).
 
-import std/[options, strutils]
+import std/[json, options, sequtils, strutils]
 import stint
 import ../hashing/sha256
 import ../bitcoin/keys as btckeys
@@ -245,6 +245,19 @@ proc enc(b: var seq[byte], i: MsigInstruction) =
   of ikExecuteQueued: b.enc(i.proposal); b.encOpt(i.executor); b.u64(i.atMs)
   of ikSpend: b.enc(i.spend); b.encSigned(i.spendApprovals); b.u64(i.period); b.u64(i.periodMs)
 
+proc `==`*(a, b: MsigChange): bool =
+  ## Equal exactly when their bytes are: what a signature covers is the only identity.
+  var x, y: seq[byte]
+  x.enc(a); y.enc(b)
+  x == y
+proc `==`*(a, b: MsigAction): bool =
+  var x, y: seq[byte]
+  x.enc(a); y.enc(b)
+  x == y
+proc `==`*(a, b: MsigProposal): bool =
+  var x, y: seq[byte]
+  x.enc(a); y.enc(b)
+  x == y
 proc borsh*(c: MsigConfig): seq[byte] = result.enc(c)
 proc borsh*(p: MsigProposal): seq[byte] = result.enc(p)
 proc borsh*(s: MsigSpend): seq[byte] = result.enc(s)
@@ -305,12 +318,56 @@ proc rconfig(r: var Reader): MsigConfig =
   result.actions = r.ru8(); result.targets = r.rkeys()
   for _ in 0 ..< r.rlen(1): result.limits.add r.rlimit()
 
-proc decodeConfig*(b: openArray[byte]): MsigConfig =
+proc rchange(r: var Reader): MsigChange =
+  let tag = r.ru8()
+  if tag > uint8(ord(high(ChangeKind))): bad("unknown config change " & $tag)
+  case ChangeKind(tag)
+  of ccAddMember: MsigChange(kind: ccAddMember, member: r.rmember())
+  of ccRemoveMember: MsigChange(kind: ccRemoveMember, removed: r.rfixed(32))
+  of ccSetRoles: MsigChange(kind: ccSetRoles, rolesKey: r.rfixed(32), roles: r.ru8())
+  of ccSetWeight: MsigChange(kind: ccSetWeight, weightKey: r.rfixed(32), weight: r.ru16())
+  of ccSetThreshold: MsigChange(kind: ccSetThreshold, threshold: r.ru32())
+  of ccSetTimelock: MsigChange(kind: ccSetTimelock, timelockMs: r.ru64())
+  of ccSetOpenExecution: MsigChange(kind: ccSetOpenExecution, open: r.rbool())
+  of ccSetActions: MsigChange(kind: ccSetActions, actions: r.ru8())
+  of ccSetTargets: MsigChange(kind: ccSetTargets, targets: r.rkeys())
+  of ccAddLimit: MsigChange(kind: ccAddLimit, limit: r.rlimit())
+  of ccRemoveLimit: MsigChange(kind: ccRemoveLimit, limitId: r.ru32())
+
+proc raction(r: var Reader): MsigAction =
+  let tag = r.ru8()
+  if tag > uint8(ord(high(ActionKind))): bad("unknown action " & $tag)
+  case ActionKind(tag)
+  of akTransfer: MsigAction(kind: akTransfer, to: r.rfixed(32), amount: r.ru128())
+  of akCall:
+    var a = MsigAction(kind: akCall, program: r.rfixed(32))
+    for _ in 0 ..< r.rlen(64): a.rows.add MsigRow(account: r.rfixed(32), program: r.rfixed(32))
+    a.data = r.rfixed(r.rlen(1))
+    a
+  of akConfig:
+    var a = MsigAction(kind: akConfig)
+    for _ in 0 ..< r.rlen(1): a.changes.add r.rchange()
+    a
+  of akCancel:
+    var a = MsigAction(kind: akCancel)
+    for _ in 0 ..< r.rlen(8): a.nonces.add r.ru64()
+    a
+
+proc decodeProposal*(b: openArray[byte]): MsigProposal =
+  ## A proposal as its members sign it. Only exact bytes decode: a short, padded or
+  ## non-canonical encoding (a bool other than 0/1, a trailing byte) is refused.
+  var r = Reader(b: @b)
+  result.multisig = r.rfixed(32); result.zone = r.rfixed(32); result.epoch = r.ru64()
+  result.nonce = r.ru64(); result.action = r.raction(); result.expiresMs = r.ru64()
+  result.proposer = r.rfixed(32)
+  if r.i != r.b.len: bad("trailing bytes after the proposal")
+
+proc decodeMsigConfig*(b: openArray[byte]): MsigConfig =
   var r = Reader(b: @b)
   result = r.rconfig()
   if r.i != r.b.len: bad("trailing bytes after the config")
 
-proc decodeState*(b: openArray[byte]): MsigState =
+proc decodeMsigState*(b: openArray[byte]): MsigState =
   ## The program's shard of the multisig's account. A partial or padded shard is refused.
   var r = Reader(b: @b)
   result.version = r.ru8()
@@ -323,7 +380,7 @@ proc decodeState*(b: openArray[byte]): MsigState =
     result.queue.add MsigQueued(nonce: r.ru64(), proposalId: r.rfixed(32), etaMs: r.ru64(), expiresMs: r.ru64())
   if r.i != r.b.len: bad("trailing bytes after the state")
 
-proc encodeState*(s: MsigState): seq[byte] =
+proc encodeMsigState*(s: MsigState): seq[byte] =
   ## For in-process models and tests; the chain's bytes come from the program.
   var b: seq[byte]
   b.u8(s.version); b.k32(s.zone); b.k32(s.createKey); b.u64(s.epoch); b.enc(s.config)
@@ -389,3 +446,51 @@ proc nextNonce*(s: MsigState, taken: seq[uint64] = @[]): uint64 =
 
 proc hexOf*(b: openArray[byte]): string =
   for x in b: result.add toLowerAscii(toHex(x, 2))
+
+# ── what the card shows, decoded from the bytes the approvals sign (RFP U.6) ─────
+proc rolesText*(r: uint8): seq[string] =
+  if (r and RolePropose) != 0: result.add "propose"
+  if (r and RoleApprove) != 0: result.add "approve"
+  if (r and RoleExecute) != 0: result.add "execute"
+
+proc memberJson(m: MsigMember): JsonNode =
+  %*{"key": hexOf(m.key), "roles": rolesText(m.roles), "weight": int(m.weight)}
+
+proc limitJson(l: MsigLimit): JsonNode =
+  %*{"id": int(l.id), "signers": l.signers.mapIt(hexOf(it)), "threshold": int(l.threshold),
+     "amount": $l.amount, "periodMs": $l.periodMs}
+
+proc changeJson*(c: MsigChange): JsonNode =
+  case c.kind
+  of ccAddMember: %*{"change": "add-member", "member": memberJson(c.member)}
+  of ccRemoveMember: %*{"change": "remove-member", "key": hexOf(c.removed)}
+  of ccSetRoles: %*{"change": "set-roles", "key": hexOf(c.rolesKey), "roles": rolesText(c.roles)}
+  of ccSetWeight: %*{"change": "set-weight", "key": hexOf(c.weightKey), "weight": int(c.weight)}
+  of ccSetThreshold: %*{"change": "set-threshold", "threshold": int(c.threshold)}
+  of ccSetTimelock: %*{"change": "set-timelock", "timelockMs": $c.timelockMs}
+  of ccSetOpenExecution: %*{"change": "set-open-execution", "open": c.open}
+  of ccSetActions: %*{"change": "set-actions", "transfer": (c.actions and ActTransfer) != 0,
+                      "call": (c.actions and ActCall) != 0}
+  of ccSetTargets: %*{"change": "set-targets", "targets": c.targets.mapIt(hexOf(it))}
+  of ccAddLimit: %*{"change": "add-limit", "limit": limitJson(c.limit)}
+  of ccRemoveLimit: %*{"change": "remove-limit", "id": int(c.limitId)}
+
+proc actionJson*(a: MsigAction): JsonNode =
+  case a.kind
+  of akTransfer: %*{"kind": "transfer", "to": hexOf(a.to), "amount": $a.amount}
+  of akCall: %*{"kind": "call", "program": hexOf(a.program),
+                "rows": a.rows.mapIt(%*{"account": hexOf(it.account), "program": hexOf(it.program)}),
+                "data": hexOf(a.data)}
+  of akConfig: %*{"kind": "config", "changes": a.changes.mapIt(changeJson(it))}
+  of akCancel: %*{"kind": "cancel", "nonces": a.nonces.mapIt($it)}
+
+proc proposalJson*(p: MsigProposal): JsonNode =
+  %*{"multisig": hexOf(p.multisig), "zone": hexOf(p.zone), "epoch": $p.epoch, "nonce": $p.nonce,
+     "action": actionJson(p.action), "expiresMs": $p.expiresMs, "proposer": hexOf(p.proposer),
+     "proposalId": hexOf(proposalId(p))}
+
+proc configJson*(c: MsigConfig): JsonNode =
+  %*{"members": c.members.mapIt(memberJson(it)), "threshold": int(c.threshold),
+     "timelockMs": $c.timelockMs, "openExecution": c.openExecution,
+     "transfer": (c.actions and ActTransfer) != 0, "call": (c.actions and ActCall) != 0,
+     "targets": c.targets.mapIt(hexOf(it)), "limits": c.limits.mapIt(limitJson(it))}

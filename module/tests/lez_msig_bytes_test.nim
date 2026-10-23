@@ -53,7 +53,7 @@ let config = MsigConfig(
   limits: @[MsigLimit(id: 7, signers: @[k1, k2], threshold: 1, amount: 1_000_000.u128, periodMs: 86_400_000)])
 same(borsh(config), "config", "the config")
 same(envelopePublic(createKey, MsigInstruction(kind: ikCreate, zone: zone, config: config)), "create_envelope", "Create's envelope")
-check(decodeConfig(hb("config")) == config, "the config decodes to what encoded it")
+check(decodeMsigConfig(hb("config")) == config, "the config decodes to what encoded it")
 
 echo "2. proposals of each action kind"
 let k4 = btckeys.xonlyPubKey(fill(4))
@@ -81,6 +81,12 @@ for (name, action) in actions:
   let id = proposalId(p)
   same(borsh(p), name & ".proposal", name & ": the proposal")
   same(id, name & ".proposal_id", name & ": its id")
+  check(borsh(decodeProposal(hb(name & ".proposal"))) == hb(name & ".proposal"), name & ": the proposal decodes and re-encodes exactly")
+  var refusedP = 0
+  for badP in [hb(name & ".proposal") & @[0'u8], hb(name & ".proposal")[0 ..< ^1]]:
+    try: discard decodeProposal(badP)
+    except MsigDecodeError: inc refusedP
+  check(refusedP == 2, name & ": a padded or short proposal is refused")
   same(approveMsg(id), name & ".approve_msg", name & ": what an approver signs")
   same(executeMsg(id), name & ".execute_msg", name & ": what an executor signs")
   let ap1 = btckeys.schnorrSign(secrets[0], approveMsg(id), aux)
@@ -114,17 +120,17 @@ same(envelopePublic(createKey, MsigInstruction(kind: ikSpend, spend: sp, spendAp
      "spend_envelope", "Spend's envelope")
 
 echo "4. the state"
-let st = decodeState(hb("state"))
+let st = decodeMsigState(hb("state"))
 check(st.epoch == 5 and st.nonceBase == 9 and st.config == config and st.queue.len == 1 and
       st.queue[0].nonce == 12 and st.usage[0].used == 999.u128, "the state decodes")
-same(encodeState(st), "state", "and re-encodes to the same bytes")
+same(encodeMsigState(st), "state", "and re-encodes to the same bytes")
 check(not st.nonceFree(9) == false and st.nonceFree(9), "nonce 9 (the base) is free")
 check(not st.nonceFree(10) and not st.nonceFree(11) and st.nonceFree(12), "nonces 10 and 11 are spent, 12 is free")
 check(st.nextNonce() == 9 and st.nextNonce(@[9'u64]) == 12, "the next nonce skips spent and taken ones")
 check(approvalWeight(config, @[k1, k2, k2, k3]) == 3, "the APPROVE weight counts each member once, EXECUTE-only none")
 var refused = 0
 for bad in [hb("state") & @[0'u8], hb("state")[0 ..< ^1]]:
-  try: discard decodeState(bad)
+  try: discard decodeMsigState(bad)
   except MsigDecodeError: inc refused
 check(refused == 2, "a padded or short state is refused")
 

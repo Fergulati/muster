@@ -50,6 +50,8 @@ const Kinds*: seq[KindInfo] = @[
            founding: true, accountFamilies: @["btc.tapscript-multi-a"]),
   KindInfo(kind: "lez-multisig", family: "lez.multisig-program", label: "LEZ multisig", composes: @["payment"],
            founding: true, accountFamilies: @["lez.multisig-program"]),
+  KindInfo(kind: "lez-msig", family: "lez.msig", label: "LEZ multisig (approvals in the room)",
+           composes: @["payment"], founding: true, accountFamilies: @["lez.msig"]),
   KindInfo(kind: "btc-frost", family: "btc.frost-bip445", label: "Bitcoin (FROST)", composes: @["payment"],
            founding: true, accountFamilies: @["btc.frost-bip445"]),
   KindInfo(kind: "lez-frost", family: "lez.frost-public-account", label: "LEZ (FROST)", composes: @["payment"],
