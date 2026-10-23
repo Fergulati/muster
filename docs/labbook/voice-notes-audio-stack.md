@@ -1,8 +1,9 @@
 # Voice notes' audio stack: libopus and miniaudio inside a Nim plugin (2026-10-21)
 
 **Voice notes, slices S1 to S7 and S11's device test (`docs/design/voice-notes.md`).
-darwin-arm64 only, with nim 2.2.4 and clang 19.1.7 at the builder's nixpkgs `e9f00bd`. None
-of this has run on Linux.**
+darwin-arm64 only, with nim 2.2.4 and clang 19.1.7 at the builder's nixpkgs `e9f00bd`. On
+Linux the module suite has run since, the maintainer's and the fork's CI, and S9's self-test
+on the fork's CI (design §12, §15); no real device has opened there.**
 
 Cost: a throwaway prototype on an Apple M5, then one review per slice. Most of these traps
 passed every test that existed when they went in. Each was found by a mutation or a
@@ -202,7 +203,9 @@ at; psbt strips only the ends.
   to `GLIBC_2.29`; it was built on glibc 2.40, older than nixpkgs gcc's 2.44, and a test loads
   the gcc's libc and libm itself (Nim's `std/math` passes `-lm`) before libopus's RUNPATH is
   read. Read off cache.nixos.org's copy of the ELF and evaluated for `x86_64-linux` (the pin's
-  `libopus.out` is `39jlnb9v…-libopus-1.5.2.drv`); not yet run on Linux.
+  `libopus.out` is `39jlnb9v…-libopus-1.5.2.drv`). The fork's CI ran the voice and audio
+  tests that way at `08dfcb3`, on both arches, and they passed, but the version they printed
+  is not read yet (design §12).
   `scripts/grade-specs.sh` took nixpkgs' libopus for exo-526's host probe until the final
   check of the review's fixes; it takes the pin's too now, read by the same
   `module/tools/builder-nixpkgs.sh` as `run-suite.sh` (for `x86_64-linux`, `mzksc9fp…-libopus-1.5.2`
@@ -282,10 +285,12 @@ way, each now in `src/audio/CLAUDE.md`:
   past which a start is refused `device-start-slow`, which is that cap working, so the test
   waits for earlier starts between rounds.
 
-Whether the fix holds for a real microphone (the start on its own thread, a prompt answered
-while it waits) has not run: `voice_device_e2e` now pumps until the start lands, its speaker
-leg has run that way on Core Audio, and its microphone leg, which needs the person's consent,
-is the first real check. Basecamp 0.3.2's `logos_host` is never asked at all (observed later
+A real microphone's start on its own thread has run since: on 2026-10-23, at `08dfcb3`,
+`voice_device_e2e`, which now pumps until the start lands, passed its microphone leg on Core
+Audio (47.79 frames a millisecond, capped at exactly 96,000) and its speaker leg, launched
+from a shell whose responsible app was already allowed the microphone, so no prompt stood
+(design §17 S11). A prompt standing, or answered, while a start waits has not run. Basecamp
+0.3.2's `logos_host` is never asked at all (observed later
 on 2026-10-22, design §11): tccd logged "Prompting policy for hardened runtime; service:
 kTCCServiceMicrophone requires entitlement com.apple.security.device.audio-input but it is
 missing for responsible=LogosBasecamp" and "Policy disallows prompt", `authValue=0`, so its
@@ -331,15 +336,19 @@ These are inferred, or wait on a host this was not built on. The design doc carr
 (The microphone under Basecamp's hardened runtime, once here, is found out: `logos_host`
 survives `voice_record_start`, tccd disallows the prompt, and the capture is all zeros, which
 Send refuses as `silent`; design §11.)
-- **A real microphone's start on the start thread.** The microphone leg passed later on
-  2026-10-22, at `bbae7d8`, before the start thread (Core Audio, 48.37 frames a millisecond,
-  capped at exactly 96,000, a peak of -41.2 dBFS, the codec round trip keeping
-  96,000 samples), and has not run since. With the person's consent:
+- **A real microphone's start on the start thread while a prompt stands.** The microphone leg
+  passed later on 2026-10-22, at `bbae7d8`, before the start thread (Core Audio, 48.37 frames
+  a millisecond, capped at exactly 96,000, a peak of -41.2 dBFS, the codec round trip keeping
+  96,000 samples), and on 2026-10-23, at `08dfcb3`, on it (47.79 frames a millisecond, capped
+  at exactly 96,000, a peak of -45.6 dBFS, the round trip keeping 96,000 samples), each time
+  with the responsible app already allowed, so no prompt stood. A start under a standing
+  prompt needs an app whose permission is not decided, and the person's consent:
   `MUSTER_VOICE_REAL=mic module/tests/run-suite.sh e2e voice_device_e2e`.
 - **Which Core Audio call waits on a prompt** (§9 above): `ma_device_init` or
   `ma_device_start`.
 - **Linux** (§12, §15): miniaudio's `dlopen` of `libpulse` and `libasound` from a portable
   `.lgx`, the AppImage and a nix-built runner (whose loader reads no `/etc/ld.so.cache`); the
-  Linux plugin links; `libopus.so.0` bundled and resolved by each variant's RUNPATH.
+  Linux plugin links; `libopus.so.0` bundled and resolved by each variant's RUNPATH, checked
+  for `linux-amd64` only (design §12, §15).
 - **The exit proc at unload** (§9, §15): whether it runs when the host unloads the plugin
   with a device open.

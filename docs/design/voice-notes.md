@@ -1,16 +1,19 @@
 # Voice notes: a short recorded clip in the room, sealed like text, one fixed size on the wire
 
 Status: **proposed 2026-10-21 by an outside contributor; slices S1–S10 are built on this
-branch. Of S11, the real-device test has run both its legs on this Mac, and the checks in
-Basecamp 0.3.2's own window have run, at `bbae7d8`, before §9's start thread: `logos_host`
-survives `voice_record_start`, macOS never asks for the microphone and denies it, so the
-capture is zeros and Send refuses it `silent` with the Basecamp 0.3.2 note, and a note
-crossed from one profile to another, drawn and played (§11, §15, §17). S9's two-runner
-self-test ran on the fork's Linux CI at `bbae7d8` and failed there on its own reading of the
-logs, though B had played the note; read as fixed since, it has not run on a runner, nor has
-the start thread run in any host; the module calls the
-self-test makes have run twice from one headless host to another on the live fleet, with no
-UI (§15).** This document is
+branch. Of S11, the checks in Basecamp 0.3.2's own window have run, at `bbae7d8`, before §9's
+start thread: `logos_host` survives `voice_record_start`, macOS never asks for the microphone
+and denies it, so the capture is zeros and Send refuses it `silent` with the Basecamp 0.3.2
+note, and a note crossed from one profile to another, drawn and played (§11, §15, §17).
+Nothing has run in Basecamp's window since the start thread. The real-device test has run
+both its legs on this Mac, outside Basecamp, at `bbae7d8`, and again on 2026-10-23 at
+`08dfcb3`, where its device starts went through the start thread, with no permission prompt
+standing (§17 S11). S9's two-runner self-test ran on the fork's Linux CI at `bbae7d8` and
+failed there on its own reading of the logs, though B had played the note; at `08dfcb3`,
+reading them as it does now, it passed there on both fleets, on the C++ UI (§15). The module
+calls the self-test makes have run three times from one headless host to another on the live
+fleet, with no UI, the last at `08dfcb3`, where C's start on the null device went through the
+start thread in logosctl's `logos_host` (§15).** This document is
 the first commit of a draft PR. The wire format (§3–§5) is what S4–S10 are built on, so an
 objection to it now means reworking those slices (§18). There is no exo id yet
 (§18): the slices are S0–S11 in the order of §17, and the commit scope is `voice-notes` until
@@ -825,7 +828,7 @@ differ:
   holds, §6). `voice_test` §14 pins that field by field, and
   finds no 48-character stretch of any half, taken at every 24-character step and at its end,
   in the map `toJson` gives.
-- **`coordinate_proof`: refused until the operator decides** (§18). A room whose authentic
+- **`coordinate_proof`: refused until the maintainer decides** (§18). A room whose authentic
   view holds a part the fold stands (`voiceStanding`, §6's header pass: a part of a note
   complete, arriving or broken, as every member's own note is) exports no proof:
   `{error: "voice-notes-present", detail}` (`voice_live.roomProof`, `voice_live_test` §23,
@@ -846,7 +849,7 @@ differ:
     serves to any caller. `voice_live_test` §26 pins this case.
 
   That keeps the fixed decision that no hosted method returns a note's audio from this
-  member's view, at the cost of no proof export for a room with a voice note. The operator
+  member's view, at the cost of no proof export for a room with a voice note. The maintainer
   then picks one of two. One option keeps raw values, since a proof accounts for every
   entry, and says here that a proof export carries the audio. That amends the IPC decision
   for this one explicit export. The other is a proof form that carries a voice part as a
@@ -968,7 +971,7 @@ sixth. Each stays true after this PR:
 
    So in a room with such a member, "audio plaintext never crosses IPC" (§18) holds on the
    machines of members who run this PR, not on theirs. Only that member's upgrading, or
-   `--access-policy enforce` on their machine (§13), closes it. It is put to the operator in
+   `--access-policy enforce` on their machine (§13), closes it. It is put to the maintainer in
    §18.
 
 S10 carries four of these as gaps of their own in the registry (built, step `open-room`, each
@@ -1063,13 +1066,22 @@ never the module thread.
 
 ## 12. Linux
 
-There is no Linux host here. What ran on Linux is the maintainer's, in PR 340's review
-(x86_64, at `bbae7d8`):
-- **The module suite:** `module/tests/run-suite.sh` gave 285 passed, 0 failed, among them
-  `voice_clip_test`, `voice_codec_test`, `audio_io_test`, `audio_io_null_test`,
-  `session_pad_test`, `voice_test`, `voice_live_test` and the three voice stepper probes. That
-  run linked nixpkgs' libopus 1.6.1, as run-suite then did on Linux; it links the builder
-  pin's 1.5.2 there since the review (§15), and that has not run on Linux.
+There is no Linux host here. On Linux, the maintainer ran the module suite in PR 340's review
+(x86_64, at `bbae7d8`), and the fork's CI, in a workflow that is not part of this PR, ran the
+suite on both arches and S9's voice self-test (§15):
+- **The module suite, the maintainer's run:** `module/tests/run-suite.sh` gave 285 passed, 0
+  failed, among them `voice_clip_test`, `voice_codec_test`, `audio_io_test`,
+  `audio_io_null_test`, `session_pad_test`, `voice_test`, `voice_live_test` and the three
+  voice stepper probes. That run linked nixpkgs' libopus 1.6.1, as run-suite then did on
+  Linux; it links the builder pin's 1.5.2 there since the review (§15).
+- **The module suite on the fork's CI.** Run 39836679442 (`bbae7d8`'s tree, on
+  `ubuntu-latest` and `ubuntu-24.04-arm`, `JOBS=4`): on each, 284 of 285 passed, and the one
+  that failed, `room_graph_scale_test`, failed on its own timing beside the other tests and
+  passed alone. It linked 1.6.1 too. Run 40030788377 runs it at `08dfcb3` on both arches: its
+  first step, the voice and audio tests (`run-suite.sh voice audio session_pad`), passed on
+  each, and its module suite jobs were still running when this was written. A job's log
+  cannot be read until the job ends, so which libopus `voice_codec_test` §1 printed there is
+  not read.
 - **The package loads.** In the fork's `lgx variants` run (39776903474), `linux-amd64` carries
   `libopus.so.0` beside the plugin with RPATH `$ORIGIN`, and `ldd` resolves every library the
   plugin needs, libopus from the package itself, against the Qt in Basecamp 0.3.2's AppImage.
@@ -1129,7 +1141,7 @@ What it cannot do is read audio through a voice method: none returns it, and `vo
 carries state, position and peak only. That is unlike `coordinate_messages`, which serves
 room plaintext to any caller (`side-modules.md:104`). Two methods that returned raw log
 content, `coordinate_graph` and `coordinate_proof`, would have handed it the clip. S6 closed
-the first. The second refuses a room holding a voice note until the operator decides between
+the first. The second refuses a room holding a voice note until the maintainer decides between
 an exception and a new proof form (§10, §18); an entry under `voice/` that is no note's part
 leaves with the proof, so a member's copy of a note this member's view does not hold leaves
 too (§10, "What is left"). On the machine of a member
@@ -1192,14 +1204,16 @@ and the PR says so (§18).
 ## 15. What is not verified
 
 S1–S10 are built (§17). Of S11, the real-device test is built and both its legs have passed
-on this Mac, its microphone leg at `bbae7d8`, before the start thread (§17 S11). A note has
-crossed the live fleet from one headless host to another, twice, outside Basecamp and with no
-UI, and from one Basecamp 0.3.2 profile to another in Basecamp's own window, where the
-`silent` refusal of a capture of zeros was seen too (below; all of it at `bbae7d8`, before
-§9's start thread). Still not run: S9's two-runner self-test as it reads its logs now (it ran
-on the fork's Linux CI at `bbae7d8` and failed there on its own reading of them, B having
-played the note: below), the start thread in any host, and anything since `bbae7d8` in
-Basecamp's window. What is unverified, built or planned:
+on this Mac, at `bbae7d8`, before the start thread, and again at `08dfcb3`, on it (§17 S11).
+A note has crossed the live fleet from one headless host to another three times, outside
+Basecamp and with no UI, twice before §9's start thread and once at `08dfcb3`; from one
+Basecamp 0.3.2 profile to another in Basecamp's own window, where the `silent` refusal of a
+capture of zeros was seen too, at `bbae7d8`, before the start thread; and between two
+runners on the fork's Linux CI, in S9's self-test, which failed at `bbae7d8` on its own
+reading of the logs, B having played the note, and passed at `08dfcb3` (below). Still not
+run: a start on the start thread while a permission prompt stands, anything since `bbae7d8`
+in Basecamp's window, S9's self-test on the Nim UI's runner, `ui-parity.sh voice` for either
+UI, and any device on Linux. What is unverified, built or planned:
 - **Some audio facts are still the prototype's** (a throwaway on an Apple M5): the cost of
   encoding and decoding 60 s (§3.1, §9), and the fixed-arity binding's wrong read-back
   (§3.1; in this build a fixed-arity mutant failed `OPUS_BAD_ARG` instead, labbook §1). The rest has run through the
@@ -1215,8 +1229,8 @@ Basecamp's window. What is unverified, built or planned:
   Basecamp 0.3.2 note, posting nothing. So on macOS no person's Basecamp 0.3.2 records sound;
   that waits on the upstream ask (§11). Real capture has run only where the responsible app is
   allowed the microphone: `voice_device_e2e`'s microphone leg (§17 S11), and a Basecamp profile
-  launched from a shell under Claude Code (§11). None of it has run on §9's start thread, which
-  landed after.
+  launched from a shell under Claude Code (§11). The microphone leg has run on §9's start
+  thread since, at `08dfcb3` (§17 S11); the shell-launched Basecamp profile has not.
 - **A device start held the module thread: fixed in this PR** (PR 340's review, its second
   should-fix; §18). On a Mac where the responsible app can prompt for the microphone (it has a
   usage string, and the permission is not decided), Core Audio's device start waited for the
@@ -1258,15 +1272,16 @@ Basecamp's window. What is unverified, built or planned:
     1,994 ms after Start, Stop about a second after that);
   - the gallery fixture `room-voice-starting` (below).
 
-  What has not run: a real microphone's start on its start thread (`voice_device_e2e` pumps
-  until a start lands, under its watchdog; its speaker leg has run on the start thread, in
-  S2's review and again on its fixes, Core Audio's start landing and playing as before, but
-  its microphone leg, §17 S11, needs the person's consent and has not run since), a prompt
-  answered while a start waits, any of it in a host (`logos_host`, Basecamp), the C++
-  autopilot's wait for `recording` (it compiles into the `.lgx` and has not run), and an image
-  unloaded while a start is still blocked (§9). A person's Basecamp 0.3.2 is never asked
-  (§11: tccd disallows the prompt), so there a start does not wait at all; the start thread
-  matters where the responsible app can prompt (§8).
+  What has run since, on 2026-10-23 at `08dfcb3`: a real microphone's start on its start
+  thread, in `voice_device_e2e` (it pumps until a start lands, under its watchdog), with the
+  responsible app already allowed the microphone, so no prompt stood (§17 S11); the start
+  thread in a host, miniaudio's null device in logosctl 0.3.2's `logos_host` (the headless
+  run below) and in a Linux runner (C in S9's self-test, below); and the C++ autopilot's wait
+  for `recording`, in S9's runners. What has not run: a start while a prompt stands, or a
+  prompt answered while a start waits; the start thread in Basecamp's window, and the C++
+  autopilot's wait there; and an image unloaded while a start is still blocked (§9). A
+  person's Basecamp 0.3.2 is never asked (§11: tccd disallows the prompt), so there a start
+  does not wait at all; the start thread matters where the responsible app can prompt (§8).
 - **A device past the end of its stream.** The cap and `done` are noticed by the voice pump
   alone (§9), so with nothing calling the module the microphone stays open past 60 s (a
   review probe on the null device: still capturing 63 s after the start, 2,880,000 frames,
@@ -1283,11 +1298,13 @@ Basecamp's window. What is unverified, built or planned:
   under nixpkgs' gcc on glibc 2.44-25. Its `libopus.so.0`, read from cache.nixos.org, needs
   only `libm.so.6` and `libc.so.6`, at `GLIBC_2.2.5` to `GLIBC_2.29`, with RUNPATH the pin's
   glibc; a test links libc and libm itself (Nim's `std/math`, which `strutils` imports, passes
-  `-lm`), so the gcc's glibc is the one loaded. That is read and evaluated, not run on Linux:
-  `voice_codec_test` §1 prints the version a run used.
+  `-lm`), so the gcc's glibc is the one loaded. That is read and evaluated. The fork's CI ran
+  the voice and audio tests at `08dfcb3` on both arches, and they passed (§12), but the
+  version `voice_codec_test` §1 printed there is not read yet: the job had not ended.
 - **Delivery of two 90,153 B frames:**
-  - over the live fleet, past one headless run on `logos.dev` (below), which ran the module
-    from before `publishTogether` sends the two back to back;
+  - over the live fleet, past the headless runs on `logos.dev` (below; the last two with
+    `publishTogether`, which sends the two back to back) and the `logos.dev` leg of S9's
+    self-test on the fork's CI (below);
   - with RLN on `logos.test`, where each note spends two sends;
   - under `mix = preferred | required`.
 
@@ -1351,7 +1368,7 @@ Basecamp's window. What is unverified, built or planned:
   in the tree joins a room (below).
 - **Audio over `coordinate_proof`** (§10). It refuses `voice-notes-present` for a room whose
   authentic view holds a part the fold stands, so no proof of a room with a voice note leaves
-  the module until the operator decides; `voice_live_test` §23 and §26 hold the refusal on
+  the module until the maintainer decides; `voice_live_test` §23 and §26 hold the refusal on
   `roomProof`, which the hosted method calls after its `not-joined` check and a poll. An
   entry under `voice/` that is no note's part refuses nothing and leaves with the proof
   whole, so junk that copies a note's bytes carries them out of a room whose view holds none
@@ -1368,9 +1385,9 @@ Basecamp's window. What is unverified, built or planned:
   change that code, and no test here runs such a client against a voice note: what it does
   is read from `main`'s source.
 - **The size budget** (§5) is measured in process only. The record's size is S1's arithmetic,
-  and the worst case's JSON and frames are measured over `LocalTransport` (S4, S5). One
-  note's two frames crossed `logos.dev` once, in the headless run below, but no frame's size
-  was read there.
+  and the worst case's JSON and frames are measured over `LocalTransport` (S4, S5). A note's
+  two frames have crossed `logos.dev` in the headless runs below and in S9's self-test on the
+  fork's CI, but no frame's size was read there.
 - **The voice methods through a host** (S7). `voice_live_test` runs `VoiceRecorder` in
   process, on `SyntheticAudioIo`, `FileAudioIo` and miniaudio's null device, with two members
   over `LocalTransport`, and holds the rows `coordinate_messages` serves (`messagesJson`, §22)
@@ -1424,6 +1441,16 @@ Basecamp's window. What is unverified, built or planned:
     Send, B played it to its end, and B's sink held exactly 230,832 samples, 4,809 × 48, with
     the same 1 kHz figures. C's Send was refused `silent` with the same `detail`, and B's
     thread still held one voice row.
+  - **Run again on 2026-10-23 at `08dfcb3`**, after §9's start thread, the same harness with
+    `muster_module` built from that commit and logosctl 0.3.2 the official `aarch64-macos`
+    release tarball (sha256 `f78e8ffd…`). A and B are on `FileAudioIo`, which starts at once,
+    with no start thread; C, on `MUSTER_VOICE_BACKEND=null`, is `MiniaudioIo` on the null
+    device, so C's start went through the start thread inside logosctl's `logos_host`. A's
+    draft was 4,894 ms, sent as note `4efda2a32d6b3b5822f7fe84d1e4b8f2`; B's thread showed it
+    complete about 1 s after the Send, B played it to its end, and B's sink held exactly
+    234,912 samples, 4,894 × 48, with 0.99 of the source's 1 kHz power. C's
+    `voice_record_start` answered `{ok}`, its Stop gave a silent draft (3,140 ms, peak 0), its
+    Send was refused `silent` with the same `detail`, and B's thread still held one voice row.
 
   What it does not cover: no UI, so no QML, neither backend and no autopilot (it is not S9's
   self-test, below); no Basecamp window, since the screen was locked then (the window's
@@ -1437,10 +1464,11 @@ Basecamp's window. What is unverified, built or planned:
   source and the PCM sink, `FileAudioIo`); the Nim UI; and everything since `bbae7d8`, S2's
   start thread among it, so neither the `starting` state nor the autopilot's wait for
   `recording` has run in a window.
-- **S9's self-test has run only on the fork's Linux CI, at `bbae7d8`, and failed there on
-  its own reading of the logs; as it reads them now it has not run on a runner.**
+- **S9's self-test has run only on the fork's Linux CI: at `bbae7d8` it failed there on its
+  own reading of the logs, and at `08dfcb3`, reading them as it does now, it passed.**
   On the contributor's fork, a workflow that is not part of this PR built the runner from
-  `bbae7d8`'s tree on GitHub's `ubuntu-latest` and ran the script on both fleets:
+  `bbae7d8`'s tree, and later `08dfcb3`'s, on GitHub's `ubuntu-latest` and ran the script on
+  both fleets:
   - Runs 39776743154, 39822900956 and 39836679442 failed both legs, `logos.dev` and
     `MUSTER_FLEET=local`, with "FAIL: B never played A's note (sent: 48410f05…, played: 0)".
     The product had done its part. In 39836679442's kept logs B was admitted before A
@@ -1475,9 +1503,25 @@ Basecamp's window. What is unverified, built or planned:
     ui-host does and cuts most of them: SUCCESS, C's leg included, and FAIL when A's Send is
     refused or B never stops playing; `bbae7d8`'s script against it fails as CI did,
     "played: 0".
-  - Not run yet: the script as it reads its logs now, on a runner, on either fleet; the Nim
-    UI's runner; the `voice` entry of `ui-parity.sh`; and everything since `bbae7d8` in a
-    runner, S2's start thread and the autopilot's wait for `recording` among it.
+  - **At `08dfcb3` it passed** (2026-10-23, run 40030788377, job "voice self-test (runner,
+    ubuntu-latest)", on `08dfcb3` plus the fork-only workflow commits, branch
+    `ci/voice-notes-linux` at `7fe3812`, which are not part of this PR).
+    `python3 scripts/tests/voice-self-test-replay.py` said "all passed", `BUILD_MEM= make
+    build` built the runner, and the script ran three standalone runners, A, B and C, on one
+    `ubuntu-latest` machine, on the C++ UI. On `logos.dev`: SUCCESS, note `89d79b72…`; B's
+    sink held 143,280 samples, 2,985 ms × 48, its 1 kHz power 66,639,028 of the source's
+    67,095,156; from A's Stop on, delivery accepted 2 of A's sends and refused none; C's Stop
+    called its draft silent (peak 0), its Send was refused `{"error":"silent","detail":""}`
+    (the module gives the Basecamp note on macOS only, §11), C's thread held no note and B's
+    exactly A's. With `MUSTER_FLEET=local`: SUCCESS, note `477737db…`, B's sink 143,328
+    samples, 2,986 ms × 48. C, on `MUSTER_VOICE_BACKEND=null`, started its device through the
+    start thread, and the C++ autopilot timed A's and C's seconds from the first
+    `voice_status` that said `recording`. Offscreen, the C++ runner loads no QML view, so no
+    voice QML ran, as the script says.
+  - Not run yet: the script on the Nim UI's runner (`make build-nim`, then `MUSTER_UI=nim
+    scripts/voice-self-test.sh`) or with `MUSTER_QPA=xcb`, so no voice QML has run in a
+    runner; the `voice` entry of `ui-parity.sh`, for either UI; and the red run against a
+    runner with no autopilot (below).
 
   `scripts/voice-self-test.sh` (§17) needs the standalone runner, and the runner does not
   build on this Mac. `BUILD_MEM= make build` on 2026-10-22
@@ -1531,14 +1575,14 @@ Basecamp's window. What is unverified, built or planned:
     a `VOICE_SECS` past 60 could never fit the wait (now refused up front, as 61 is).
 
   The C++ autopilot ran in Basecamp's window at `bbae7d8` (above), before S2 made it wait
-  for the first `voice_status` that says `recording`; with that wait it compiles into the
-  `.lgx` and has not run.
+  for the first `voice_status` that says `recording`; with that wait it has run in the fork's
+  CI runners at `08dfcb3` (above), and not in a Basecamp window.
 
   **What the maintainer runs on Linux before S9 counts as done** (the PR stays a draft, and
-  this entry stays, until the transcripts exist): `make build && scripts/voice-self-test.sh`;
-  the same with `MUSTER_FLEET=local`; `make build-nim` and `MUSTER_UI=nim
-  scripts/voice-self-test.sh`; `scripts/ui-parity.sh voice` for each UI; and one red run,
-  the script against a runner built from `9cc1005` (no autopilot), which must FAIL with
+  this entry stays, until the transcripts exist): `make build && scripts/voice-self-test.sh`
+  and the same with `MUSTER_FLEET=local`, which the fork's CI has run at `08dfcb3` (above);
+  `make build-nim` and `MUSTER_UI=nim scripts/voice-self-test.sh`; `scripts/ui-parity.sh
+  voice` for each UI; and one red run, the script against a runner built from `9cc1005` (no autopilot), which must FAIL with
   "B never played A's note (sent: none".
 - **The voice gallery fixtures break the gallery's own rule.** `ui/tests/gallery/CLAUDE.md`
   says fixture data is recorded, never hand-typed. S8's voice fixtures (`room-voice-notes`,
@@ -1589,7 +1633,8 @@ Basecamp's window. What is unverified, built or planned:
     `libopus.so.0` beside the plugin, RPATH `$ORIGIN`, every `NEEDED` resolved against the Qt
     in Basecamp 0.3.2's AppImage. `linux-arm64` is not named there;
   - the module suite on Linux since the review: its libopus (above), and the run-suite rule
-    that only a test in the E2E list may skip (§17 S11).
+    that only a test in the E2E list may skip (§17 S11). The fork's CI runs it at `08dfcb3`,
+    and its module suite jobs were still running when this was written (§12).
 
 ## 16. Invariants, checked
 
@@ -1607,9 +1652,10 @@ Basecamp's window. What is unverified, built or planned:
 
 Each slice's test is written and run red before its code (worker.md), and every commit carries
 `Tested-Behavior` or `TDD-Exempt`. S9's is the exception so far: `scripts/voice-self-test.sh`
-has run on real runners only on the fork's Linux CI at `bbae7d8`, red there on its own
-reading of the logs (§15). How it reads them now is held red and green with no runner, by
-`scripts/tests/voice-self-test-replay.py` and a stand-in runner, never yet a real one.
+has run on real runners only on the fork's Linux CI, red at `bbae7d8` on its own reading of
+the logs and green at `08dfcb3` (§15), and its red run, against a runner with no autopilot,
+has not run. How it reads its logs is held red and green with no runner, by
+`scripts/tests/voice-self-test-replay.py` and a stand-in runner.
 
 - **S0 — this document** (TDD-Exempt: docs).
 - **S1 — The Opus binding, the clip record, the codec.** `audio/opus.nim`, `voice_clip.nim`
@@ -1641,7 +1687,7 @@ reading of the logs (§15). How it reads them now is held red and green with no 
   and leaving a room drops its memo; since its second pass, the flow, the room map and
   provenance read through it too, and each hosted method calls the recorder's proc
   (`lastTs`, `flowRows`, `graphOf`, `provenanceOf`) that `voice_live_test` §28 drives.
-  Until the operator decides (§10), `coordinate_proof` refuses a room holding a voice note.
+  Until the maintainer decides (§10), `coordinate_proof` refuses a room holding a voice note.
   Since the review's second should-fix a device starts on a thread of its own: Start and Play
   answer at once, the recording is `starting` until the device runs, and a start that fails
   or is still pending after 15 s ends in its word (§8, §9). Test: `voice_live_test` on
@@ -1664,9 +1710,9 @@ reading of the logs (§15). How it reads them now is held red and green with no 
   gallery fixture `room-voice-forged` holds a forged `voice-note` body, and RoomThread draws
   it as plain text under its poster's name, with no voice card and no Play (§7).
 - **S9 — End to end (built; the self-test ran on the fork's Linux CI at `bbae7d8` and failed
-  there on its own reading of ui-host's relay, B having played the note, and as it reads the
-  logs now it has not run on a runner; its module calls ran twice from one headless host to
-  another on `logos.dev`: §15).** `scripts/voice-self-test.sh`, in
+  there on its own reading of ui-host's relay, B having played the note, and reading the logs
+  as it does now it passed there at `08dfcb3`, on the C++ UI; its module calls ran three
+  times from one headless host to another on `logos.dev`: §15).** `scripts/voice-self-test.sh`, in
   `fileshare-self-test.sh`'s shape: two offscreen runners in one room, each with a scratch
   HOME. A records `VOICE_SECS` (3; a whole number from 1 to 60, as both autopilots read it)
   seconds from a 3 s 1 kHz WAV the script writes (`MUSTER_VOICE_SOURCE`) and sends; B plays
@@ -1744,7 +1790,8 @@ reading of the logs (§15). How it reads them now is held red and green with no 
     lands, and the watchdog times that (20 s), as it times a stop or close (10 s); a start
     call that takes 100 ms or more to return fails the leg. Since that change the speaker
     leg has run on Core Audio, in S2's review (48.24 frames a millisecond) and again on its
-    fixes (48.15), each `done` after the 1,920-frame tail; the microphone leg has not.
+    fixes (48.15), each `done` after the 1,920-frame tail; both legs have since, at `08dfcb3`
+    (below).
 
   **Run on this Mac, 2026-10-22** (macOS 26.5.2, Apple Silicon, outside Basecamp, run from Claude
   Code in the Claude desktop app, with the person's consent; `MUSTER_VOICE_REAL=1`, then
@@ -1778,11 +1825,28 @@ reading of the logs (§15). How it reads them now is held red and green with no 
   - **The microphone leg passed later that day, at `bbae7d8`**, run with the person's consent
     once the microphone was allowed: Core Audio read back as 48 kHz mono s16, 48.37 frames a
     millisecond, capped at exactly 96,000 frames, a peak of -41.2 dBFS, and the codec round
-    trip kept 96,000 samples. That was before §9's start thread, so the leg has not run on it.
+    trip kept 96,000 samples. That was before §9's start thread.
 
-  **What is left:** the microphone leg on the start thread, with the person's consent
-  (`MUSTER_VOICE_REAL=mic module/tests/run-suite.sh e2e voice_device_e2e`). Linux has not run
-  it (§12): PulseAudio, then ALSA, with no permission prompt there.
+  **Run again on this Mac, 2026-10-23, at `08dfcb3`**, on §9's start thread (macOS 26.5, Apple
+  Silicon, outside Basecamp, `MUSTER_VOICE_REAL=1`, launched from a shell under Claude Code,
+  whose responsible app, `com.anthropic.claude-code`, is allowed the microphone, so no prompt
+  stood). Both device starts went through `MiniaudioIo`'s start thread. PASS, both legs:
+  - **The microphone leg.** Core Audio read back as 48 kHz mono s16, its first frames after
+    15 ms; 48,000 frames in 1,004 ms, 47.79 a millisecond; capped after 1,996 ms at exactly
+    96,000 frames; a peak of 172 (-45.6 dBFS), RMS 23.9 (-62.7 dBFS). libopus 1.5.2 took the
+    96,000 samples into 101 packets of 40 B (a record of 4,318 B) and decoded them back to
+    96,000 samples. Opus is lossy, so only the length is checked.
+  - **The speaker leg**, on digital silence: its first frames taken after 15 ms; 48,480
+    frames in 1,007 ms, 48.10 a millisecond; a 100 ms buffer `done` after 131 ms, past the
+    device's tail of 1,920 frames (40.0 ms).
+
+  What it still does not show: a start while a permission prompt stands, since none stood.
+
+  **What is left:** the microphone leg's start on that thread while a permission prompt
+  stands, and once it is answered, which needs a responsible app whose permission is not
+  decided, and the person's consent (`MUSTER_VOICE_REAL=mic module/tests/run-suite.sh e2e
+  voice_device_e2e`). Linux has not run it (§12): PulseAudio, then ALSA, with no permission
+  prompt there.
 
 ## 18. Decisions
 
@@ -1814,9 +1878,10 @@ Asked of the maintainer (corpetty):
   acceptance criterion still names only `health()`, `propose()` and `status()`, so a voice
   regression now turns exo-526 red. Sign off on the wider oracle, or a voice spec's own probe
   takes these checks over once the epic has an exo id.
-- **A device start with no timeout** (§15): **done in this PR**, the way the review preferred
-  (its second should-fix). On a Mac where the responsible app can prompt, Core Audio's device
-  start waited for an unanswered permission prompt (S11), so the module thread could wait with
+- **A device start with no timeout** (§15): **done in this PR** (the review's second
+  should-fix), the first of the review's two options, the device started off the module
+  thread and its state reported through `voice_status`, with a 15 s bound as well. On a Mac
+  where the responsible app can prompt, Core Audio's device start waited for an unanswered permission prompt (S11), so the module thread could wait with
   it, and every module call behind it. Now the device starts off the module thread:
   `voice_record_start` and `voice_play` answer at once, `voice_status` says `starting` until
   the device runs, a start that fails ends in its word, one still pending 15 s after the call
@@ -1827,8 +1892,9 @@ Asked of the maintainer (corpetty):
   responsible app can prompt, a shell or terminal launch, where the wait was seen (S11), and a
   future Basecamp that carries the entitlement and a usage string. The maintainer may still
   object: to the bound (15 s), to the word, or to a start thread at all for a wait today's
-  Basecamp never has. A real microphone's start on that thread has not run: its test needs the
-  person's consent (§15).
+  Basecamp never has. A real microphone's start on that thread has run, on this Mac at
+  `08dfcb3`, with the responsible app already allowed, so no prompt stood (§17 S11); a start
+  while a prompt stands has not (§15).
 - **An indicator outside the room** (§13): **done in this PR**, as the review suggested ("a
   global recording indicator in `Main.qml` would close most of it"). `Main.qml` reads
   `voice_status` every second on every page, room or none, and while it says `starting` or
@@ -1841,13 +1907,19 @@ Asked of the maintainer (corpetty):
   `voice_status` does not say. Seen in the gallery only. The maintainer may still object to
   its words or its place, or to a room's view showing the strip and the room's banner both,
   each with its own Stop and Discard (gallery `room-voice-starting`), which this PR keeps.
-- **The Linux-only checks** (§15): who runs them? This PR is built on a Mac.
+- **The Linux-only checks** (§12, §15). This PR is built on a Mac. On Linux the maintainer
+  ran the module suite (x86_64, at `bbae7d8`), and the fork's CI ran it on both arches and
+  S9's self-test on the C++ UI (§12, §15). Still not run on Linux: the device backends of §12
+  (PulseAudio, then ALSA), Record and Play inside Basecamp's AppImage, the Nim
+  UI's runner and its self-test (`make build-nim`, then `MUSTER_UI=nim
+  scripts/voice-self-test.sh`), `scripts/ui-parity.sh voice` for either UI, and the rest of
+  §15's Linux-only checks, `grade-specs.sh` among them.
 - **Scope.** This PR regenerates the stale gallery `FakeBackend.qml`, which also pulls in
   FileShare's missing slots, and fixes the unknown-card fallback. The Nim backend's missing
   FileShare autopilot and FileShare's absence from `ui-parity.sh` are left for a separate PR.
 
 Still open:
-- **for the operator: `coordinate_proof` and the audio** (§10). A log proof carries every
+- **for the maintainer: `coordinate_proof` and the audio** (§10). A log proof carries every
   event's value whole, so a proof of a room with a note carries its Opus to the caller. Either
   the proof export is named as an exception to "audio plaintext never crosses IPC", or a new
   proof form carries voice parts as committed digests. Until then `coordinate_proof` refuses
@@ -1870,7 +1942,7 @@ Still open:
   own, and `voice_status` does not yet name that room. S8's draft surface therefore shows a
   draft in whichever room is open, and says so only when Send is refused (`room-changed`:
   "This recording belongs to another room. Send it from there, or discard it.");
-- **for the operator: an older client in the room** (§10, "What still leaks", item 6). A member
+- **for the maintainer: an older client in the room** (§10, "What still leaks", item 6). A member
   on a Muster from before voice notes (0.3.2 or earlier) serves every note's Opus to the
   modules loaded beside them, through `coordinate_graph` and `coordinate_proof`, and nothing
   in this PR can change that. Accept it as a stated gap (S10's registry entry), or keep voice
