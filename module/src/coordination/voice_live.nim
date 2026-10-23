@@ -476,7 +476,7 @@ proc roomProof*(s: CoordinationSession): JsonNode =
   ## is append-only, so a refusal for junk would let any one member switch the room's proof
   ## off for good. Such an entry leaves with the proof, as a message's body does; one that
   ## copies a note's bytes leaves with them when this member's view holds none of that note's
-  ## parts (§10). Audio never leaves the module; the operator decides between naming the
+  ## parts (§10). Audio never leaves the module; the maintainer decides between naming the
   ## export an exception and a proof form that commits a part by digest. Any other room:
   ## buildProof's JSON over the raw log, from epoch 0 to the current one.
   let events = s.log.allEvents()

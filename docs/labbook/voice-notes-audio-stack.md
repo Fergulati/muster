@@ -100,7 +100,11 @@ miniaudio `dlopen`s the platform's audio libraries itself:
 - On darwin that is libSystem. S3's plugin shows all three "(from libSystem)" (`nm -m`),
   with no audio framework linked (`otool -L`).
 - On Linux it should be libc itself (glibc 2.34 and later; earlier ones need `-ldl`). That
-  link has not been run.
+  link has run since: the `linux-amd64` package of PR 340's `lgx variants` run (39776903474,
+  at `bbae7d8`), where `ldd` resolves every library the plugin needs (design §12), the module
+  suite's miniaudio tests on Linux, and the runner the fork's CI built at `08dfcb3`, whose C
+  started the null device (design §15). Which library supplied the three there was not
+  read, and no Linux run has dlopened a device backend.
 
 **The trap inside it: macOS links a plugin with `-undefined dynamic_lookup`.** A missing
 symbol shows up only when the plugin loads, never at link. So S3 made `voice_status` reach
@@ -204,8 +208,8 @@ at; psbt strips only the ends.
   the gcc's libc and libm itself (Nim's `std/math` passes `-lm`) before libopus's RUNPATH is
   read. Read off cache.nixos.org's copy of the ELF and evaluated for `x86_64-linux` (the pin's
   `libopus.out` is `39jlnb9v…-libopus-1.5.2.drv`). The fork's CI ran the voice and audio
-  tests that way at `08dfcb3`, on both arches, and they passed, but the version they printed
-  is not read yet (design §12).
+  tests at `08dfcb3` on both arches, and they passed; run-suite's code links the pin there,
+  but which libopus they loaded is not read yet (design §12).
   `scripts/grade-specs.sh` took nixpkgs' libopus for exo-526's host probe until the final
   check of the review's fixes; it takes the pin's too now, read by the same
   `module/tools/builder-nixpkgs.sh` as `run-suite.sh` (for `x86_64-linux`, `mzksc9fp…-libopus-1.5.2`
@@ -348,7 +352,7 @@ Send refuses as `silent`; design §11.)
   `ma_device_start`.
 - **Linux** (§12, §15): miniaudio's `dlopen` of `libpulse` and `libasound` from a portable
   `.lgx`, the AppImage and a nix-built runner (whose loader reads no `/etc/ld.so.cache`); the
-  Linux plugin links; `libopus.so.0` bundled and resolved by each variant's RUNPATH, checked
-  for `linux-amd64` only (design §12, §15).
+  Linux plugin links and `libopus.so.0` bundled and resolved by each variant's RUNPATH, both
+  checked for `linux-amd64` only (design §12, §15).
 - **The exit proc at unload** (§9, §15): whether it runs when the host unloads the plugin
   with a device open.
