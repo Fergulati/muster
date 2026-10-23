@@ -1,5 +1,5 @@
 {
-  "about": "A device that takes its time to start (docs/design/voice-notes.md §8, §9; PR 340's review): the module answers Start and Play at once and starts the device on a thread of its own, so the message row shows \"Starting the microphone…\" with Stop and Discard, no time and no level, until voice_status says recording; Stop then records nothing and the banner goes; a start past the module's 15 s bound, or one that failed on its thread, ends idle with recording.error and ready.capture saying why, in words; a note's card says \"Starting…\" until its speaker runs, and a speaker start too slow says so. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (voice_live_test §29, §29b, §29d, §30: while a start is on its way, ready says unknown for its device), not recorded (§15).",
+  "about": "A device that takes its time to start (docs/design/voice-notes.md §8, §9; PR 340's review): the module answers Start and Play at once and starts the device on a thread of its own, so the message row shows \"Starting the microphone…\" with Stop and Discard, no time and no level, until voice_status says recording; Stop then records nothing, the banner goes and the room says so: voice_status moved to idle because of that Stop, so its answer follows it there, whether the move comes first (the first Stop) or the answer does (the second); a start past the module's 15 s bound, or one that failed on its thread, ends idle with recording.error and ready.capture saying why, in words; a note's card says \"Starting…\" until its speaker runs, and a speaker start too slow says so. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (voice_live_test §29, §29b, §29d, §30: while a start is on its way, ready says unknown for its device), not recorded (§15).",
   "snapshot": "data/statement-proposed.json",
   "sizes": [
     "1440x900"
@@ -320,7 +320,124 @@
       "expectProp": [
         "voiceNotice",
         "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "Nothing was recorded: the microphone had not started yet."
+      ]
+    },
+    {
+      "shot": "stopped-while-starting"
+    },
+    {
+      "click": "voiceRecordButton"
+    },
+    {
+      "expect": {
+        "slot": "startVoiceRecording"
+      }
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "starting",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        },
+        "voiceResultJson": {
+          "ok": true
+        },
+        "voiceResultSeq": "4"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceRecordingTitle",
+        "text",
+        "Starting the microphone…"
+      ]
+    },
+    {
+      "click": "voiceStopButton"
+    },
+    {
+      "expect": {
+        "slot": "stopVoiceRecording"
+      }
+    },
+    {
+      "props": {
+        "voiceResultJson": {
+          "error": "not-started"
+        },
+        "voiceResultSeq": "5"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "Nothing was recorded: the microphone had not started yet."
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceRecording",
+        "visible",
         false
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceNotice",
+        "text",
+        "Nothing was recorded: the microphone had not started yet."
       ]
     },
     {
@@ -361,7 +478,7 @@
         "voiceResultJson": {
           "ok": true
         },
-        "voiceResultSeq": "4"
+        "voiceResultSeq": "6"
       }
     },
     {
@@ -448,7 +565,7 @@
         "voiceResultJson": {
           "ok": true
         },
-        "voiceResultSeq": "5"
+        "voiceResultSeq": "7"
       }
     },
     {
@@ -526,7 +643,7 @@
         "voiceResultJson": {
           "ok": true
         },
-        "voiceResultSeq": "6"
+        "voiceResultSeq": "8"
       }
     },
     {
@@ -655,7 +772,7 @@
         "voiceResultJson": {
           "ok": true
         },
-        "voiceResultSeq": "7"
+        "voiceResultSeq": "9"
       }
     },
     {

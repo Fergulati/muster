@@ -338,7 +338,16 @@ Item {
     readonly property int voiceAnswers: backend ? (parseInt(String(backend.voiceResultSeq || "0"), 10) || 0) : 0
     property int voiceCallAnswers: -1
     readonly property bool voicePending: room.voiceCallAnswers >= 0 && room.voiceAnswers === room.voiceCallAnswers
-    onVoiceAtChanged: if (room.voiceAt !== room.voiceOpAt) room.voiceOpAt = ""
+    // One move is the call's own, and its answer is about that move: a Stop while the device
+    // was still starting drops the recording (starting → idle) and answers not-started,
+    // "nothing was recorded", so that answer follows voice_status to idle instead of going
+    // stale with it, whichever of the two arrives first (voice-notes.md §8).
+    onVoiceAtChanged: {
+        if (room.voiceAt === room.voiceOpAt) return;
+        var stopWhileStarting = room.voiceOp === "stop" && room.voiceOpAt.indexOf("starting/") === 0
+                                && room.voiceAt.indexOf("idle/") === 0;
+        room.voiceOpAt = stopWhileStarting ? room.voiceAt : "";
+    }
     readonly property var voiceResult: {
         if (room.voicePending || room.voiceOpTopic !== room.topic || room.voiceOpAt !== room.voiceAt) return ({});
         var r = backend ? String(backend.voiceResultJson || "") : "";

@@ -587,24 +587,29 @@ Elapsed time on screen comes from a QML clock, started when `voice_status` first
 `recording`. The module's cap is the one that counts. While a recording is `starting`, the
 message row's banner says "Starting the microphone…", with Stop and Discard, no time and no
 level, and that nothing is recorded until it starts; a note's card says "Starting…" while its
-speaker starts. A start that failed or was too slow shows in words (`no-device`: "No
-microphone was found on this device."; `device-start-slow`: "The microphone took too long to
-start. If you were asked whether to allow it, answer that, then try again."), and so does a
-Play the module took whose speaker then did not start. The gallery fixture
-`room-voice-starting` holds each.
+speaker starts. A start that failed or was too slow shows in words (`no-device`: "No microphone
+was found on this device."; `device-start-slow`: "The microphone took too long to start. If you
+were asked whether to allow it, answer that, then try again."), and so does a Play the module
+took whose speaker then did not start. Stop while the microphone is still starting ends the
+banner and says "Nothing was recorded: the microphone had not started yet." (the module's
+`not-started`, in the table above). The gallery fixture `room-voice-starting` holds each.
 
 **A refusal shows while it holds.** The UI keeps the last voice call's answer with the room the
 call was made in and where `voice_status` stood then (the recording's state, the note playing).
 Once another room opens, or `voice_status` moves on (the other recording ended, the note
 stopped playing), the answer is no longer shown; a refusal such as `busy` or `room-changed`
-describes a state that has gone. The gallery fixture `room-voice-refused` holds both. Both
-backends count their voice answers in `voiceResultSeq`, one more per answer, so an answer
-identical to the last one still reads as new: a real backend's second `silent` leaves
-`voiceResultJson` as it was. While a call is in flight (the count has not moved since it was
-made) the last answer is not shown, since it answered an earlier call. A refusal the person
-dismissed stays dismissed until a new answer arrives, and shows again if that answer refuses
-in the same words (the notice is keyed by the count); a platform note, once dismissed, stays
-dismissed until its words change. The same fixture holds these too.
+describes a state that has gone. The gallery fixture `room-voice-refused` holds both. One move
+is the call's own: a Stop while the device was starting drops the recording, so `voice_status`
+goes from `starting` to idle because of that Stop, and its answer, `not-started`, follows it
+there and shows. `room-voice-starting` holds it in both orders, the move before the answer and
+the answer before the move (S2's review found the answer was never shown before). Both backends
+count their voice answers in `voiceResultSeq`, one more per answer, so an answer identical to
+the last one still reads as new: a real backend's second `silent` leaves `voiceResultJson` as
+it was. While a call is in flight (the count has not moved since it was made) the last answer
+is not shown, since it answered an earlier call. A refusal the person dismissed stays dismissed
+until a new answer arrives, and shows again if that answer refuses in the same words (the
+notice is keyed by the count); a platform note, once dismissed, stays dismissed until its words
+change. `room-voice-refused` holds these too.
 
 ## 9. Devices, threads and the build
 
