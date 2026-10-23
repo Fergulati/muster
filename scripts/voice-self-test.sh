@@ -37,11 +37,25 @@
 # The audio never leaves the module: the runners' UIs only trigger and poll voice_status
 # (§8). The WAV and the PCM live in the scratch dir, never in the tree.
 #
+# The logs are read through ui_log (scripts/lib/ui_log.py): the C++ UI's lines reach them
+# through ui-host's relay, QDebug-quoted, several to a line and now and then cut. A line the
+# script cannot read as JSON is reported as the script's error, never as what B did.
+#
+# VOICE_REPLAY=<dir> launches nothing: it gives the verdict on a finished run's files
+# (KEEP_LOGS=1's, or a CI artifact's: A.log, B.log, tone.wav, B.pcm, and C.log when C ran;
+# C's checks run when C.log is there, unless VOICE_SILENT says otherwise), and deletes
+# nothing. VOICE_OS names the OS the runners ran on (default: this one's).
+# scripts/tests/voice-self-test-replay.py holds the verdict that way, on lines cut from a
+# Linux CI run.
+#
 #   make build && scripts/voice-self-test.sh       # KEEP_LOGS=1 keeps the logs and the audio
 set -uo pipefail
+REPLAY="${VOICE_REPLAY:-}"
+case "$REPLAY" in ''|/*) ;; *) REPLAY="$PWD/$REPLAY" ;; esac   # named from where it was run
 cd "$(dirname "$0")/.."
 SECS="${VOICE_SECS:-3}"
 SILENT_LEG="${VOICE_SILENT:-1}"
+HOST_OS="${VOICE_OS:-$(uname -s)}"
 # Both backends read MUSTER_AUTOVOICE as a whole number, and anything else as 0, which
 # records nothing; the module refuses a draft under 500 ms.
 # Over 60 the module stops at its cap while the Stop still waits VOICE_SECS, and the wait
@@ -52,20 +66,45 @@ esac
 [ "$SECS" -ge 1 ] && [ "$SECS" -le 60 ] \
   || { echo "VOICE_SECS must be a whole number of seconds from 1 to 60, not '$SECS'"; exit 2; }
 . scripts/lib/ui-build.sh
-ui_require_runner
-trap ui_cleanup EXIT
-
-D=$(mktemp -d)
-TOPIC="/muster/1/voice-$(date +%s)/proto"
-CFG=$(ui_fleet_config)
-# the backend's lines can reach the log Qt-quoted (\"key\":\"value\"): read them unquoted
-lg() { sed 's/\\"/"/g' "$1" 2>/dev/null; }
+# a runner's log with the UI's own lines as it wrote them, one to a line
+lg() { ui_log "$1"; }
 # the JSON after the last "[muster_ui] <tag> " line of a log
 last() { lg "$2" | grep -a "\[muster_ui\] $1 " | tail -1 | sed "s/.*\[muster_ui\] $1 //"; }
-mkdir -p "$D/A-home" "$D/B-home" "$D/C-home"
+# the last line on stdin that reads as JSON, or nothing: a runner still writes its log, so
+# the last line can be half written
+readable() { python3 -c '
+import json, sys
+good = ""
+for line in sys.stdin:
+    line = line.rstrip("\n")
+    try: json.loads(line); good = line
+    except ValueError: pass
+print(good)'; }
+# the JSON after the last "[muster_ui] <tag> " line of a log that reads as JSON, for a line
+# the UI logs every tick
+last_json() { lg "$2" | grep -a "\[muster_ui\] $1 " | sed "s/.*\[muster_ui\] $1 //" | readable; }
+# pause <seconds>: give the runners time; a replay has none to give
+pause() { [ -n "$REPLAY" ] || sleep "$1"; }
 
-# 3 s of 1 kHz at half scale, 48 kHz mono s16: what A's "microphone" hears, then silence
-python3 - "$D/tone.wav" <<'EOF'
+if [ -n "$REPLAY" ]; then
+  D="$REPLAY"
+  for f in A.log B.log tone.wav; do
+    [ -f "$D/$f" ] || { echo "VOICE_REPLAY: no $D/$f"; exit 2; }
+  done
+  [ -n "${VOICE_SILENT:-}" ] || [ -f "$D/C.log" ] || SILENT_LEG=0
+  WAIT=1 WAIT_C=1
+  echo "replaying the run in $D (launching nothing)"
+else
+  ui_require_runner
+  trap ui_cleanup EXIT
+  D=$(mktemp -d)
+  TOPIC="/muster/1/voice-$(date +%s)/proto"
+  CFG=$(ui_fleet_config)
+  WAIT=240 WAIT_C=120
+  mkdir -p "$D/A-home" "$D/B-home" "$D/C-home"
+
+  # 3 s of 1 kHz at half scale, 48 kHz mono s16: what A's "microphone" hears, then silence
+  python3 - "$D/tone.wav" <<'EOF'
 import math, struct, sys, wave
 w = wave.open(sys.argv[1], "wb")
 w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000)
@@ -73,57 +112,107 @@ w.writeframes(b"".join(struct.pack("<h", int(16383 * math.sin(2 * math.pi * 1000
                        for i in range(3 * 48000)))
 w.close()
 EOF
-echo "topic: $TOPIC · recording: ${SECS}s of a 3 s 1 kHz tone · logs: $D"
+  echo "topic: $TOPIC · recording: ${SECS}s of a 3 s 1 kHz tone · logs: $D"
 
-ui_launch "$D/A" "$D/A.log" HOME="$D/A-home" QT_FORCE_STDERR_LOGGING=1 MUSTER_LP_DEBUG=1 \
-  MUSTER_AUTOADMIT=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=voiceA \
-  MUSTER_VOICE_SOURCE="$D/tone.wav" MUSTER_AUTOVOICE="$SECS"
-CFG_B=$(ui_peer_config "$D/A.log") || exit 1
-ui_launch "$D/B" "$D/B.log" HOME="$D/B-home" QT_FORCE_STDERR_LOGGING=1 \
-  MUSTER_DELIVERY_CONFIG="$CFG_B" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=voiceB \
-  MUSTER_VOICE_SINK="$D/B.pcm" MUSTER_AUTOVOICEPLAY=1
+  ui_launch "$D/A" "$D/A.log" HOME="$D/A-home" QT_FORCE_STDERR_LOGGING=1 MUSTER_LP_DEBUG=1 \
+    MUSTER_AUTOADMIT=1 MUSTER_DELIVERY_CONFIG="$CFG" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=voiceA \
+    MUSTER_VOICE_SOURCE="$D/tone.wav" MUSTER_AUTOVOICE="$SECS"
+  CFG_B=$(ui_peer_config "$D/A.log") || exit 1
+  ui_launch "$D/B" "$D/B.log" HOME="$D/B-home" QT_FORCE_STDERR_LOGGING=1 \
+    MUSTER_DELIVERY_CONFIG="$CFG_B" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=voiceB \
+    MUSTER_VOICE_SINK="$D/B.pcm" MUSTER_AUTOVOICEPLAY=1
+  echo "waiting for A to send a note and B to play it (up to ${WAIT}s)..."
+fi
 
-echo "waiting for A to send a note and B to play it (up to 240s)..."
-ok=0 NID="" played=0
-for i in $(seq 1 240); do
-  sleep 1
-  [ -n "$NID" ] || NID=$(last 'VOICE-RESULT send' "$D/A.log" | grep -ao '"note":"[0-9a-f]*"' | sed 's/"note":"//;s/"//')
-  [ -n "$NID" ] || continue
+ok=0 NID="" played=0 unread=0 firstunread="" asend="" sendreads=0
+for i in $(seq 1 "$WAIT"); do
+  pause 1
+  if [ -z "$NID" ]; then
+    asend=$(last 'VOICE-RESULT send' "$D/A.log")
+    [ -n "$asend" ] || continue
+    sent=$(printf '%s' "$asend" | python3 -c '
+import json, sys
+try: r = json.loads(sys.stdin.read())
+except ValueError: print("unread"); sys.exit()
+n = r.get("note") if isinstance(r, dict) else None
+print("note " + n if isinstance(n, str) and n else "none")')
+    case "$sent" in
+      "note "*) NID="${sent#note }" ;;
+      none)    # refused: no note left A, so there is nothing to wait for
+        echo "FAIL: A's Send names no note: $(printf '%s' "$asend" | cut -c1-400) — logs kept in $D"; exit 1 ;;
+      *)       # not JSON: half written, or the script misreads the log; three reads decide
+        sendreads=$((sendreads + 1))
+        if [ -n "$REPLAY" ] || [ "$sendreads" -ge 3 ]; then
+          echo "FAIL: the script could not read A's Send (its reading of the log, not A's): $(printf '%s' "$asend" | cut -c1-400) — logs kept in $D"
+          exit 1
+        fi
+        continue ;;
+    esac
+  fi
   # B played it: a voice_status naming it playing, or its Play's own answer ok, then a
   # voice_status with nothing playing. Both autopilots log voice_status once a tick, before
   # they decide to Play, and not the re-read after it, so a short note can end unseen.
-  played=$(lg "$D/B.log" | grep -aE '\[muster_ui\] VOICE( \{|-RESULT play )' | sed 's/.*\[muster_ui\] VOICE//' | python3 -c '
+  # It prints that stage (0, 1 or 2) and how many of those lines were not JSON, then the
+  # first of them.
+  read_b=$(lg "$D/B.log" | grep -aE '\[muster_ui\] VOICE( \{|-RESULT play )' | sed 's/.*\[muster_ui\] VOICE//' | python3 -c '
 import json, sys
-nid, seen = sys.argv[1], 0
+nid, seen, unread, first = sys.argv[1], 0, 0, ""
 for line in sys.stdin:
+    line = line.rstrip("\n")
     if line.startswith("-RESULT play "):
         parts = line[len("-RESULT play "):].split(" ", 1)
-        try: r = json.loads(parts[1]) if len(parts) == 2 else {}
-        except ValueError: r = {}
-        if parts[0] == nid and isinstance(r, dict) and r.get("ok") is True and "error" not in r: seen = max(seen, 1)
+        try: r = json.loads(parts[1]) if len(parts) == 2 else None
+        except ValueError: r = None
+        if not isinstance(r, dict):
+            unread += 1; first = first or "VOICE" + line
+        elif parts[0] == nid and r.get("ok") is True and "error" not in r: seen = max(seen, 1)
         continue
-    try: p = json.loads(line).get("playing")
-    except (ValueError, AttributeError): continue
-    if p and p.get("note") == nid: seen = max(seen, 1)
+    try: v = json.loads(line[1:])
+    except ValueError: v = None
+    if not isinstance(v, dict):
+        unread += 1; first = first or "VOICE" + line
+        continue
+    p = v.get("playing")
+    if isinstance(p, dict) and p.get("note") == nid: seen = max(seen, 1)
     elif p is None and seen: seen = 2
-print(seen)' "$NID")
+print(seen, unread)
+print(first[:400])' "$NID")
+  played=$(printf '%s\n' "$read_b" | sed -n 1p | cut -d' ' -f1)
+  unread=$(printf '%s\n' "$read_b" | sed -n 1p | cut -d' ' -f2)
+  firstunread=$(printf '%s\n' "$read_b" | sed -n 2p)
   [ "$played" = 2 ] && { ok=1; break; }
 done
 echo "A's Start: $(last 'VOICE-RESULT start' "$D/A.log") · Stop: $(last 'VOICE-RESULT stop' "$D/A.log") · Send: $(last 'VOICE-RESULT send' "$D/A.log")"
 echo "B's Play: $(last 'VOICE-RESULT play' "$D/B.log") · after ~${i}s"
+# a tagged line that is not JSON is the script misreading the log, whatever B did
+[ "${unread:-0}" = 0 ] || echo "NOTE: $unread of B's VOICE lines did not read as JSON (the script's reading of the log, not B's), the first: $firstunread"
 [ "$ok" = 1 ] || { echo "FAIL: B never played A's note (sent: ${NID:-none}, played: $played) — logs kept in $D"; \
   echo "B's last voice_status: $(last VOICE "$D/B.log" | cut -c1-400)"; \
   echo "B's thread's notes: $(last VOICE-NOTES "$D/B.log" | cut -c1-400)"; exit 1; }
 
 # The audio: the exact length, and the tone
-check=$(python3 - "$D/tone.wav" "$D/B.pcm" "$NID" "$(last 'VOICE-RESULT stop' "$D/A.log")" "$(last VOICE-NOTES "$D/B.log")" <<'EOF'
+check=$(python3 - "$D/tone.wav" "$D/B.pcm" "$NID" "$(last 'VOICE-RESULT stop' "$D/A.log")" "$(last_json VOICE-NOTES "$D/B.log")" <<'EOF'
 import json, math, struct, sys, wave
 src_path, sink_path, nid, stop, notes = sys.argv[1:6]
+def read(what, text, ok):       # a line it cannot read is the script's error, not B's
+    try:
+        v = json.loads(text)
+    except ValueError:
+        v = None
+    if v is None or not ok(v):
+        print("bad: the script could not read %s: %s" % (what, text[:400] or "(no line)"))
+        sys.exit(0)
+    return v
+draft_ms = read("A's Stop", stop, lambda v: isinstance(v, dict) and isinstance(v.get("draft"), dict)
+                and type(v["draft"].get("durationMs")) is int)["draft"]["durationMs"]
+rows = read("B's thread's notes", notes, lambda v: isinstance(v, list) and all(isinstance(n, dict) for n in v))
 w = wave.open(src_path, "rb"); src = struct.unpack("<%dh" % w.getnframes(), w.readframes(w.getnframes()))
-raw = open(sink_path, "rb").read()
+try:
+    raw = open(sink_path, "rb").read()
+except OSError:
+    raw = b""
 sink = struct.unpack("<%dh" % (len(raw) // 2), raw[: len(raw) // 2 * 2])
-draft_ms = json.loads(stop)["draft"]["durationMs"]
-row = [n for n in json.loads(notes) if n.get("note") == nid]
+row = [n for n in rows if n.get("note") == nid]
 row_ms = row[0]["durationMs"] if row else -1
 state = row[0]["state"] if row else "absent"
 def power(x, f, a, n):        # Goertzel: |X(f)|^2 over x[a:a+n], normalised by n^2
@@ -164,37 +253,53 @@ echo "A's sends from its Stop on: $accepted accepted, $refused refused"
 
 if [ "$ok" = 1 ] && [ "$SILENT_LEG" = 1 ]; then
   # C: the null device's zeros, refused at Send; nothing reaches B
-  CFG_C=$(ui_peer_config "$D/A.log") || exit 1
-  ui_launch "$D/C" "$D/C.log" HOME="$D/C-home" QT_FORCE_STDERR_LOGGING=1 \
-    MUSTER_DELIVERY_CONFIG="$CFG_C" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=voiceC \
-    MUSTER_VOICE_BACKEND=null MUSTER_AUTOVOICE="$SECS"
-  echo "C joins on the null device; waiting for its Send's answer (up to 120s)..."
+  if [ -z "$REPLAY" ]; then
+    CFG_C=$(ui_peer_config "$D/A.log") || exit 1
+    ui_launch "$D/C" "$D/C.log" HOME="$D/C-home" QT_FORCE_STDERR_LOGGING=1 \
+      MUSTER_DELIVERY_CONFIG="$CFG_C" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=voiceC \
+      MUSTER_VOICE_BACKEND=null MUSTER_AUTOVOICE="$SECS"
+    echo "C joins on the null device; waiting for its Send's answer (up to ${WAIT_C}s)..."
+  fi
   csend=""
-  for _ in $(seq 1 120); do
-    sleep 1
-    csend=$(last 'VOICE-RESULT send' "$D/C.log")
+  for _ in $(seq 1 "$WAIT_C"); do
+    pause 1
+    csend=$(last_json 'VOICE-RESULT send' "$D/C.log")
     [ -n "$csend" ] && break
   done
-  sleep 5      # C's and B's ticks, after C's Send
-  cstop=$(last 'VOICE-RESULT stop' "$D/C.log")
-  notes=$(last VOICE-NOTES "$D/B.log")
+  pause 5      # C's and B's ticks, after C's Send
+  cstop=$(last_json 'VOICE-RESULT stop' "$D/C.log")
+  notes=$(last_json VOICE-NOTES "$D/B.log")
   # C's own thread after its Send: a note it had sent would be there at once, since the session
   # logs each part before the transport sees it (voice-notes.md §8), however slow the fleet
   cnotes=$(lg "$D/C.log" | sed -n '/\[muster_ui\] VOICE-RESULT send /,$p' | grep -a '\[muster_ui\] VOICE-NOTES ' \
-    | tail -1 | sed 's/.*\[muster_ui\] VOICE-NOTES //')
-  echo "C's Stop: ${cstop:-none} · Send: ${csend:-none} · C's thread's notes after it: ${cnotes:-none} · B's thread's notes: $notes"
-  printf '%s' "$cstop" | grep -q '"silent":true' || { echo "FAIL: C's Stop did not call its draft silent"; ok=0; }
-  printf '%s' "$csend" | grep -q '"error":"silent"' || { echo "FAIL: C's Send was not refused as silent"; ok=0; }
+    | sed 's/.*\[muster_ui\] VOICE-NOTES //' | readable)
+  echo "C's Stop: ${cstop:-none} · Send: ${csend:-none} · C's thread's notes after it: ${cnotes:-none} · B's thread's notes: ${notes:-none}"
   # on macOS the refusal carries the module's microphone note (platformNote, §11); elsewhere none
-  if [ "$(uname -s)" = Darwin ]; then
-    printf '%s' "$csend" | grep -q '"detail":"[^"]' || { echo "FAIL: C's refusal has no detail on macOS"; ok=0; }
-  fi
-  [ -n "$cnotes" ] || { echo "FAIL: C logged no thread after its Send"; ok=0; }
-  case "$cnotes" in *'"self":true'*) echo "FAIL: C's thread holds a note of its own"; ok=0 ;; esac
-  [ "$(printf '%s' "$notes" | grep -ao '"note":"[0-9a-f]*"' | sort -u | wc -l | tr -d ' ')" = 1 ] \
-    || { echo "FAIL: B's thread does not hold exactly one note"; ok=0; }
+  cfail=$(python3 - "$cstop" "$csend" "$cnotes" "$notes" "$NID" "$HOST_OS" <<'EOF'
+import json, sys
+def read(t):
+    try: return json.loads(t)
+    except ValueError: return None
+stop, send, cnotes, notes = (read(t) for t in sys.argv[1:5])
+nid, host = sys.argv[5:7]
+draft = stop.get("draft") if isinstance(stop, dict) else None
+if not (isinstance(draft, dict) and draft.get("silent") is True):
+    print("FAIL: C's Stop did not call its draft silent")
+if not (isinstance(send, dict) and send.get("error") == "silent"):
+    print("FAIL: C's Send was not refused as silent")
+elif host == "Darwin" and not send.get("detail"):
+    print("FAIL: C's refusal has no detail on macOS")
+if not isinstance(cnotes, list):
+    print("FAIL: C logged no thread after its Send")
+elif any(isinstance(n, dict) and n.get("self") is True for n in cnotes):
+    print("FAIL: C's thread holds a note of its own")
+if not (isinstance(notes, list) and [n.get("note") if isinstance(n, dict) else n for n in notes] == [nid]):
+    print("FAIL: B's thread does not hold exactly one note, A's")
+EOF
+)
+  [ -z "$cfail" ] || { echo "$cfail"; ok=0; }
 fi
-ui_cleanup
+[ -n "$REPLAY" ] || ui_cleanup
 
 qml=$(cat "$D"/*.log | grep -aE 'TypeError|ReferenceError' | head -3)
 [ -z "$qml" ] || { echo "FAIL: QML errors:"; echo "$qml"; ok=0; }
@@ -204,7 +309,7 @@ fi
 
 if [ "$ok" = 1 ]; then
   echo "SUCCESS: B played A's voice note ($NID), exactly its samples, the 1 kHz tone intact$([ "$SILENT_LEG" = 1 ] && echo '; the null device'"'"'s zeros were refused as silent')."
-  [ "${KEEP_LOGS:-0}" = 1 ] || rm -rf "$D"
+  [ -n "$REPLAY" ] || [ "${KEEP_LOGS:-0}" = 1 ] || rm -rf "$D"
 else
   echo "FAIL: logs kept in $D"
   exit 1

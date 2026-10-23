@@ -6,7 +6,9 @@ Basecamp 0.3.2's own window have run, at `bbae7d8`, before §9's start thread: `
 survives `voice_record_start`, macOS never asks for the microphone and denies it, so the
 capture is zeros and Send refuses it `silent` with the Basecamp 0.3.2 note, and a note
 crossed from one profile to another, drawn and played (§11, §15, §17). S9's two-runner
-self-test has not run yet, nor has the start thread in any host; the module calls the
+self-test ran on the fork's Linux CI at `bbae7d8` and failed there on its own reading of the
+logs, though B had played the note; read as fixed since, it has not run on a runner, nor has
+the start thread run in any host; the module calls the
 self-test makes have run twice from one headless host to another on the live fleet, with no
 UI (§15).** This document is
 the first commit of a draft PR. The wire format (§3–§5) is what S4–S10 are built on, so an
@@ -1161,8 +1163,10 @@ on this Mac, its microphone leg at `bbae7d8`, before the start thread (§17 S11)
 crossed the live fleet from one headless host to another, twice, outside Basecamp and with no
 UI, and from one Basecamp 0.3.2 profile to another in Basecamp's own window, where the
 `silent` refusal of a capture of zeros was seen too (below; all of it at `bbae7d8`, before
-§9's start thread). Still not run: S9's two-runner self-test, the start thread in any host,
-and anything since `bbae7d8` in Basecamp's window. What is unverified, built or planned:
+§9's start thread). Still not run: S9's two-runner self-test as it reads its logs now (it ran
+on the fork's Linux CI at `bbae7d8` and failed there on its own reading of them, B having
+played the note: below), the start thread in any host, and anything since `bbae7d8` in
+Basecamp's window. What is unverified, built or planned:
 - **Some audio facts are still the prototype's** (a throwaway on an Apple M5): the cost of
   encoding and decoding 60 s (§3.1, §9), and the fixed-arity binding's wrong read-back
   (§3.1; in this build a fixed-arity mutant failed `OPUS_BAD_ARG` instead, labbook §1). The rest has run through the
@@ -1279,7 +1283,8 @@ and anything since `bbae7d8` in Basecamp's window. What is unverified, built or 
   Basecamp 0.3.2's and the runner's; their voice rows, `voiceJson`, `voiceResultJson` and its
   count `voiceResultSeq`, `flowJson` and the room map's voice entries are typed from the shapes
   the module's code and tests give, not recorded: no runner has recorded them, since S9's
-  self-test has not run (below). The C++ UI has reached a real `muster_module` in Basecamp
+  self-test has run only on the fork's Linux CI, offscreen, recording nothing (below). The
+  C++ UI has reached a real `muster_module` in Basecamp
   0.3.2's window, at `bbae7d8`: the microphone button of §11, and a note drawn and played
   between two profiles (below). The Nim backend is type-checked only against stubs made from
   the `.rep` and `muster.lidl` (ui-nim builds on Linux only), its voice autopilot run against a
@@ -1392,16 +1397,58 @@ and anything since `bbae7d8` in Basecamp's window. What is unverified, built or 
   source and the PCM sink, `FileAudioIo`); the Nim UI; and everything since `bbae7d8`, S2's
   start thread among it, so neither the `starting` state nor the autopilot's wait for
   `recording` has run in a window.
-- **S9's self-test has not run.** `scripts/voice-self-test.sh` (§17) needs the standalone
-  runner, and the runner does not build on this Mac. `BUILD_MEM= make build` on 2026-10-22
+- **S9's self-test has run only on the fork's Linux CI, at `bbae7d8`, and failed there on
+  its own reading of the logs; as it reads them now it has not run on a runner.**
+  On the contributor's fork, a workflow that is not part of this PR built the runner from
+  `bbae7d8`'s tree on GitHub's `ubuntu-latest` and ran the script on both fleets:
+  - Runs 39776743154, 39822900956 and 39836679442 failed both legs, `logos.dev` and
+    `MUSTER_FLEET=local`, with "FAIL: B never played A's note (sent: 48410f05…, played: 0)".
+    The product had done its part. In 39836679442's kept logs B was admitted before A
+    recorded, B's thread held the note complete, B's Play answered ok, `voice_status` named
+    it playing (990 ms, then 1,990 ms) and then nothing, and B's sink held exactly 143,280
+    samples, 2,985 ms × 48, with 0.99 of the source's 1 kHz power (the local leg: 2,984 ms).
+    From A's Stop on, delivery accepted two of A's sends and refused none.
+  - The script misread the logs. The C++ UI's lines do not reach them bare: ui-host relays
+    them a chunk at a time, `ui-host [ "muster_ui" ]: "<chunk>"`, QDebug-quoted, several of
+    the UI's lines to a chunk. The script only turned `\"` into `"`, so every VOICE line kept
+    the chunk's closing quote, or the next line joined to it by a literal `\n`, and each
+    `json.loads` failed and was swallowed. Run 40005318158 patched the runner's checkout of
+    the script to read the relay unquoted and passed both legs, C's included: C's Stop
+    called its draft silent (peak 0), its Send was refused `silent`, C's thread held no note
+    and B's held one.
+  - The same logs show ui-host cutting lines as well. A chunk can end inside one of the UI's
+    lines, its rest in the next chunk (210 to 240 times in each log), and another process's
+    line can land inside a relayed one (20 to 30 times in each). Since PR 340's review the
+    script reads its logs through `ui_log` (`scripts/lib/ui_log.py`), which undoes the
+    quoting and both cuts: in those four logs all 1,960 voice lines read as JSON, where the
+    patched run's reader left 8 that did not, 7 of them in the local leg's A. A line the
+    script cannot read is named as the script's error, never as what B did.
+    `VOICE_REPLAY=<dir>` gives the verdict on a finished run's files, and
+    `scripts/tests/voice-self-test-replay.py` holds it, with no runner, on lines cut from
+    39836679442's logs: SUCCESS on the run as it was and on the same logs with B's lines cut
+    as ui-host cuts them, FAIL for each way a run can fail, and the same on the logs written
+    bare, as the Nim UI writes them. With `bbae7d8`'s reading put back in the script it is
+    red: "the script could not read A's Send … {"note":"48410f05…"}"", the quote that
+    reading left. Replayed on 39836679442's whole kept logs and sinks, the script as it is
+    now says SUCCESS on both legs (143,280 and 143,232 samples, 0.99 of the 1 kHz power).
+    Against a stand-in runner (scratch, not committed) that relays the autopilot's lines as
+    ui-host does and cuts most of them: SUCCESS, C's leg included, and FAIL when A's Send is
+    refused or B never stops playing; `bbae7d8`'s script against it fails as CI did,
+    "played: 0".
+  - Not run yet: the script as it reads its logs now, on a runner, on either fleet; the Nim
+    UI's runner; the `voice` entry of `ui-parity.sh`; and everything since `bbae7d8` in a
+    runner, S2's start thread and the autopilot's wait for `recording` among it.
+
+  `scripts/voice-self-test.sh` (§17) needs the standalone runner, and the runner does not
+  build on this Mac. `BUILD_MEM= make build` on 2026-10-22
   (macOS 26.5, Apple Silicon, Command Line Tools and no Xcode; 1 h 28 min from cold) stopped
   in lez_core 0.5.0's Rust dependencies, `logos-execution-zone-wallet-ffi-deps-0.1.0`:
   `risc0-sys` 1.5.0's build script runs `xcrun --sdk macosx metal`, the Command Line Tools
   carry no Metal compiler (`xcrun: error: unable to find utility "metal"`), and
   `risc0-build-kernel` 2.0.1 panics "Could not build metal kernels". `libmuster_module`, the
-  `muster_ui` plugin and `logos-standalone-app` had built by then. So no note has crossed two
-  runners on either UI, on `MUSTER_FLEET=local` or a fleet, and the `voice` entry of
-  `ui-parity.sh` has not run. (A note did cross from one headless host to another, with no
+  `muster_ui` plugin and `logos-standalone-app` had built by then. So on this Mac no note has
+  crossed two runners on either UI, on `MUSTER_FLEET=local` or a fleet; on the fork's CI one
+  has, on the C++ UI (above). (A note did cross from one headless host to another, with no
   runner, no UI and no autopilot, and between two Basecamp profiles, with the C++ UI and its
   autopilot but no runner, the entries above: neither is this test.) What did run, on darwin:
   - the Nim autopilot, in `ui-nim/tests/autovoice/run.sh`, which compiles
@@ -1514,7 +1561,9 @@ and anything since `bbae7d8` in Basecamp's window. What is unverified, built or 
 
 Each slice's test is written and run red before its code (worker.md), and every commit carries
 `Tested-Behavior` or `TDD-Exempt`. S9's is the exception so far: `scripts/voice-self-test.sh`
-has run, red and green, only against a stand-in runner, never a real one (§15).
+has run on real runners only on the fork's Linux CI at `bbae7d8`, red there on its own
+reading of the logs (§15). How it reads them now is held red and green with no runner, by
+`scripts/tests/voice-self-test-replay.py` and a stand-in runner, never yet a real one.
 
 - **S0 — this document** (TDD-Exempt: docs).
 - **S1 — The Opus binding, the clip record, the codec.** `audio/opus.nim`, `voice_clip.nim`
@@ -1567,8 +1616,10 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   `home-voice-indicator`). The
   gallery fixture `room-voice-forged` holds a forged `voice-note` body, and RoomThread draws
   it as plain text under its poster's name, with no voice card and no Play (§7).
-- **S9 — End to end (built; the self-test not run, its module calls run twice from one
-  headless host to another on `logos.dev`: §15).** `scripts/voice-self-test.sh`, in
+- **S9 — End to end (built; the self-test ran on the fork's Linux CI at `bbae7d8` and failed
+  there on its own reading of ui-host's relay, B having played the note, and as it reads the
+  logs now it has not run on a runner; its module calls ran twice from one headless host to
+  another on `logos.dev`: §15).** `scripts/voice-self-test.sh`, in
   `fileshare-self-test.sh`'s shape: two offscreen runners in one room, each with a scratch
   HOME. A records `VOICE_SECS` (3; a whole number from 1 to 60, as both autopilots read it)
   seconds from a 3 s 1 kHz WAV the script writes (`MUSTER_VOICE_SOURCE`) and sends; B plays
@@ -1591,7 +1642,12 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   once someone else is in the room; `MUSTER_AUTOVOICEPLAY=1` is the card's Play for a
   complete note another member sent, while nothing plays, a refused Play tried again up to
   five times; each tick logs `VOICE` (voice_status), `VOICE-NOTES` (the thread's `voice`
-  fields) and each call's `VOICE-RESULT`. The UIs still only trigger and poll.
+  fields) and each call's `VOICE-RESULT`. The UIs still only trigger and poll. The script
+  reads those lines through `ui_log` (`scripts/lib/ui_log.py`): the C++ UI's reach the logs
+  through ui-host's relay, quoted and now and then cut, the Nim UI's bare. A line it cannot
+  read is reported as the script's error. `VOICE_REPLAY=<dir>` gives the verdict on a finished
+  run's files, and `scripts/tests/voice-self-test-replay.py` holds that verdict on lines cut
+  from a Linux CI run.
   `ui-nim/tests/autovoice/run.sh` holds the Nim autopilot's decisions against a fake module,
   on a Mac as on Linux. A `voice` entry in `ui-parity.sh`, which refuses a bash older than 4,
   and `scripts/lib/ui-build.sh` launching and cleaning up on macOS too.
