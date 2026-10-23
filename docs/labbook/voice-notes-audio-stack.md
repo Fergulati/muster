@@ -203,7 +203,10 @@ at; psbt strips only the ends.
   the gcc's libc and libm itself (Nim's `std/math` passes `-lm`) before libopus's RUNPATH is
   read. Read off cache.nixos.org's copy of the ELF and evaluated for `x86_64-linux` (the pin's
   `libopus.out` is `39jlnb9v…-libopus-1.5.2.drv`); not yet run on Linux.
-  `scripts/grade-specs.sh` still takes nixpkgs' libopus for exo-526's host probe.
+  `scripts/grade-specs.sh` took nixpkgs' libopus for exo-526's host probe until the final
+  check of the review's fixes; it takes the pin's too now, read by the same
+  `module/tools/builder-nixpkgs.sh` as `run-suite.sh` (for `x86_64-linux`, `mzksc9fp…-libopus-1.5.2`
+  where it took `ah26jmgs…-libopus-1.6.1`). Not run on Linux either.
 - A run with `MUSTER_SODIUM` set and no `MUSTER_OPUS` stops, rather than link nixpkgs'
   libopus under the host compiler.
 - The version is printed, not asserted: no test fails on the wrong one.

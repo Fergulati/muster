@@ -227,7 +227,7 @@ W3="--path:$D/nim-eth --path:$D/nim-web3 --path:$D/nim-chronos --path:$D/nim-chr
     --path:$D/nim-bearssl --path:$D/nim-faststreams --path:$D/nim-json-rpc \
     --path:$D/nim-serialization --path:$D/nim-json-serialization --path:$D/nim-http-utils"
 SODIUM="--passL:$(nix build nixpkgs#libsodium --no-link --print-out-paths)/lib/libsodium.so"
-OPUS="--passL:$(nix build nixpkgs#libopus.out --no-link --print-out-paths)/lib/libopus.so"
+OPUS="--passL:$(nix build "$(tools/builder-nixpkgs.sh)#libopus.out" --no-link --print-out-paths)/lib/libopus.so"   # the .lgx's 1.5.2
 MA="--path:$D/miniaudio"      # C source only: src/audio/miniaudio.nim finds it and compiles it
 nim r -d:release --threads:on $SECP $STINT $SODIUM tests/epoch_crypto_test.nim
 ```

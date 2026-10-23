@@ -1536,7 +1536,13 @@ Basecamp's window. What is unverified, built or planned:
     its `voice` entry among them (S9, above);
   - the Nim UI's `contract_test`;
   - `scripts/grade-specs.sh`, `exo-526` above all: its host probe now links libopus, through
-    `.probe-env/opus`, a path no Mac run takes;
+    `.probe-env/opus`, a path no Mac run takes. Since the final check of PR 340's review fixes
+    it links the builder pin's libopus 1.5.2, the `.lgx`'s, as `run-suite.sh` does
+    (`module/tools/builder-nixpkgs.sh` reads the pin for both): for `x86_64-linux` that
+    evaluates to `/nix/store/mzksc9fpj2hvhvr8ggzqcy0j96fyqr79-libopus-1.5.2`, where it took
+    nixpkgs' current one, `/nix/store/ah26jmgs60s1dzphf0vi4f9pqmlpl9y6-libopus-1.6.1`
+    (`nix eval`, 2026-10-23). Not run: this Mac has no exophial, and the script links
+    `libsodium.so` and `libopus.so`, Linux's names;
   - the Linux plugin links, by `lgx-variants.yml` on the fork (S3 linked darwin-arm64 only).
     Each Linux variant's bundled lib directory must hold `libopus.so.0`, and the plugin's
     `NEEDED` and `RUNPATH` must resolve it. The plugin links libopus at load (on darwin a

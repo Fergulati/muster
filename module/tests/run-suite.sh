@@ -61,33 +61,14 @@ NIMPKGS="$(tools/nim-closure.sh)" || exit 1
 HOST_OS="$(uname -s)"
 SOEXT=so; [ "$HOST_OS" = Darwin ] && SOEXT=dylib
 # The builder's nixpkgs, the one the .lgx is built from (macOS takes its libopus, and with
-# no nim on PATH its nim and clang, from here). The pin is read off a lock, never by
-# evaluating the flake (>7 GB, CLAUDE.md): this directory's flake.lock when there is one,
-# else, since flake.lock is gitignored and a fresh clone has none, the builder's own lock
-# (flake.nix overrides none of the builder's nixpkgs), which `nix flake metadata` fetches
-# without evaluating. `builder_pin` reads it once into NIXPKGS_PIN: call it as a statement,
-# never inside $(…), whose subshell would drop the value.
-# A function, not $(python3 <<'PY' …): bash 3.2 matches quotes inside a heredoc in $(…).
-builder_nixpkgs() {
-  if [ -f flake.lock ]; then cat flake.lock
-  else nix flake metadata "$(grep -o 'github:corpetty/logos-module-builder/[0-9a-f]\{40\}' flake.nix | head -1)" --json 2>/dev/null
-  fi | python3 -c '
-import json, sys
-d = json.load(sys.stdin); lock = d.get("locks", d); nodes = lock["nodes"]
-def node(ref):   # an input is a node name, or a follows path walked from the root
-    if isinstance(ref, str): return ref
-    n = lock["root"]
-    for k in ref: n = node(nodes[n]["inputs"][k])
-    return n
-# the root of flake.lock is this flake, the root of the metadata the builder itself
-lmb = lock["root"] if "locks" in d else node(nodes[lock["root"]]["inputs"]["logos-module-builder"])
-k = nodes[node(nodes[lmb]["inputs"]["nixpkgs"])]["locked"]
-print("github:%s/%s/%s" % (k["owner"], k["repo"], k["rev"]))'
-}
+# no nim on PATH its nim and clang, from here), read off a lock by tools/builder-nixpkgs.sh,
+# never by evaluating the flake (>7 GB, CLAUDE.md); scripts/grade-specs.sh reads it the same
+# way. `builder_pin` reads it once into NIXPKGS_PIN: call it as a statement, never inside
+# $(…), whose subshell would drop the value.
 NIXPKGS_PIN=""
 builder_pin() {
   [ -n "$NIXPKGS_PIN" ] && return 0
-  NIXPKGS_PIN="$(builder_nixpkgs)"
+  NIXPKGS_PIN="$(tools/builder-nixpkgs.sh)" || NIXPKGS_PIN=""
   [ -n "$NIXPKGS_PIN" ] || { echo "the builder's nixpkgs pin could not be read (flake.lock, or the builder's own lock)"; exit 1; }
 }
 # libopus (the voice codec, docs/design/voice-notes.md §3.1), the one the .lgx ships, on both
