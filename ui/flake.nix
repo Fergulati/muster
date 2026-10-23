@@ -142,10 +142,15 @@
 
       base = uiWith ./metadata.json;
       # The runner's muster_ui: the same, with lez_msig_module among its dependencies, because
-      # the builder puts only `dependencies` in the runner's module set (exo-e77).
-      runnerUi = uiWith (builtins.toFile "metadata.json" (builtins.toJSON (
+      # the builder puts only `dependencies` in the runner's module set (exo-e77). It is a file
+      # beside metadata.json, because the runner reads the icon relative to it; evaluation
+      # refuses it unless it is metadata.json plus lez_msig_module, so the two never drift.
+      runnerUi =
         let cfg = builtins.fromJSON (builtins.readFile ./metadata.json);
-        in cfg // { dependencies = cfg.dependencies ++ [ "lez_msig_module" ]; })));
+            runnerCfg = builtins.fromJSON (builtins.readFile ./metadata.runner.json);
+        in if runnerCfg == cfg // { dependencies = cfg.dependencies ++ [ "lez_msig_module" ]; }
+           then uiWith ./metadata.runner.json
+           else throw "ui/metadata.runner.json must be ui/metadata.json with lez_msig_module appended to dependencies";
 
       nixpkgs = logos-module-builder.inputs.nixpkgs;
 

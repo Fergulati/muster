@@ -152,6 +152,7 @@ MOD=$(nix build "git+file://$ROOT?dir=module#lgx-portable" "${SUB[@]}" --no-eval
   || { echo "module build failed; see $WORK/build-module.log" >&2; exit 1; }
 UI=$(nix build "git+file://$ROOT?dir=ui#lgx-portable" "${SUB[@]}" --no-eval-cache \
         --override-input muster_module "git+file://$ROOT?dir=module" \
+        --override-input lez_msig_module "git+file://$ROOT?dir=programs/lez-msig" \
         --no-link --print-out-paths 2>"$WORK/build-ui.log" | tail -1) \
   || { echo "ui build failed; see $WORK/build-ui.log" >&2; exit 1; }
 fi
