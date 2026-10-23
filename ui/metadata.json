@@ -80,6 +80,12 @@
     },
     {
       "intent": "monero.accounts.manage"
+    },
+    {
+      "intent": "basecamp.apps.launch"
+    },
+    {
+      "intent": "monero.wallet.send"
     }
   ]
 }

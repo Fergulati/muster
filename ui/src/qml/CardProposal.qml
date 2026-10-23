@@ -288,18 +288,46 @@ ColumnLayout {
                 LogosText {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: cardRoot.partState(modelData)
-                    color: modelData.confirmed ? Theme.palette.success
+                    // while Mark received is armed: what pressing it again does
+                    text: markRow.armed
+                          ? (cardRoot.isXmr
+                             ? qsTr("Your word, with no wallet check: the share counts as paid and can't be paid through the room after.")
+                             : qsTr("Your word, with no check: the share counts as paid and can't be paid through the room after."))
+                          : cardRoot.partState(modelData)
+                    color: markRow.armed ? Theme.palette.warning
+                         : modelData.confirmed ? Theme.palette.success
                          : modelData.settled ? Theme.palette.textSecondary : Theme.palette.textTertiary
                     font.pixelSize: MusterStyle.cardCaption
                 }
-                // the creditor's word: a share paid in cash, or anywhere muster cannot see
-                ActionButton {
-                    objectName: "cardMarkReceived"
+                // the creditor's word: a share paid in cash, or anywhere muster cannot see.
+                // It ends the share for good, so it takes a second press. On Monero the
+                // creditor's own wallet confirms on its own, so it is offered only once the
+                // payer has said they paid: before that there is nothing to have received,
+                // and marking it would close the payment unpaid.
+                RowLayout {
+                    id: markRow
+                    property bool armed: false
                     visible: cardRoot.iAmCreditor && cardRoot.ready && !cardRoot.paid && !modelData.confirmed
-                    text: qsTr("Mark received")
-                    variant: LogosButton.Variant.Secondary
-                    onClicked: cardRoot.confirmPart(String(modelData.part || ""))
+                             && (!cardRoot.isXmr || !!modelData.settled)
+                    spacing: Theme.spacing.tiny
+                    ActionButton {
+                        objectName: "cardMarkReceived"
+                        text: markRow.armed ? qsTr("Yes, I have it") : qsTr("Mark received")
+                        variant: markRow.armed ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                        onClicked: {
+                            if (!markRow.armed) { markRow.armed = true; markDisarm.restart(); return; }
+                            markRow.armed = false;
+                            cardRoot.confirmPart(String(modelData.part || ""));
+                        }
+                    }
+                    ActionButton {
+                        objectName: "cardMarkReceivedCancel"
+                        visible: markRow.armed
+                        text: qsTr("Cancel")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: markRow.armed = false
+                    }
+                    Timer { id: markDisarm; interval: 15000; onTriggered: markRow.armed = false }
                 }
             }
         }
@@ -428,7 +456,10 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
                 text: {
                     var p = xmrPayBox.pay;
-                    if (p.confirmed) return qsTr("✓ %1's wallet confirmed your payment.").arg(cardRoot.creditorName);
+                    if (p.confirmed)
+                        return String((cardRoot.myPart && cardRoot.myPart.tx) || "").length > 0
+                               ? qsTr("✓ %1's wallet confirmed your payment.").arg(cardRoot.creditorName)
+                               : qsTr("✓ %1 marked it received.").arg(cardRoot.creditorName);
                     if (p.reported)
                         return qsTr("You said you paid. %1's own wallet confirms it once it has %2 confirmations (about 20 minutes).")
                                .arg(cardRoot.creditorName).arg(cardRoot.xmrDepth);
@@ -487,12 +518,11 @@ ColumnLayout {
                     TextEdit { id: clip; visible: false; width: 0; height: 0 }
                     Timer { id: copiedReset; interval: 1500; onTriggered: copyLink.copied = false }
                 }
-                // Pay with Basecamp's own Monero Wallet: copy the address, then bring the
-                // wallet app up, where the person sends. Its Send form takes an address
-                // and an amount, not a monero: link (monero_wallet_ui 0.1.1), so the two
-                // go across separately. Muster still sends nothing and approves nothing
-                // (ADR-018); a review of a send Muster prepared waits on the wallet app
-                // (exo-dcc.6).
+                // Pay with Basecamp's own Monero Wallet: ask it to fill its Send tab with the
+                // agreed address and amount (monero.wallet.send); the person checks them and
+                // sends there. A wallet without that intent (0.1.1) is brought up on its own
+                // view instead, and the two go across by hand. The address is copied either
+                // way. Muster still sends nothing and approves nothing (ADR-018).
                 ActionButton {
                     objectName: "cardXmrPayWithWallet"
                     text: qsTr("Pay with Monero Wallet")
@@ -501,7 +531,7 @@ ColumnLayout {
                         clip.selectAll();
                         clip.copy();
                         xmrPayBox.walletAsked = true;
-                        cardRoot.openMoneroWallet("");
+                        cardRoot.presentMoneroWallet(String(xmrPayBox.pay.payTo || ""), cardRoot.eth(xmrPayBox.pay.amount));
                     }
                 }
                 ActionButton {
@@ -524,8 +554,11 @@ ColumnLayout {
                 wrapMode: Text.WordWrap
                 // the steps always; the wallet's answer too when it did not simply open
                 text: {
-                    var steps = qsTr("The address is copied. In Monero Wallet, open Send, paste it as the address and enter exactly %1 XMR (Copy amount puts it on the clipboard). Send from there, then come back and press I paid.")
-                                .arg(cardRoot.eth(xmrPayBox.pay.amount));
+                    var steps = cardRoot.moneroWalletFilled
+                        ? qsTr("Monero Wallet's Send is filled in with %1's address and %2 XMR. Check both there, send, then come back and press I paid.")
+                              .arg(cardRoot.creditorName).arg(cardRoot.eth(xmrPayBox.pay.amount))
+                        : qsTr("The address is copied. If Monero Wallet's Send isn't filled in, paste the address there and enter exactly %1 XMR (Copy amount puts it on the clipboard). Send from there, then come back and press I paid.")
+                              .arg(cardRoot.eth(xmrPayBox.pay.amount));
                     var n = cardRoot.moneroWalletNote;
                     return (n.length > 0 && n.indexOf(qsTr("Monero Wallet is open")) !== 0 && n !== qsTr("Your Monero wallet is open."))
                            ? steps + "\n" + n : steps;

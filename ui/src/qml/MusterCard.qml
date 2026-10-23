@@ -399,6 +399,11 @@ Rectangle {
     // moneroWalletNote, "" = nothing asked).
     signal reportPaid(string tx)
     signal openMoneroWallet(string wallet)
+    // pay from Monero Wallet: its Send filled in with this address and amount
+    // (monero.wallet.send), or, a wallet without that, brought up on its own view
+    // (basecamp.apps.launch) — never its accounts or Settings, which monero.accounts.manage opens
+    signal presentMoneroWallet(string address, string amount)
+    property bool moneroWalletFilled: false   // the last pay request filled Monero Wallet's Send
     property string moneroWalletNote: ""
     readonly property var xmr: (cardRoot.split && cardRoot.split.xmr) ? cardRoot.split.xmr : null
     // A Monero multisig spend's progress (ADR-020): {intentId, state, signers, synced, signed,

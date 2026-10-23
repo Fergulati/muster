@@ -624,6 +624,9 @@ ColumnLayout {
                                      ? qsTr("Sent to %1, the address %2 shared. You pay once %2 accepts it is theirs.")
                                      : qsTr("Paid to %1, the address %2 shared. Nobody pays until %2 agrees it is theirs."))
                                         .arg(addr).arg(room.memberLabel(room.splitFor))
+                                  : room.splitForAddressUsed
+                                  ? qsTr("⚠ The Monero address %1 shared already backs a payment here, and one address can't tell two payments apart: ask them for a new one.")
+                                        .arg(room.memberLabel(room.splitFor))
                                   : room.splitMonero
                                   ? (room.splitSend
                                      ? qsTr("⚠ %1 hasn't shared a Monero address on %2: ask them for one, then send.")
@@ -644,7 +647,8 @@ ColumnLayout {
                             objectName: "roomAskMoneroAddress"
                             visible: room.splitMonero && room.splitFor.length > 0 && room.splitForAddress.length === 0 && !room.acrossOpen
                             Layout.preferredWidth: 360
-                            text: qsTr("Ask %1 for a Monero address").arg(room.memberLabel(room.splitFor))
+                            text: (room.splitForAddressUsed ? qsTr("Ask %1 for a new Monero address")
+                                                             : qsTr("Ask %1 for a Monero address")).arg(room.memberLabel(room.splitFor))
                             variant: LogosButton.Variant.Secondary
                             onClicked: {
                                 if (!room.backend) return;

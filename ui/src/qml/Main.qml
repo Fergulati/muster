@@ -901,6 +901,7 @@ Item {
         // open the Monero wallet (exo-dcc.5): the same, for monero.wallet.unlock / manage
         moneroWallet: root.moneroWallet
         onMoneroWalletRequested: function (wallet) { root.openMoneroWallet(wallet); }
+        onMoneroWalletPresentRequested: function (address, amount) { root.payWithMoneroWallet(address, amount); }
         objectName: "roomSurface"
         anchors.top: contentArea.top
         anchors.left: contentArea.left
@@ -1143,6 +1144,46 @@ Item {
         if (!root.canRaiseIntents) { finish({ ok: false, error: "unavailable" }); return; }
         root.moneroWallet = { intent: intent, wallet: w, state: "asking", error: "", at: Date.now() };
         try { logos.request(intent, w.length > 0 ? { wallet: w } : ({}), finish); }
+        catch (x) { finish({ ok: false, error: "unavailable" }); }
+    }
+    // Pay from Monero Wallet: ask it to fill its Send tab with the address and amount
+    // (monero.wallet.send, which the person reviews and sends there: nothing is sent by the
+    // request). A wallet that doesn't provide it answers unavailable (Monero Wallet 0.1.1 and
+    // older); then the wallet is brought up on its own view and the card's steps say what
+    // to type. A refusal from the wallet itself (view-only, a send already on screen) is
+    // shown as its own reason. The card copies the address either way.
+    function payWithMoneroWallet(address, amount) {
+        var intent = "monero.wallet.send";
+        var finish = function (res) {
+            var e = String((res && res.error) || "");
+            var ok = !!(res && res.ok);
+            if (!ok && (e === "unavailable" || e === "not_declared" || e === "bad_request" || e === "timeout")) {
+                root.presentMoneroWallet();   // no provider, or one that can't take this: open it
+                return;
+            }
+            root.moneroWallet = { intent: intent, wallet: "", error: e, at: Date.now(),
+                                  state: ok ? "open" : e === "cancelled" ? e : e.length > 0 ? "failed" : "error" };
+        };
+        if (!root.canRaiseIntents) { finish({ ok: false, error: "unavailable" }); return; }
+        root.moneroWallet = { intent: intent, wallet: "", state: "asking", error: "", at: Date.now() };
+        try { logos.request(intent, { address: String(address || ""), amount: String(amount || "") }, finish); }
+        catch (x) { finish({ ok: false, error: "unavailable" }); }
+    }
+    // Bring Monero Wallet up on its own view to pay from it: the shell's basecamp.apps.launch,
+    // a navigation with no consent dialog, which answers ok whether or not the app is there
+    // (it offers the install itself). The fallback when the wallet can't be filled in.
+    function presentMoneroWallet() {
+        var intent = "basecamp.apps.launch";
+        var finish = function (res) {
+            var e = String((res && res.error) || "");
+            var ok = !!(res && res.ok);
+            root.moneroWallet = { intent: intent, wallet: "", error: e, at: Date.now(),
+                                  state: ok ? "open" : (e === "unavailable" || e === "cancelled") ? e
+                                         : e.length > 0 ? "failed" : "error" };
+        };
+        if (!root.canRaiseIntents) { finish({ ok: false, error: "unavailable" }); return; }
+        root.moneroWallet = { intent: intent, wallet: "", state: "asking", error: "", at: Date.now() };
+        try { logos.request(intent, { app: "monero_wallet_ui" }, finish); }
         catch (x) { finish({ ok: false, error: "unavailable" }); }
     }
     // Show the package in Package Manager (packages.show): offered when the install

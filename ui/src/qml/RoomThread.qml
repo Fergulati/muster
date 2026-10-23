@@ -220,6 +220,8 @@ Rectangle {
                             room.backend.reportPaid(String(msg.liveIntent.id || ""), tx);
                     }
                     onOpenMoneroWallet: function (wallet) { room.moneroWalletRequested(wallet); }
+                    onPresentMoneroWallet: function (address, amount) { room.moneroWalletPresentRequested(address, amount); }
+                    moneroWalletFilled: room.moneroWalletFilled()
                     moneroWalletNote: room.moneroWalletNote()
                     splitNote: (room.splitResult && room.splitResult.id && msg.liveIntent
                                 && String(room.splitResult.id) === String(msg.liveIntent.id || "")
