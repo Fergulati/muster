@@ -355,7 +355,15 @@ Item {
     // named) or monero.accounts.manage, and the answer comes back in moneroWallet:
     // {intent, wallet, state: asking|open|unavailable|failed|cancelled|error, error, at}.
     signal moneroWalletRequested(string wallet)
-    signal moneroWalletPresentRequested()   // bring Monero Wallet up to pay from it (basecamp.apps.launch)
+    // pay from Monero Wallet: Send filled in (monero.wallet.send), else the wallet brought up
+    signal moneroWalletPresentRequested(string address, string amount)
+    // whether the last pay request filled Monero Wallet's Send (and is still current)
+    function moneroWalletFilled() {
+        var r = room.moneroWallet || {};
+        var at = Number(r.at || 0);
+        return String(r.intent || "") === "monero.wallet.send" && String(r.state || "") === "open"
+               && room.moneroStateAt <= at && room.moneroNow - at <= 120000;
+    }
     property var moneroWallet: ({})
     // When the state a wallet note describes last changed (exo-dcc.20): a newer split or
     // share answer, or a Monero request's wallet state in the projection. A note older
@@ -391,6 +399,14 @@ Item {
         // the shell answers a launch the same way whether or not the app is there (it offers
         // the install itself): the card's own steps say what to do next
         if (String(r.intent || "") === "basecamp.apps.launch") return "";
+        // a filled Send: the card says what to check; a refusal is the wallet's own reason
+        if (String(r.intent || "") === "monero.wallet.send") {
+            if (st === "open") return "";
+            if (String(r.error || "") === "view-only wallet")
+                return qsTr("The wallet open in Monero Wallet is view-only: it can't send. Open a wallet that can.");
+            if (String(r.error || "") === "busy")
+                return qsTr("Monero Wallet has a send on screen already: finish or cancel it there, then try again.");
+        }
         if (st === "open")
             return String(r.intent || "") === "monero.wallet.unlock"
                    ? qsTr("Your Monero wallet is open.")
