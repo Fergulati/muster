@@ -16,9 +16,8 @@
 #
 # Env: MUSTER_NIMPKGS (closure dir, default ~/.cache/muster/nimpkgs; tools/nim-closure.sh
 # fills it on first run), MUSTER_SODIUM (libsodium prefix; unset: nixpkgs' libsodium, built
-# with nixpkgs' gcc), MUSTER_OPUS (libopus prefix, the voice codec's; unset: on macOS the
-# builder pin's libopus, the .lgx's; on Linux nixpkgs', from the same nix build as libsodium
-# and the gcc; required beside MUSTER_SODIUM on Linux), JOBS (default 8),
+# with nixpkgs' gcc), MUSTER_OPUS (libopus prefix, the voice codec's; unset: the builder
+# pin's libopus, the .lgx's, on either OS; required beside MUSTER_SODIUM on Linux), JOBS (default 8),
 # TEST_TIMEOUT (seconds per test, default 900), OUT (log dir, default a fresh mktemp).
 # TEST_ARGS (appended to each selected test's command line — an e2e test's own
 # arguments, e.g. TEST_ARGS="$SAFE" for coordinate_submit_anvil; see tests/README.md).
@@ -91,29 +90,33 @@ builder_pin() {
   NIXPKGS_PIN="$(builder_nixpkgs)"
   [ -n "$NIXPKGS_PIN" ] || { echo "the builder's nixpkgs pin could not be read (flake.lock, or the builder's own lock)"; exit 1; }
 }
-# libopus (the voice codec, docs/design/voice-notes.md §3.1), the one the .lgx ships where the
-# host allows it. macOS: nixpkgs#libopus at the builder's pin (metadata.json's
-# nix.packages.runtime "libopus", 1.5.2 at e9f00bd), so the codec test runs on the shipping
-# codec. Linux: as libsodium, from the one nix build with the gcc, so it shares that gcc's
-# glibc (nixpkgs' current libopus, not the pin's); a host libsodium means the host's
-# compiler, which cannot link nixpkgs' glibc, so MUSTER_SODIUM needs a host MUSTER_OPUS beside
-# it. MUSTER_OPUS picks any other prefix on either OS; voice_codec_test prints the version.
+# libopus (the voice codec, docs/design/voice-notes.md §3.1), the one the .lgx ships, on both
+# OSes: nixpkgs#libopus at the builder's pin (metadata.json's nix.packages.runtime "libopus",
+# 1.5.2 at e9f00bd), so the codec test runs on the shipping codec. Linux took nixpkgs' current
+# one (1.6.1) until PR 340's review, from the build with the gcc, for that gcc's glibc. The
+# pin's runs under that gcc too: its libopus.so.0 needs only libc.so.6 and libm.so.6, at
+# GLIBC_2.2.5 to GLIBC_2.29, and was built on glibc 2.40, older than the gcc's (2.44 on
+# 2026-10-23), and glibc runs what an older one built; a test links libc and libm itself
+# (Nim's std/math, which strutils imports, passes -lm), so the gcc's glibc is the one loaded
+# before libopus's RUNPATH is read. Read off the cache's ELF and evaluated for x86_64-linux;
+# not yet run on Linux. A host libsodium means the host's compiler, which cannot link nixpkgs'
+# glibc, so MUSTER_SODIUM needs a host MUSTER_OPUS beside it. MUSTER_OPUS picks any other
+# prefix on either OS; voice_codec_test §1 prints the version it ran on.
 if [ -n "${MUSTER_SODIUM:-}" ]; then
   SODIUM="$MUSTER_SODIUM"
   [ "$HOST_OS" = Darwin ] || [ -n "${MUSTER_OPUS:-}" ] || { echo "MUSTER_SODIUM is set: set MUSTER_OPUS too (the host's compiler cannot link nixpkgs' libopus)"; exit 1; }
 elif [ "$HOST_OS" = Darwin ]; then
   SODIUM="$(nix build nixpkgs#libsodium.out --no-link --print-out-paths 2>/dev/null | tail -1)"
 else
-  { read -r SODIUM; read -r NIXGCC; read -r NIXOPUS; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out nixpkgs#libopus.out --no-link --print-out-paths 2>/dev/null)
+  { read -r SODIUM; read -r NIXGCC; } < <(nix build nixpkgs#libsodium.out nixpkgs#gcc.out --no-link --print-out-paths 2>/dev/null)
   [ -n "${NIXGCC:-}" ] && [ -x "$NIXGCC/bin/gcc" ] || { echo "nixpkgs#gcc not found (set MUSTER_SODIUM to use the host's compiler)"; exit 1; }
   export PATH="$NIXGCC/bin:$PATH"
 fi
 [ -f "$SODIUM/lib/libsodium.$SOEXT" ] || { echo "libsodium not found (set MUSTER_SODIUM)"; exit 1; }
 if [ -n "${MUSTER_OPUS:-}" ]; then OPUS="$MUSTER_OPUS"
-elif [ "$HOST_OS" = Darwin ]; then
+else
   builder_pin
   OPUS="$(nix build "$NIXPKGS_PIN#libopus.out" --no-link --print-out-paths 2>/dev/null | tail -1)"
-else OPUS="${NIXOPUS:-}"
 fi
 [ -f "$OPUS/lib/libopus.$SOEXT" ] || { echo "libopus not found (set MUSTER_OPUS)"; exit 1; }
 # macOS with no nim on PATH: the nim and the clang the .lgx compiles with. Its

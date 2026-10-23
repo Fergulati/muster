@@ -1030,18 +1030,42 @@ never the module thread.
 
 ## 12. Linux
 
-All of this is unverified, because there is no Linux host here.
-- **What miniaudio loads.** It dlopens `libpulse.so` or `libpulse.so.0`, and
-  `libasound.so.2`. PipeWire answers through `pipewire-pulse`.
-- **Portable `.lgx` and the AppImage.** `logos_host` uses the system loader, so the distro's
-  libraries should resolve (inferred).
-- **A nix-built dev runner.** Nix glibc's loader does not read `/etc/ld.so.cache`, so a dlopen
-  by soname may find nothing. The system backend then reports `no-device`; it never records
-  silence, because Null is not on its list.
-  - The fix to try: `libpulseaudio` in `nix.packages.runtime`, so its lib dir joins RUNPATH.
+There is no Linux host here. What ran on Linux is the maintainer's, in PR 340's review
+(x86_64, at `bbae7d8`):
+- **The module suite:** `module/tests/run-suite.sh` gave 285 passed, 0 failed, among them
+  `voice_clip_test`, `voice_codec_test`, `audio_io_test`, `audio_io_null_test`,
+  `session_pad_test`, `voice_test`, `voice_live_test` and the three voice stepper probes. That
+  run linked nixpkgs' libopus 1.6.1, as run-suite then did on Linux; it links the builder
+  pin's 1.5.2 there since the review (§15), and that has not run on Linux.
+- **The package loads.** In the fork's `lgx variants` run (39776903474), `linux-amd64` carries
+  `libopus.so.0` beside the plugin with RPATH `$ORIGIN`, and `ldd` resolves every library the
+  plugin needs, libopus from the package itself, against the Qt in Basecamp 0.3.2's AppImage.
+  So a missing codec does not take down `muster_module` there.
+
+**The devices, as the code behaves today** (read from the code and the review, not run):
+- **What miniaudio loads.** `abSystem` lists PulseAudio, then ALSA, and never Null (§9). At a
+  Record or a Play, on the start thread, miniaudio dlopens `libpulse.so` or `libpulse.so.0`,
+  then `libasound.so.2`, by soname. PipeWire answers through `pipewire-pulse`, where that is
+  installed. No permission prompt is involved on Linux.
+- **A nix-built runner** (`make run`, the self-tests): nix's glibc does not read
+  `/etc/ld.so.cache`, so a dlopen by soname likely finds neither library, and the review
+  expects `make run` to report no device. Then Record answers `{ok}` at once, `voice_status`
+  says `starting`, and the next pump ends the recording idle with `recording.error` and
+  `ready.capture` both `no-device`; the room says "No microphone was found on this device."
+  Play ends the same way: "No speaker was found on this device." Nothing records zeros, since
+  Null is not on the list: such a machine refuses with the device word, and never makes a
+  silent note for Send's `silent` to refuse.
+  - The fix to try: `libpulseaudio` in `nix.packages.runtime`, so its lib dir joins the
+    plugin's RUNPATH, which a dlopen from the plugin searches.
   - The list is flat, so it would enter the darwin closure too.
   - A runner that drops nim.link libraries from RUNPATH has bitten before
     (`docs/labbook/nim-cdylib-modules-cannot-load-in-basecamp-sdk-skew.md`).
+- **Inside Basecamp's AppImage**, with the portable `.lgx`: unverified. If `logos_host` there
+  runs on the system's loader, which reads `/etc/ld.so.cache`, the distro's `libpulse.so.0` or
+  `libasound.so.2` resolves (inferred, not checked); no Record or Play has run in it, so
+  whether a device opens there, and in which format, is not known.
+- **Not known either:** a PipeWire host without `pipewire-pulse`, an ALSA-only host, and
+  whether every device on them reads back as 48 kHz mono s16 (`device-format` otherwise).
 
 ## 13. Co-resident callers, with the access policy off
 
@@ -1120,8 +1144,8 @@ unverified, built or planned:
   real `logos-module-builder` derivation since: S3 built the `.lgx` (`nix build
   .#lgx-portable`, miniaudio compiled in through `{.compile.}`, `nm` showing `T
   _ma_context_init`), `voice_codec_test` holds the 40 B packets on the shipping libopus
-  1.5.2, and S7's `.lgx` ran the null backend in `logos_host` (below). None of it has run on
-  Linux.
+  1.5.2, and S7's `.lgx` ran the null backend in `logos_host` (below). On Linux the
+  maintainer's run of the module suite has, on libopus 1.6.1, and the package's load (§12).
 - **A real microphone in a person's Basecamp.** Observed on 2026-10-22 at `bbae7d8` (§11): in
   Basecamp 0.3.2 launched as the Dock launches it, `logos_host` survives `voice_record_start`,
   tccd disallows the prompt because the audio-input entitlement is missing ("Policy disallows
@@ -1187,8 +1211,18 @@ unverified, built or planned:
   closed by the first `voice_status`), and a finished playback keeps the speaker open. A
   device-side stop (a watchdog thread that calls `ma_device_stop` once `capped` or `done` is
   set) is not built.
-- **Linux dlopen** of `libpulse` and `libasound`, from a portable `.lgx`, the AppImage and a
-  nix-built runner; and PipeWire.
+- **Linux devices** (§12): miniaudio's dlopen of `libpulse` and `libasound` from a nix-built
+  runner (the review expects no device, and the code then refuses `no-device`), from the
+  portable `.lgx` inside Basecamp's AppImage, and PipeWire. None has run.
+- **The suite's libopus on Linux.** Since PR 340's review `run-suite.sh` links the builder
+  pin's libopus 1.5.2 on Linux too, the one the `.lgx` ships, where it linked nixpkgs' 1.6.1:
+  for `x86_64-linux` the pin's `libopus.out` evaluates to
+  `/nix/store/39jlnb9vgammhav2skbf3dvkbciqsh14-libopus-1.5.2.drv`, built on glibc 2.40-66,
+  under nixpkgs' gcc on glibc 2.44-25. Its `libopus.so.0`, read from cache.nixos.org, needs
+  only `libm.so.6` and `libc.so.6`, at `GLIBC_2.2.5` to `GLIBC_2.29`, with RUNPATH the pin's
+  glibc; a test links libc and libm itself (Nim's `std/math`, which `strutils` imports, passes
+  `-lm`), so the gcc's glibc is the one loaded. That is read and evaluated, not run on Linux:
+  `voice_codec_test` §1 prints the version a run used.
 - **Delivery of two 90,153 B frames:**
   - over the live fleet, past one headless run on `logos.dev` (below), which ran the module
     from before `publishTogether` sends the two back to back;
@@ -1432,7 +1466,11 @@ unverified, built or planned:
     `NEEDED` and `RUNPATH` must resolve it. The plugin links libopus at load (on darwin a
     plain, non-weak `@loader_path/./libopus.0.dylib`), so a variant without it fails all of
     `muster_module` to load, not only voice. `dlopen`, `dlsym` and `dlclose` must resolve from
-    glibc there.
+    glibc there. **`linux-amd64` is checked**, by the maintainer in PR 340's review (§12):
+    `libopus.so.0` beside the plugin, RPATH `$ORIGIN`, every `NEEDED` resolved against the Qt
+    in Basecamp 0.3.2's AppImage. `linux-arm64` is not named there;
+  - the module suite on Linux since the review: its libopus (above), and the run-suite rule
+    that only a test in the E2E list may skip (§17 S11).
 
 ## 16. Invariants, checked
 
@@ -1454,7 +1492,8 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
 
 - **S0 — this document** (TDD-Exempt: docs).
 - **S1 — The Opus binding, the clip record, the codec.** `audio/opus.nim`, `voice_clip.nim`
-  (pure CDE), `voice_codec.nim`, plus libopus in `metadata.json` and `run-suite.sh`. Tests:
+  (pure CDE), `voice_codec.nim`, plus libopus in `metadata.json` and `run-suite.sh` (the
+  builder pin's 1.5.2, the `.lgx`'s, on macOS and, since PR 340's review, on Linux: §15). Tests:
   `voice_clip_test` and `voice_codec_test`. The ctl read-back is the arm64 guard. It tells a
   fixed-arity binding from a varargs one only on darwin-arm64, so it must run on this Mac. On
   Linux it cannot tell the two apart (§3.1).

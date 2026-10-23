@@ -120,8 +120,9 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   lands, and a watchdog thread ends the test when it has not landed after 20 s, or a stop
   or close has not returned after 10 s.
 - Tests: `module/tests/voice_clip_test.nim` (pure), `module/tests/voice_codec_test.nim`
-  (libopus; `run-suite.sh` links the builder pin's on macOS, the .lgx's 1.5.2, and nixpkgs'
-  beside libsodium on Linux; `MUSTER_OPUS` picks another; §1 prints the version),
+  (libopus; `run-suite.sh` links the builder pin's, the .lgx's 1.5.2, on macOS and, since PR
+  340's review, on Linux, not yet run there; `MUSTER_OPUS` picks another; §1 prints the
+  version),
   `module/tests/audio_io_test.nim` (the seam with no device; §7–§9 a start held by a
   `StartGate`: stopped after the pump saw it run, let go, returned before any pump saw it
   (§8b), failed, the in-flight cap, the buffers counted),

@@ -196,8 +196,14 @@ at; psbt strips only the ends.
   1.6.1 at `/nix/store/n6gds98gifgs65vfr987j84jgh543rsa-libopus-1.6.1`.
 
 **Still open.**
-- On Linux the suite still links nixpkgs' current libopus, 1.6.1. It has to share nixpkgs
-  gcc's glibc with libsodium.
+- ~~On Linux the suite still links nixpkgs' current libopus, 1.6.1. It has to share nixpkgs
+  gcc's glibc with libsodium.~~ Since PR 340's review (its nit) it links the pin's 1.5.2 on
+  Linux too. The pin's `libopus.so.0` needs only `libc.so.6` and `libm.so.6`, at `GLIBC_2.2.5`
+  to `GLIBC_2.29`; it was built on glibc 2.40, older than nixpkgs gcc's 2.44, and a test loads
+  the gcc's libc and libm itself (Nim's `std/math` passes `-lm`) before libopus's RUNPATH is
+  read. Read off cache.nixos.org's copy of the ELF and evaluated for `x86_64-linux` (the pin's
+  `libopus.out` is `39jlnb9v…-libopus-1.5.2.drv`); not yet run on Linux.
+  `scripts/grade-specs.sh` still takes nixpkgs' libopus for exo-526's host probe.
 - A run with `MUSTER_SODIUM` set and no `MUSTER_OPUS` stops, rather than link nixpkgs'
   libopus under the host compiler.
 - The version is printed, not asserted: no test fails on the wrong one.

@@ -15,9 +15,10 @@ tests/run-suite.sh e2e <name>       # one chain-bound test, by name (below)
 The runner materializes the Nim closure at the revs `../metadata.json` pins
 (`codegen.nim.packages`) with [`../tools/nim-closure.sh`](../tools/nim-closure.sh),
 into `~/.cache/muster/nimpkgs`, so a local run compiles against the same sources the
-`.lgx` does. It takes libsodium from nixpkgs, libopus from the builder's nixpkgs on macOS
-(the one the `.lgx` ships) and from nixpkgs beside libsodium on Linux (and, for the
-host-return probe, secp256k1 and `g++`), and builds every test with one flag set: the
+`.lgx` does. It takes libsodium from nixpkgs, libopus from the builder's nixpkgs, the one
+the `.lgx` ships, 1.5.2 (on Linux too since PR 340's review, where it had linked nixpkgs'
+1.6.1; not yet run there, and `run-suite.sh` says why the pin's runs under nixpkgs' gcc),
+and, for the host-return probe, secp256k1 and `g++`. It builds every test with one flag set: the
 union of the `$SECP`, `$STINT`, web3, SDK, libsodium, libopus and miniaudio flags below. An extra
 `--path` is harmless to a pure-Nim test. Each test's log lands in `$OUT` (a fresh temp
 dir unless set), and the summary names every failure. Env: `JOBS` (8), `TEST_TIMEOUT` (900 s),
