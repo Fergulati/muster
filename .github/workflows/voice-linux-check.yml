@@ -108,7 +108,13 @@ jobs:
         with:
           fetch-depth: 0
       - uses: logos-co/setup-nix-cache-action@781f072122f4df6af0e33a7d355ebd20283e019e # v1.2.0
+      # The self-test's verdict on lines cut from an earlier Linux run, with no runner: the
+      # reading of ui-host's quoted, cut relay that made run 39836679442 say "played: 0".
+      - name: The self-test's verdict on recorded logs
+        shell: bash
+        run: python3 scripts/tests/voice-self-test-replay.py
       - name: Build the standalone runner
+        if: always()
         shell: bash
         run: BUILD_MEM= make build
       - name: voice-self-test.sh on the logos.dev fleet
