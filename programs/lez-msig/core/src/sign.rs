@@ -22,7 +22,11 @@ impl Signer {
     pub fn sign(&self, msg: &Key) -> Signed {
         let mut aux = [0u8; 32];
         rand_core::RngCore::fill_bytes(&mut rand_core::OsRng, &mut aux);
-        let sig = self.0.sign_raw(msg, &aux).expect("BIP-340 signing");
+        self.sign_with_aux(msg, &aux)
+    }
+    /// BIP-340 with the given auxiliary randomness: deterministic, for test vectors.
+    pub fn sign_with_aux(&self, msg: &Key, aux: &[u8; 32]) -> Signed {
+        let sig = self.0.sign_raw(msg, aux).expect("BIP-340 signing");
         Signed { key: self.key(), sig: sig.to_bytes() }
     }
     pub fn approve(&self, p: &Proposal) -> Signed {

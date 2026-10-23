@@ -5,7 +5,7 @@
 #   host     msig_host — the client: build, sign, send, prove; and the tests on LEE's state
 [workspace]
 resolver = "2"
-members = ["core", "v03", "methods"]
+members = ["core", "v03", "methods", "host"]
 exclude = ["methods/guest"]
 
 [workspace.package]
@@ -19,4 +19,5 @@ borsh = { version = "1.5.7", features = ["derive"] }
 # LEZ at the tag the local zone (infra/lez/localnet.sh) and muster's pins run.
 lee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.3.0" }
 lee = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.3.0" }
-risc0-build = "3.0.5"
+risc0-build = "=3.0.5"
+key_protocol = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.3.0" }

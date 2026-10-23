@@ -1,0 +1,18 @@
+[package]
+name = "msig_host"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The lez-msig client: the multisig's account at its placement, transactions for both postures, and its decrypted state."
+
+[dependencies]
+msig_core = { workspace = true, features = ["signing"] }
+msig_v03.workspace = true
+msig_methods = { path = "../methods" }
+lee.workspace = true
+lee_core = { workspace = true, features = ["host"] }
+key_protocol.workspace = true
+borsh.workspace = true
+
+[dev-dependencies]
+rand = "0.8"
