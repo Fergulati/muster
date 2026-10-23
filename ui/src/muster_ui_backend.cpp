@@ -1486,12 +1486,18 @@ void MusterUiBackend::onContextReady()
                 // this payment"); MUSTER_AUTOMSIG_APPROVE approves every lez-msig intent this
                 // member has not (the card's Approve); MUSTER_AUTOMSIG_SETTLE settles each once
                 // it is executable (the card's Settle on-chain). Logged each tick as MSIG.
+                // The private posture (exo-efa): MUSTER_AUTOMSIG_PRIVATE opens it private (the
+                // panel's "Create a private…"); MUSTER_AUTOMSIG_FUND=<amount> deposits that much
+                // from this member's own account once the private account is disclosed (the
+                // panel's "Put in from my account").
                 const QString msigOpenK = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_OPEN"));
+                const bool msigPrivate = !qgetenv("MUSTER_AUTOMSIG_PRIVATE").isEmpty();
+                const QString msigFund = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_FUND"));
                 const QString msigPay = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_PAY"));
                 const bool msigApprove = !qgetenv("MUSTER_AUTOMSIG_APPROVE").isEmpty();
                 const bool msigSettle = !qgetenv("MUSTER_AUTOMSIG_SETTLE").isEmpty();
                 if (!msigOpenK.isEmpty() || !msigPay.isEmpty() || msigApprove || msigSettle) {
-                    static bool msigOpened = false, msigProposed = false, msigPolicySet = false;
+                    static bool msigOpened = false, msigProposed = false, msigPolicySet = false, msigFunded = false;
                     static QSet<QString> msigApproved, msigSettled;
                     static bool msigPayerLogged = false;
                     if (!msigPayerLogged) {   // the account this member sends (and pays) from
@@ -1501,8 +1507,10 @@ void MusterUiBackend::onContextReady()
                     loadLezMsig();
                     if (!msigOpenK.isEmpty() && !msigOpened && membersJson().contains("\"self\":false")) {
                         msigOpened = true;
-                        lezMsigOpen(QString::fromUtf8(QJsonDocument(QJsonObject{{"threshold", msigOpenK.toInt()}})
+                        lezMsigOpen(QString::fromUtf8(QJsonDocument(QJsonObject{{"threshold", msigOpenK.toInt()},
+                                                                             {"private", msigPrivate}})
                                                           .toJson(QJsonDocument::Compact)));
+                        qInfo().noquote() << "[muster_ui] MSIG open ->" << lezMsigOpenJson();
                     }
                     QString msigAccount;
                     for (const auto &c : QJsonDocument::fromJson(lezMsigCeremoniesJson().toUtf8()).array())
@@ -1512,6 +1520,12 @@ void MusterUiBackend::onContextReady()
                         msigPolicySet = true;
                         setPolicy("lez-msig@" + msigAccount);
                         qInfo().noquote() << "[muster_ui] MSIG account" << msigAccount << "policy ->" << policyJson();
+                    }
+                    if (!msigFund.isEmpty() && !msigFunded && msigPolicySet
+                        && QJsonDocument::fromJson(lezMsigStateJson().toUtf8()).object().value("private").toBool()) {
+                        msigFunded = true;
+                        lezMsigFund(msigAccount, msigFund);
+                        qInfo().noquote() << "[muster_ui] MSIG fund ->" << lezMsigFundJson();
                     }
                     if (!msigPay.isEmpty() && !msigProposed && msigPolicySet) {
                         const QStringList pay = msigPay.split(':');
