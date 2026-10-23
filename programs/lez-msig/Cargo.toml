@@ -1,0 +1,22 @@
+# lez-msig: an M-of-N multisig on LEZ (docs/design/lez-msig.md, epic exo-0d3).
+#   core     msig_core — the rules, no LEZ dependency
+#   v03      msig_v03 — the LEZ v0.3 wire types and account derivation (guest + host)
+#   methods  builds the v0.3 guest program (methods/guest) with risc0-build
+#   host     msig_host — the client: build, sign, send, prove; and the tests on LEE's state
+[workspace]
+resolver = "2"
+members = ["core", "v03", "methods"]
+exclude = ["methods/guest"]
+
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+msig_core = { path = "core" }
+msig_v03 = { path = "v03" }
+borsh = { version = "1.5.7", features = ["derive"] }
+# LEZ at the tag the local zone (infra/lez/localnet.sh) and muster's pins run.
+lee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.3.0" }
+lee = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.3.0" }
+risc0-build = "3.0.5"

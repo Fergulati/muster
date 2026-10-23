@@ -1,0 +1,22 @@
+[package]
+name = "msig_guest"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[workspace]
+
+[[bin]]
+name = "msig"
+path = "src/bin/msig.rs"
+
+[dependencies]
+msig_core = { path = "../../core" }
+msig_v03 = { path = "../../v03" }
+lee_core = { git = "https://github.com/logos-blockchain/logos-execution-zone", tag = "v0.3.0" }
+borsh = { version = "1.5.7", features = ["derive"] }
+risc0-zkvm = { version = "3.0.5", default-features = false, features = ["std"] }
+
+[profile.release]
+lto = true
+opt-level = 3
