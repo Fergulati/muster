@@ -133,6 +133,10 @@ Rectangle {
                     lezMsigOpen: details.room.lezMsigOpen
                     lezMsigPropose: details.room.lezMsigPropose
                     lezMsigState: details.room.lezMsigState
+                    lezMsigFund: details.room.lezMsigFund
+                    onLezMsigFundRequested: function (account, amount) {
+                        if (details.room.backend) details.room.backend.lezMsigFund(account, amount);
+                    }
                     onLezMsigOpenRequested: function (specJson) { if (details.room.backend) details.room.backend.lezMsigOpen(specJson); }
                     onLezMsigProposeRequested: function (account, actionJson) {
                         if (!details.room.backend) return;

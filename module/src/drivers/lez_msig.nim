@@ -34,6 +34,7 @@ import ../lez/msig
 
 const
   LezMsigFamily* = "lez.msig"
+  LezMsigPrivateFamily* = "lez.msig-private"   ## the private posture: a group-owned private PDA (exo-efa)
   LezMsigSchema* = "muster.effect.lez-msig.v1"
   ApproveDomain = "lez.msig.approve.v1"
   ContributorPrefix* = "msig:"
@@ -48,6 +49,7 @@ type
     accountId*: string        ## CAIP-10: "<chain>:<address hex>"
     epoch*: uint64            ## the config epoch the disclosure read
     config*: MsigConfig
+    private*: bool            ## a group-owned private PDA: its state is a note only members read
 
   LezMsigDriver* = ref object of Driver
     account*: LezMsigAccount
@@ -68,21 +70,35 @@ proc configJsonOf*(a: LezMsigAccount): string =
   ## What a disclosure carries as its config: enough to re-derive the account and read its
   ## rules.
   $(%*{"program": hexOf(a.program), "createKey": hexOf(a.createKey), "zone": hexOf(a.zone),
-       "placement": "public", "epoch": $a.epoch, "config": hexOf(borsh(a.config))})
+       "placement": (if a.private: "private" else: "public"), "epoch": $a.epoch, "config": hexOf(borsh(a.config))})
 
 proc lezMsigAccountOf*(chain, address, config: string): tuple[ok: bool, account: LezMsigAccount, detail: string] =
   ## Re-derive the account a member disclosed: the address must be the public PDA its config
   ## derives, and the config must be one the program would accept.
   try:
     let c = parseJson(config)
-    if c{"placement"}.getStr("public") != "public":
-      return (false, LezMsigAccount(), "a private lez-msig account is proved, not disclosed by address (not built yet)")
+    let placement = c{"placement"}.getStr("public")
+    if placement notin ["public", "private"]:
+      return (false, LezMsigAccount(), "unknown placement " & placement)
     let program = unhx(c{"program"}.getStr())
     let createKey = unhx(c{"createKey"}.getStr())
     let zone = unhx(c{"zone"}.getStr())
     if program.len != 32 or createKey.len != 32 or zone.len != 32:
       return (false, LezMsigAccount(), "program, create key and zone are 32 bytes each")
     let cfg = decodeMsigConfig(unhx(c{"config"}.getStr()))
+    if placement == "private":
+      # a group-owned private PDA: its address takes the group's keys to derive, so only a member
+      # holding the group secret checks it (through the prover's derive); here it is what was
+      # disclosed, and the program's own derivation is what a private execution proves against
+      let a = unhx(address)
+      if a.len != 32: return (false, LezMsigAccount(), "a private multisig's address is 32 bytes")
+      let acct = LezMsigAccount(chain: chain, program: program, createKey: createKey, zone: zone, address: a,
+                                accountId: chain & ":" & hexOf(a), epoch: parseBiggestUInt(c{"epoch"}.getStr("0")),
+                                config: cfg, private: true)
+      if cfg.members.len == 0 or cfg.threshold == 0 or cfg.threshold > approvalWeight(cfg, cfg.members.mapIt(it.key)):
+        return (false, acct, "the config's threshold does not fit its approvers")
+      return (true, acct, "a private multisig of program " & hexOf(program) & ": " & $cfg.threshold & " of " &
+                          $cfg.members.len & "; members holding the group secret check its address")
     let a = multisigPublic(program, createKey)
     let acct = LezMsigAccount(chain: chain, program: program, createKey: createKey, zone: zone, address: a,
                               accountId: chain & ":" & hexOf(a), epoch: parseBiggestUInt(c{"epoch"}.getStr("0")),
@@ -226,6 +242,19 @@ method signInApp*(d: LezMsigDriver, e: Effect, ks: Keystore, attestDigest: array
            attestation: ks.lezMemberSign(label, attestDigest), keyRef: "")
 
 method profile*(d: LezMsigDriver): FamilyProfile =
+  if d.account.private:
+    # the private posture (exo-efa): the multisig is a group-owned private PDA. On chain an
+    # execution is one privacy-preserving transaction: a nullifier, a commitment, a proof; no
+    # member, no approval and no config appear. A public payee's credit shows its amount and
+    # payee. The group secret is shared state the members hold.
+    return FamilyProfile(declared: true, family: LezMsigPrivateFamily, settlement: "lez",
+      locus: loContract, scheme: scSharedBytes, commits: cmContent, binding: bdExplicit,
+      ordering: orDedup, expiry: exForced, setup: suRegister, signerChange: chInPlace,
+      revealsPolicy: rvNever, revealsSigners: rvNever, revealsEffect: evPublic,
+      approverCost: acNone, rounds: 1, secretState: false, maturity: maExperimental,
+      chain: d.account.chain, account: d.account.accountId, k: d.describe().threshold,
+      n: d.account.config.members.len, bypassesKnown: true,
+      bypasses: (if d.account.config.limits.len > 0: @["spending-limit"] else: @[]))
   ## The public posture: a program checks k of n (contract locus) over one shared message;
   ## the approval commits to zone, account, epoch, nonce and expiry (explicit binding); a
   ## nonce is used once, in any order inside a window (dedup); every proposal expires;
@@ -255,6 +284,14 @@ method manifest*(d: LezMsigDriver, effect: Effect): ActionManifest =
       for r in p.action.rows: touches.add touch(d.account.chain & ":" & hexOf(r.account), tmWrite)
     else: discard
   except CatchableError: discard
+  if d.account.private:
+    # proved by the lez_msig_module; the chain sees a nullifier, a commitment and a proof, and
+    # only a public payee's credit (its amount and payee) in the clear
+    return ActionManifest(declared: true, agreement: d.describe(),
+      requirements: @[req(rqEnvironment, d.account.chain), req(rqInfra, "lez-sequencer-rpc"),
+                      req(rqModule, "lez_msig_module"), req(rqAuthority, "lez-msig-key", rpContributor)],
+      discloses: @[row("payee-and-amount", obChainObserver), row("signed-tx", obRpcProvider)],
+      touches: touches)
   ActionManifest(declared: true, agreement: d.describe(),
     requirements: @[req(rqEnvironment, d.account.chain), req(rqInfra, "lez-sequencer-rpc"),
                     req(rqAuthority, "lez-msig-key", rpContributor)],

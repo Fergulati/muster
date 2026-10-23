@@ -186,6 +186,28 @@ the program locally before proving (§6), so a refusal shows up in seconds, not 
   minutes and runs in the background with visible progress. Every execution consumes `A`, so
   executions serialise, and a proof built against a stale `A` is rebuilt.
 
+**The prover is a Logos module, `lez_msig_module`** (`programs/lez-msig/module`, built — exo-efa).
+It wraps `msig_host::exec::exec_request`, the same function the `msig_exec` CLI runs, so the two
+cannot drift. It holds no key:
+- `exec` takes the program's instruction (`msig_core::Instruction`, borsh), the group secret and
+  `A`'s current note. It reads the note's membership proof from the user's sequencer, proves,
+  sends, and answers with a job; `job` then gives the hash and the new note.
+- `fund` proves a deposit, a native transfer from a member's public account into `A`, from the
+  payer's public key alone. It answers with the message hash to sign. The member's keystore
+  signs it, and `send` checks the signature against the message, then sends.
+- One proof runs at a time on its own thread. A job is readable only by the caller that
+  submitted it, and `forget` drops its decrypted note.
+
+In muster, `wallet/msig_prover.nim` is the seam (`MsigProver`), `msig_prover_lp.nim` reaches the
+module over `lp_*`, and `CliMsigProver` runs `msig_exec` for tests without a host.
+`wallet/lez_msig_private.nim`'s `MsigPrivate` is the public chain seam with three differences:
+- it reads the state from the newest note;
+- it sends through the prover;
+- it follows a job, then its transaction.
+
+So the settlement's rules (approvals, epoch, nonce, time lock) are one piece of code for both
+postures. A refusal surfaces while proving, and nothing is sent.
+
 ## 7. What each observer sees (U.5, Privacy 1–3)
 
 **Private posture.**
@@ -249,6 +271,26 @@ The coordination room is muster's room. Each multisig is created *from* a room.
 5. **Reconcile.** On every executed config change, the room's membership follows the program's.
    A removed member is evicted and the room re-keys forward. An added member is admitted (after
    they disclose a key).
+
+**The private posture in the room (built, exo-efa).** The opener's `lez_msig_open {private:
+true}` generates the GMS and seals one copy to each invited member's room identity. Each copy is
+author-signed, and only the opener's counts:
+- `lmsig/<ck>/gms/<member>` carries the sealed GMS.
+- The opener's client creates the multisig through the prover. Once the chain includes the
+  Create, the client seals the note, the multisig's decrypted account, to every member as
+  `lmsig/<ck>/note/0/<member>`. It then discloses the account with placement `private`.
+- After every later transaction the chain includes, the member who sent it seals note `n+1`.
+  Only one transaction can spend note `n` (its nullifier), so each number has one note.
+
+Every member reads the multisig from the newest note. No one scans the chain, and anyone else in
+the room holds no copy. A member holding the GMS checks the disclosed address through the
+prover's `derive`; to the rest of the room it reads as unknown.
+
+What is not built:
+- **Recovery** when the member who landed a transaction disappears before sealing its note:
+  the others would scan the chain with the group's viewing key.
+- **Real proving from a room.** The room flow has run in dev mode only
+  (`module/tests/lez_msig_private_e2e.nim`). Real proving is measured in §10.
 
 Every view of the room is the fold over its signed log.
 

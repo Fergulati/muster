@@ -27,6 +27,7 @@ import ../drivers/lez_frost        # a FROST group acting on LEZ (exo-55e)
 import ../drivers/lez_msig         # lez-msig: approvals verified in-program (exo-0d3)
 import ../lez/msig
 import ../wallet/lez_msig_chain
+import ../wallet/lez_msig_private  # its private posture, through the prover (exo-efa)
 import stint
 import ../drivers/lez_multisig
 import ../lez/multisig
@@ -374,6 +375,7 @@ type LezMsigSettlement* = ref object of Settlement
   driver: LezMsigDriver
   etaMs, expiresMs: uint64
   queueSlackMs*: uint64     ## how late a Queue may land; 0 = QueueSlackMs
+  queuedRef: string         ## the ExecuteQueued this settlement sent itself, once the lock ended
 
 const QueueSlackMs = 120_000'u64   ## a Queue claims to land within two minutes
 
@@ -482,7 +484,7 @@ method assemble*(s: LezMsigSettlement, drv: Driver, effect: Effect,
   s.etaMs = (if ins.kind == ikQueue: ins.atMs + st.config.timelockMs else: 0)
   Assembled(ok: true, have: have, need: need,
     tx: PreparedTx(chain: d.account.chain, frm: s.relayer, to: hexOf(d.account.address),
-                   payload: $(%*{"lez": "v0.3", "msig": $ins.kind, "envelope": hexOf(env),
+                   payload: $(%*{"lez": "v0.3", "msig": $ins.kind, "envelope": hexOf(env), "op": hexOf(borsh(ins)),
                                  "rows": rows.mapIt(%*{"account": hexOf(it.account), "program": hexOf(it.program)}),
                                  "proposal": proposalJson(p)})))
 
@@ -496,7 +498,11 @@ method submit*(s: LezMsigSettlement, tx: PreparedTx, ks: Keystore): TxRef =
   proc unz(h: string): seq[byte] =
     for i in 0 ..< h.len div 2: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
   let p = parseJson(tx.payload)
-  let r = s.msigChainOf().sendMsig(rowsOf(p), unz(p["envelope"].getStr()))
+  let c = s.msigChainOf()
+  # a private multisig's instruction goes to its prover, which builds the envelope with the
+  # group's keys and proves it over the latest note (exo-efa)
+  let r = (if c of MsigPrivate: MsigPrivate(c).sendOp(unz(p["op"].getStr()))
+           else: c.sendMsig(rowsOf(p), unz(p["envelope"].getStr())))
   if not r.ok: raise newException(WalletError, "the sequencer refused it: " & r.error)
   TxRef(chain: tx.chain, id: r.hash)
 
@@ -506,7 +512,19 @@ method watch*(s: LezMsigSettlement, txRef: TxRef): Finality =
   ## out its lock; then this member sends ExecuteQueued and watches that.
   let c = s.msigChainOf()
   if c == nil or s.driver == nil: return s.adapter.finality(txRef)
-  if not c.included(txRef.id): return Finality(status: fsPending, detail: "sent; waiting for the chain to include it")
+  if not c.included(txRef.id):
+    if txRef.id.startsWith("job:"): return Finality(status: fsPending, detail: "proving, then sending")
+    return Finality(status: fsPending, detail: "sent; waiting for the chain to include it")
+  if c of MsigPrivate and MsigPrivate(c).failure(txRef.id).len > 0:
+    # a private execution the program refuses fails while proving: nothing was sent
+    return Finality(status: fsFailed, detail: "the program refused it while proving; nothing was sent: " &
+                                              MsigPrivate(c).failure(txRef.id))
+  if s.queuedRef.len > 0 and c of MsigPrivate:
+    # a private multisig's note moves only once the ExecuteQueued it proved lands
+    let pc = MsigPrivate(c)
+    if not pc.included(s.queuedRef): return Finality(status: fsPending, detail: "the lock ended; proving the execution")
+    if pc.failure(s.queuedRef).len > 0:
+      return Finality(status: fsFailed, detail: "the program refused the execution while proving: " & pc.failure(s.queuedRef))
   let r = c.readMsig(s.driver.account.address)
   if not r.found: return Finality(status: fsFailed, detail: "the multisig is no longer on chain")
   let id = proposalId(s.proposal)
@@ -524,10 +542,12 @@ method watch*(s: LezMsigSettlement, txRef: TxRef): Finality =
     let ex = c.myExecutor(s.driver, s.proposal)
     if not ex.ok: return Finality(status: fsPending, detail: "queued and ready, waiting on an EXECUTE member: " & ex.why)
     ins.executor = ex.signed
-    let sent = c.sendMsig(msigShards(c.program, s.driver.account.address, ins),
-                          envelopePublic(s.driver.account.createKey, ins))
+    let sent = (if c of MsigPrivate: MsigPrivate(c).sendOp(borsh(ins))
+                else: c.sendMsig(msigShards(c.program, s.driver.account.address, ins),
+                                 envelopePublic(s.driver.account.createKey, ins)))
     if not sent.ok: return Finality(status: fsPending, detail: "the lock ended; sending failed, retrying: " & sent.error)
     s.sentKind = ikExecuteQueued
+    s.queuedRef = sent.hash
     return Finality(status: fsPending, detail: "the lock ended; executing (" & sent.hash & ")")
   else:
     if not r.state.nonceFree(s.proposal.nonce) and not isQueued:
@@ -552,5 +572,5 @@ proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settl
   of P2wshFamily, TapscriptFamily, FrostFamily: BitcoinSettlement(family: p.family, adapter: adapter, relayer: relayer)
   of LezMultisigFamily: LezMultisigSettlement(family: p.family, adapter: adapter, relayer: relayer)
   of LezFrostFamily: LezFrostSettlement(family: p.family, adapter: adapter, relayer: relayer)
-  of LezMsigFamily: LezMsigSettlement(family: p.family, adapter: adapter, relayer: relayer)
+  of LezMsigFamily, LezMsigPrivateFamily: LezMsigSettlement(family: p.family, adapter: adapter, relayer: relayer)
   else: nil

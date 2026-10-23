@@ -1221,6 +1221,11 @@ proc lezMsigProposeImpl(o: MusterUi, actionJson: string) =
     info "coordinate_propose_lez_msig " & qs(actionJson) & " -> " & qs(r)
     o.setLezMsigProposeJson(asObjectJson(r, "intentId"))
     o.loadIntentsDo())
+proc lezMsigFundImpl(o: MusterUi, account, amount: string) =
+  ask mm.lez_msig_fundAsync(account.strip(), amount.strip(), proc (r: string) =
+    info "lez_msig_fund " & qs(account) & " " & qs(amount) & " -> " & qs(r)
+    o.setLezMsigFundJson(asObjectJson(r, "job"))
+    o.loadLezMsigDo())
 proc loadLezMsigImpl(o: MusterUi) = o.loadLezMsigDo()
 proc loadWalletSummaryImpl(o: MusterUi) = o.loadWalletSummaryDo()
 proc loadFlowImpl(o: MusterUi) = o.loadFlowDo()

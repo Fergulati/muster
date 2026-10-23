@@ -293,6 +293,10 @@ proc lezMsigDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail
   if a.threshold != int(acct.config.threshold) or
      a.signers.mapIt(it.toLowerAscii()) != acct.config.members.mapIt(msigbytes.hexOf(it.key)):
     return (acDisagrees, "the disclosure's signers or k are not its config's")
+  if acct.private:
+    # its address takes the group's keys to derive: the host of a member holding the group
+    # secret checks it through the prover (exo-efa); here it is only what was disclosed
+    return (acUnknown, detail)
   (acVerified, detail)
 
 proc lezMultisigAccountOf*(a: RoomAccount): tuple[ok: bool, account: LezMultisigAccount, detail: string] =

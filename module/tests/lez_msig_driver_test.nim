@@ -76,7 +76,14 @@ block:
   doAssert not lezMsigAccountOf(Chain, hexOf(fill(9)), good).ok, "another address"
   let priv = parseJson(good)
   priv["placement"] = %"private"
-  doAssert not lezMsigAccountOf(Chain, hexOf(a), $priv).ok, "a private placement is not disclosed by address"
+  # a private multisig's address takes the group's keys to derive: it is taken as disclosed,
+  # marked private, and its config still has to fit (exo-efa)
+  let pr = lezMsigAccountOf(Chain, hexOf(fill(9)), $priv)
+  doAssert pr.ok and pr.account.private and pr.account.address == fill(9), pr.detail
+  doAssert newLezMsigDriver(pr.account).profile.family == LezMsigPrivateFamily
+  doAssert newLezMsigDriver(pr.account).profile.revealsSigners == rvNever, "no approver on chain"
+  priv["placement"] = %"shielded"
+  doAssert not lezMsigAccountOf(Chain, hexOf(a), $priv).ok, "an unknown placement"
   doAssert not lezMsigAccountOf(Chain, hexOf(a), configJsonOf(account(cfg(4)))).ok, "4 of 3"
   echo "1. a disclosure re-derives the public PDA and checks its config OK"
 

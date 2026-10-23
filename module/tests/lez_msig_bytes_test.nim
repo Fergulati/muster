@@ -134,6 +134,19 @@ for bad in [hb("state") & @[0'u8], hb("state")[0 ..< ^1]]:
   except MsigDecodeError: inc refused
 check(refused == 2, "a padded or short state is refused")
 
+echo "5. a private note"
+let note = decodeNote(hb("note"))
+check(note.nonce == 0x0102_0304.u128, "the note's nonce")
+check(noteBalance(note) == 3800.u128, "the vault: the native shard")
+check(noteState(note, program).isSome and encodeMsigState(noteState(note, program).get) == hb("state"),
+      "the state: the program's own shard")
+check(noteState(note, fill(0x99)).isNone, "another program's shard is not the multisig's")
+var refusedN = 0
+for badN in [hb("note") & @[0'u8], hb("note")[0 ..< ^1]]:
+  try: discard decodeNote(badN)
+  except MsigDecodeError: inc refusedN
+check(refusedN == 2, "a padded or short note is refused")
+
 if fails > 0:
   echo fails, " FAILED"
   quit 1

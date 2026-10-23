@@ -44,6 +44,7 @@ type
     openExecution*: bool
     keys*: Table[string, string]  ## room identity → approval key hex (proved)
     ready*: bool
+    private*: bool                ## a group-owned private PDA: its group secret is sealed to each member
 
 proc hx(b: openArray[byte]): string = hexOf(b)
 proc unhx(s: string): seq[byte] =
@@ -78,7 +79,8 @@ proc ceremonies*(events: seq[Event], room: string): seq[MsigCeremony] =
                              program: j{"program"}.getStr(), zone: j{"zone"}.getStr(),
                              threshold: uint32(j{"threshold"}.getInt()),
                              timelockMs: uint64(j{"timelockMs"}.getBiggestInt(0)),
-                             openExecution: j{"openExecution"}.getBool(true))
+                             openExecution: j{"openExecution"}.getBool(true),
+                             private: j{"private"}.getBool(false))
         for m in j{"members"}.getElems():
           c.members.add m{"id"}.getStr().toLowerAscii()
           c.roles.add uint8(m{"roles"}.getInt(int(RoleAll)))
@@ -105,20 +107,28 @@ proc ceremonyJson*(c: MsigCeremony, me: string): JsonNode =
   %*{"createKey": c.createKey, "chain": c.chain, "opener": c.opener, "openedByMe": c.opener == me,
      "members": c.members.mapIt(%*{"id": it, "joined": it in c.keys, "key": c.keys.getOrDefault(it, "")}),
      "threshold": int(c.threshold), "timelockMs": $c.timelockMs, "openExecution": c.openExecution,
-     "ready": c.ready, "invited": me in c.members, "joined": me in c.keys}
+     "ready": c.ready, "invited": me in c.members, "joined": me in c.keys, "private": c.private}
 
 proc msigOpen*(s: CoordinationSession, ks: Keystore, chain: string, program, zone: seq[byte],
                members: seq[tuple[id: string, roles: uint8, weight: uint16]], threshold: uint32,
-               timelockMs: uint64, openExecution: bool): string =
-  ## Open a ceremony; returns the create key. The opener joins at once.
+               timelockMs: uint64, openExecution: bool, private = false): string =
+  ## Open a ceremony; returns the create key. The opener joins at once. A private one
+  ## (exo-efa) also seals a fresh group secret to every invited member, the opener included.
   var ck = newSeq[byte](32)
   if not urandom(ck): raise newException(OSError, "no randomness for a create key")
   let me = memberId(ks)
   s.publish(Event(key: "lmsig/" & hx(ck) & "/open", value: $(%*{
     "opener": me, "chain": chain, "program": hx(program), "zone": hx(zone), "threshold": int(threshold),
-    "timelockMs": $timelockMs, "openExecution": openExecution,
+    "timelockMs": $timelockMs, "openExecution": openExecution, "private": private,
     "members": members.mapIt(%*{"id": it.id.toLowerAscii(), "roles": int(it.roles), "weight": int(it.weight)})})))
   result = hx(ck)
+  if private:
+    var gms = newSeq[byte](32)
+    if not urandom(gms): raise newException(OSError, "no randomness for a group secret")
+    for m in members:
+      let id = m.id.toLowerAscii()
+      s.publishAuthored(ks, Event(key: "lmsig/" & result & "/gms/" & id, value: $(%*{
+        "author": me, "sealed": hx(sealTo(encIdentityFromBytes(unhx(id)).x, gms))})))
 
 proc msigJoin*(s: CoordinationSession, ks: Keystore, createKey: string) =
   ## This member's approval key for the multisig, proved by itself and author-signed.
@@ -172,3 +182,57 @@ proc liveMsigPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor
   let id = liveProposeIntent(s, ks, driverFor, policy, lezMsigEffect(p), nowSec, msgSeq,
                              d.account.accountId, ttlSec = ttl)
   (id, liveContribute(s, ks, driverFor, id, "", "", bindingCtx, uint64(nowSec)))
+
+# ── the private posture (exo-efa, docs/design/lez-msig.md §6) ──────────────────
+## A private multisig's account takes its group's keys to derive and to spend from, so the
+## group secret is shared with the members the opener invited, sealed to each one's room
+## identity, never with the rest of the room. Its state lives in a note only those members
+## read; after each transaction the chain includes, the member who sent it seals the new
+## note to every member, so each can propose and execute next without scanning the chain.
+##   lmsig/<ck>/gms/<who>        the group secret, sealed to <who>; only the opener's counts
+##   lmsig/<ck>/note/<n>/<who>   the note after the n-th transaction (0 is Create), sealed to
+##                               <who>, with the transaction's hash; only a member's counts
+
+proc ceremonyOf*(events: seq[Event], room, createKey: string): Option[MsigCeremony] =
+  for c in ceremonies(events, room):
+    if c.createKey == createKey.toLowerAscii(): return some(c)
+
+proc groupSecretOf*(events: seq[Event], ks: Keystore, room, createKey: string): Option[seq[byte]] =
+  ## This member's copy of a private multisig's group secret, sealed to them by its opener.
+  let c = ceremonyOf(events, room, createKey)
+  if c.isNone or not c.get.private: return
+  let key = "lmsig/" & createKey.toLowerAscii() & "/gms/" & memberId(ks)
+  for e in events:
+    if e.key != key: continue
+    try:
+      let j = parseJson(e.value)
+      if j{"author"}.getStr().toLowerAscii() != c.get.opener: continue
+      let g = ks.sealOpen(unhx(j{"sealed"}.getStr()))
+      if g.len == 32: return some(g)
+    except CatchableError: discard
+
+proc publishNote*(s: CoordinationSession, ks: Keystore, c: MsigCeremony, n: int, note: seq[byte], hash: string) =
+  ## Seal the multisig's new note to every member, after the chain included `hash`.
+  let me = memberId(ks)
+  for m in c.members:
+    s.publishAuthored(ks, Event(key: "lmsig/" & c.createKey & "/note/" & $n & "/" & m, value: $(%*{
+      "author": me, "hash": hash, "sealed": hx(sealTo(encIdentityFromBytes(unhx(m)).x, note))})))
+
+proc latestNote*(events: seq[Event], ks: Keystore, room, createKey: string): tuple[found: bool, n: int, note: seq[byte], hash: string] =
+  ## The newest note sealed to this member by a member of the multisig. Only one transaction
+  ## spending a note can land (its nullifier), so each number has one note; the first counts.
+  let c = ceremonyOf(events, room, createKey)
+  if c.isNone: return
+  let me = memberId(ks)
+  result.n = -1
+  for e in events:
+    let p = e.key.split('/')
+    if p.len != 5 or p[0] != "lmsig" or p[1] != c.get.createKey or p[2] != "note" or p[4] != me: continue
+    try:
+      let n = parseInt(p[3])
+      if n <= result.n: continue
+      let j = parseJson(e.value)
+      if j{"author"}.getStr().toLowerAscii() notin c.get.members: continue
+      let note = ks.sealOpen(unhx(j{"sealed"}.getStr()))
+      result = (true, n, note, j{"hash"}.getStr())
+    except CatchableError: discard

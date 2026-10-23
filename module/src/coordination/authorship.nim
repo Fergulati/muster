@@ -16,6 +16,10 @@
 ##   intent/<id>/part/<part>/<step>       a part report (exo-a90.2): the value's "author"
 ##   intent/<id>/proposer/<who>           who proposed the intent (exo-770)
 ##   lmsig/<ck>/key/<who>                 a member's lez-msig approval key (exo-0d3)
+##   lmsig/<ck>/gms/<who>                 a private lez-msig's group secret, sealed to <who>,
+##                                        and the value's "author" the opener (exo-efa)
+##   lmsig/<ck>/note/<n>/<who>            its note after its n-th transaction, sealed to <who>;
+##                                        the value's "author" the member who sent it
 ##   xmsig/<cid>/join/<who>               a Monero multisig setup join (exo-dcc.34.2)
 ##   xmsig/<cid>/kex/<r>/<who>            that member's wallet's round r of the key exchange
 ##   intent/<id>/xsync|xtx/<who>/<i>/<n> a Monero multisig spend's sync data or transaction
@@ -119,6 +123,15 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
     # the room swarm (exo-4d0.4): every `file/` event names its author — a seed the
     # member in its key, a share or a retract the value's "author"
     if p.len >= 3 and p[2] == "seed": return (true, (if p.len >= 4: p[3] else: ""))
+    var author = ""
+    try:
+      let j = parseJson(e.value)
+      if j.kind == JObject: author = j{"author"}.getStr()
+    except CatchableError: discard
+    return (true, author)
+  if p.len >= 3 and p[0] == "lmsig" and p[2] in ["gms", "note"]:
+    # a private lez-msig's sealed copies (exo-efa): the key names the member it is sealed
+    # to, the value's "author" the member who sealed it
     var author = ""
     try:
       let j = parseJson(e.value)

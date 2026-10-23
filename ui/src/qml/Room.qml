@@ -860,6 +860,10 @@ Item {
         try { return JSON.parse(backend ? backend.lezMsigProposeJson : "{}"); }
         catch (e) { return ({}); }
     }
+    readonly property var lezMsigFund: {
+        try { return JSON.parse(backend ? backend.lezMsigFundJson : "{}"); }
+        catch (e) { return ({}); }
+    }
     readonly property var lezMsigState: {
         try { return JSON.parse(backend ? backend.lezMsigStateJson : "{}"); }
         catch (e) { return ({}); }

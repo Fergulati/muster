@@ -123,6 +123,7 @@ One row per family, generated from the registry (`contracts/families/registry.js
 | `lez.private-multisig` | vote | own tx | **none** | 1 · deploy | new-address | setup / – / public | index · none | a tx | demo | watch |
 | `lez.frost-public-account` | aggregate | partial (t-of-n) | **none** | 2 ⚿ · dkg | new-address | – / – / public | sequence · none | – | draft | built |
 | `lez.msig` | contract | same bytes | explicit | 1 · register | in-place | setup / spend / public | dedup · forced (the proposer's own expires_ms, bound by a sequencer-enforced validity window) | – | experimental | built |
+| `lez.msig-private` | contract | same bytes | explicit | 1 · register | in-place | – / – / public | dedup · forced (the proposer's own expires_ms, bound by a sequencer-enforced validity window) | – | experimental | built |
 | `evm.split` | each | same bytes | explicit | 1 · none | fixed | – / spend / public | none · optional | – | demo | built |
 | `lez.split` | each | same bytes | **none** | 1 · none | fixed | – / – / **shielded** | none · optional | – | demo | built |
 | `btc.split` | each | same bytes | implicit | 1 · none | fixed | – / spend / public | none · optional | – | demo | built |

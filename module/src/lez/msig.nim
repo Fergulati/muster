@@ -380,6 +380,31 @@ proc decodeMsigState*(b: openArray[byte]): MsigState =
     result.queue.add MsigQueued(nonce: r.ru64(), proposalId: r.rfixed(32), etaMs: r.ru64(), expiresMs: r.ru64())
   if r.i != r.b.len: bad("trailing bytes after the state")
 
+# ── a private note (exo-efa): the multisig's account as a member decrypts it ──────────
+type
+  MsigNote* = object
+    nonce*: UInt128
+    shards*: seq[tuple[program, data: seq[byte]]]   ## by program account id, ascending
+
+proc decodeNote*(b: openArray[byte]): MsigNote =
+  ## lee_core's Account, borsh: {nonce: u128, data: {shards: BTreeMap<AccountId, Vec<u8>>}}.
+  var r = Reader(b: @b)
+  result.nonce = r.ru128()
+  for _ in 0 ..< r.rlen(36):
+    let prog = r.rfixed(32)
+    result.shards.add (prog, r.rfixed(r.rlen(1)))
+  if r.i != r.b.len: bad("trailing bytes after the note")
+
+proc noteState*(n: MsigNote, program: Key32): Option[MsigState] =
+  ## The multisig's state: the program's own shard of its note.
+  for (p, d) in n.shards:
+    if p == program and d.len > 0: return some(decodeMsigState(d))
+
+proc noteBalance*(n: MsigNote): UInt128 =
+  ## The vault: the note's native shard (u128 LE), 0 when it has none.
+  for (p, d) in n.shards:
+    if p == newSeq[byte](32) and d.len == 16: return UInt128.fromBytesLE(d)
+
 proc encodeMsigState*(s: MsigState): seq[byte] =
   ## For in-process models and tests; the chain's bytes come from the program.
   var b: seq[byte]

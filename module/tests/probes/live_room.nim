@@ -143,6 +143,15 @@ proc lezMsigTestConfig*(): JsonNode =
                          config: MsigConfig(members: members, threshold: 2, openExecution: true, actions: ActAll))
   %*{"chain": "lez:local", "config": configJsonOf(a)}
 
+proc lezMsigPrivateTestConfig*(): JsonNode =
+  ## The same 2-of-3, private (exo-efa): its address is given, as the group secret derives it.
+  var c = lezMsigTestConfig()
+  var inner = parseJson(c["config"].getStr())
+  inner["placement"] = %"private"
+  c["config"] = %($inner)
+  c["address"] = %("33".repeat(32))
+  c
+
 proc bindCtx*(): LinkContext = LinkContext(account: SafeAddr, slot: "0", expiry: Now + 86_400)
 
 proc accountFor*(r: Room, policy: string): string =

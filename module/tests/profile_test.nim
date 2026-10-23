@@ -55,6 +55,7 @@ let kinds = @[
                       "members": [repeat("01", 32), repeat("02", 32), repeat("03", 32)]},
    "module/src/drivers/lez_multisig.nim"),
   ("lez-msig", lezMsigTestConfig(), "module/src/drivers/lez_msig.nim"),
+  ("lez-msig", lezMsigPrivateTestConfig(), "module/src/drivers/lez_msig.nim"),   # the private posture (exo-efa)
   ("btc-frost", %*{"network": "regtest", "recovery": frostTestRecoveryHex()}, "module/src/drivers/btc_frost.nim"),
   ("lez-frost", %*{"chain": "lez:local", "recovery": frostTestRecoveryHex()}, "module/src/drivers/lez_frost.nim"),
   ("evm-split", %*{"chain": "eip155:31337"}, "module/src/drivers/split.nim"),

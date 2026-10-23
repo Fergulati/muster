@@ -103,7 +103,7 @@
         "coordinate_accounts",
         "lez_member_account"
       ],
-      "ui": "Not yet on screen: the room's accounts panel will open the ceremony (exo-e38).",
+      "ui": "On screen (exo-e38): the room's accounts panel opens the ceremony and shows who has joined; seen on a display with two runners (scripts/lez-msig-self-test.sh drives it).",
       "invariants": [
         2,
         4,
@@ -157,9 +157,7 @@
           "what": "BIP-340: the approval signature the program checks"
         }
       ],
-      "unverified": [
-        "The ceremony has not been clicked through in the UI (no UI yet)."
-      ],
+      "unverified": [],
       "try": [],
       "requirements": [
         {
@@ -397,7 +395,7 @@
         "lez_msig_state",
         "lez_pending"
       ],
-      "ui": "Not yet on screen (exo-e38): the composer and the card's decode of the proposal's bytes.",
+      "ui": "On screen (exo-e38): the accounts panel's pay form, the card's decode of the proposal's bytes (amount in LEZ, expiry, approvers by name), Settle on-chain; seen on a display.",
       "invariants": [
         1,
         2,
@@ -453,9 +451,7 @@
           "what": "BIP-340: the approval signature the program checks"
         }
       ],
-      "unverified": [
-        "The card's decode and the composer are not built yet (exo-e38)."
-      ],
+      "unverified": [],
       "try": []
     },
     {
@@ -572,7 +568,7 @@
         "coordinate_submit",
         "lez_msig_state"
       ],
-      "ui": "Not yet on screen (exo-e38).",
+      "ui": "On screen (exo-e38): the accounts panel sets the time lock and cancels a queued action; other changes go through coordinate_propose_lez_msig.",
       "invariants": [
         1,
         2,

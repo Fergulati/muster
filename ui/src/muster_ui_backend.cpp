@@ -987,6 +987,16 @@ void MusterUiBackend::lezMsigPropose(const QString &actionJson)
     loadIntents();
 }
 
+void MusterUiBackend::lezMsigFund(const QString &account, const QString &amount)
+{
+    // lez_msig_fund → {job, amount, payer}, or {error, detail}: the module proves the
+    // deposit, this member's keystore signs it, and the new note reaches every member.
+    const QString r = modules().muster_module.lez_msig_fund(account.trimmed(), amount.trimmed());
+    qInfo() << "[muster_ui] lez_msig_fund" << account << amount << "->" << r;
+    setLezMsigFundJson(asObjectJson(r, "job"));
+    loadLezMsig();
+}
+
 void MusterUiBackend::loadLezMsig()
 {
     setLezMsigCeremoniesJson(modules().muster_module.lez_msig_ceremonies());
