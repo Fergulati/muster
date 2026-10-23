@@ -83,9 +83,9 @@ Item {
         if (!/^[0-9]+(\.[0-9]{0,9})?$/.test(t)) return "";
         var parts = t.split(".");
         var frac = ((parts[1] || "") + "000000000").slice(0, 9);
-        var whole = parts[0].replace(/^0+(?=[0-9])/, "");
+        var whole = String(parts[0]).replace(/^0+(?=[0-9])/, "");
         var out = (whole === "0" ? "" : whole) + frac;
-        out = out.replace(/^0+/, "");
+        out = String(out).replace(/^0+/, "");
         return out.length > 0 ? out : "0";
     }
     // the room's Monero multisig account, if a member disclosed one (its CAIP-10 id is the account)
@@ -991,6 +991,7 @@ Item {
 
             // the account, as its program holds it, and proposing from it
             ColumnLayout {
+                id: msigBox
                 objectName: "msigAccountBox"
                 Layout.fillWidth: true
                 visible: acc.msigAccount !== null
@@ -1007,7 +1008,7 @@ Item {
                              ? qsTr("Proposals from this room go elsewhere: propose from this multisig to read it.")
                              : "⚠ " + String(parent.st.error) + (parent.st.detail ? " — " + String(parent.st.detail) : ""))
                           : parent.st.epoch !== undefined
-                          ? qsTr("Vault %1 LEZ  ·  %2 of %3  ·  epoch %4  ·  %5 queued").arg(Number(parent.st.balance || 0) / 1e9)
+                          ? qsTr("Vault %1 LEZ  ·  %2 of %3  ·  settings v%4  ·  %5 queued").arg(Number(parent.st.balance || 0) / 1e9)
                                 .arg(parent.st.config ? parent.st.config.threshold : "?")
                                 .arg(parent.st.config ? parent.st.config.members.length : "?")
                                 .arg(parent.st.epoch).arg((parent.st.queue || []).length)
@@ -1042,11 +1043,11 @@ Item {
                     }
                     ActionButton {
                         objectName: "msigProposePay"
-                        enabled: msigPayTo.text.trim().length > 0 && parent.parent.payBase !== "" && parent.parent.payBase !== "0"
+                        enabled: msigPayTo.text.trim().length > 0 && msigBox.payBase !== "" && msigBox.payBase !== "0"
                         text: qsTr("Propose this payment")
                         variant: LogosButton.Variant.Secondary
                         onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id),
-                            JSON.stringify({ kind: "transfer", to: msigPayTo.text.trim(), amount: parent.parent.payBase }))
+                            JSON.stringify({ kind: "transfer", to: msigPayTo.text.trim(), amount: msigBox.payBase }))
                     }
                 }
                 RowLayout {
@@ -1076,7 +1077,7 @@ Item {
                         LogosText {
                             objectName: "msigQueued"
                             Layout.fillWidth: true
-                            text: qsTr("Queued: nonce %1, runs from %2").arg(modelData.nonce)
+                            text: qsTr("Queued: proposal #%1, runs from %2").arg(modelData.nonce)
                                   .arg(new Date(Number(modelData.etaMs)).toLocaleString())
                             color: Theme.palette.textSecondary
                             font.pixelSize: MusterStyle.caption

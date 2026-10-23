@@ -890,7 +890,7 @@ ColumnLayout {
         spacing: 2
         readonly property var m: cardRoot.msig || ({})
         readonly property var a: (cardRoot.msig && cardRoot.msig.action) ? cardRoot.msig.action : ({})
-        function short(h) { h = String(h || ""); return h.length > 16 ? h.slice(0, 8) + "…" + h.slice(-6) : h; }
+        function abbr(h) { h = String(h || ""); return h.length > 16 ? h.slice(0, 8) + "…" + h.slice(-6) : h; }
         LogosText {
             objectName: "cardMsigAction"
             Layout.fillWidth: true
@@ -905,9 +905,9 @@ ColumnLayout {
                   ? qsTr("Changes the multisig: %1").arg((parent.a.changes || []).map(function (c) {
                         return String(c.change) + (c.timelockMs !== undefined ? " " + Number(c.timelockMs) / 60000 + " min"
                                                  : c.threshold !== undefined ? " " + c.threshold
-                                                 : c.key !== undefined ? " " + parent.short(c.key) : ""); }).join(", "))
+                                                 : c.key !== undefined ? " " + parent.abbr(c.key) : ""); }).join(", "))
                 : parent.a.kind === "cancel"
-                  ? qsTr("Cancels the proposals at nonce %1").arg((parent.a.nonces || []).join(", "))
+                  ? qsTr("Cancels proposal #%1").arg((parent.a.nonces || []).join(", #"))
                 : ""
             color: parent.m.error ? Theme.palette.error : Theme.palette.text
             font.pixelSize: MusterStyle.cardBody
@@ -917,10 +917,10 @@ ColumnLayout {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             visible: !parent.m.error
-            text: qsTr("Nonce %1 · epoch %2 · expires %3 · proposal %4")
+            text: qsTr("Proposal #%1 · settings v%2 · expires %3 · id %4")
                   .arg(String(parent.m.nonce)).arg(String(parent.m.epoch))
                   .arg(new Date(Number(parent.m.expiresMs)).toLocaleString())
-                  .arg(parent.short(parent.m.proposalId))
+                  .arg(parent.abbr(parent.m.proposalId))
             color: Theme.palette.textSecondary
             font.family: MusterStyle.mono
             font.pixelSize: MusterStyle.cardCaption
@@ -929,7 +929,7 @@ ColumnLayout {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
             visible: !parent.m.error
-            text: qsTr("Decoded from the exact bytes your approval signs. A change to the configuration (epoch) voids it; so does its expiry.")
+            text: qsTr("Decoded from the exact bytes your approval signs. Any change to the multisig's settings voids it; so does its expiry.")
             color: Theme.palette.textTertiary
             font.pixelSize: MusterStyle.cardCaption
         }
