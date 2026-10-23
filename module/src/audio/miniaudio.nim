@@ -41,9 +41,12 @@
 ## Audio can hold a start while a microphone prompt stands (S11), and never from a callback;
 ## the start thread keeps the callbacks' rule, and the memory it may free (the context, the
 ## device, the buffer) is C's heap. The module thread's pump takes the context and the device
-## once the start runs. A device is uninitialised on the module thread (ma_device_uninit stops
-## it and waits for its thread, so the buffer can be let go of once a stop returns), or, for
-## a start let go before it returned, on its own start thread. The context is made by a
+## once the start runs. A start let go while it initialised never starts its device: maRun
+## reads the let-go just before ma_device_start and releases what it made instead (a start let
+## go in the instant after that read starts the device, and its own thread stops it at once).
+## A device is uninitialised on the module thread (ma_device_uninit stops it and waits for its
+## thread, so the buffer can be let go of once a stop returns), or, for a start let go before
+## it returned, on its own start thread. The context is made by a
 ## start, moves with each later start (the start holds it while in flight) and back to the io
 ## when it runs, and is kept until `close`, which uninitialises it; a start that fails
 ## releases it. The voice recorder (coordination/voice_live.nim, S7) closes its AudioIo whenever
@@ -52,7 +55,7 @@
 ## whatever still runs: a context, and its backend's threads, left alive when the host unloads
 ## the plugin is a crash risk.
 
-import std/[compilesettings, os]
+import std/[atomics, compilesettings, os]
 import ./audio_io
 import ./voice_clip
 
@@ -153,16 +156,26 @@ type
     ctx: pointer                ## an ma_context, made by a start, kept until close; calloc'd
     dev: pointer                ## the open stream's ma_device; nil when idle or starting; calloc'd
     job: StartJob               ## the start in flight while `starting` (it holds the context)
+    gate: StartGate             ## a test's hold between the device's init and its start; nil
 
   StreamFormat* = tuple[rate, channels: int, s16: bool]
     ## A stream's client-side settings: what the callback is handed.
 
 const ClipFormat: StreamFormat = (rate: ClipRate, channels: ClipChannels, s16: true)
 
-proc newMiniaudioIo*(backend = abSystem): MiniaudioIo =
+proc newMiniaudioIo*(backend = abSystem, gate: StartGate = nil): MiniaudioIo =
   ## Opens nothing: the context is made by the first start, which only voice_record_start or
-  ## voice_play makes (with the access policy off, any caller's, §13).
-  MiniaudioIo(backend: backend)
+  ## voice_play makes (with the access policy off, any caller's, §13). `gate` is a test's: each
+  ## start then waits on it after the device's init and read-back, before the device starts,
+  ## where Core Audio may hold a start behind a microphone prompt (audio_io_null_test §7); the
+  ## module never passes one.
+  MiniaudioIo(backend: backend, gate: gate)
+
+var deviceStarts: Atomic[int]           ## ma_device_start calls that started a device
+
+proc devicesStarted*(): int = deviceStarts.load(moAcquire)
+  ## How many devices this process has started (ma_device_start succeeded), on any io: what
+  ## the tests count to see a start given up start nothing.
 
 proc miniaudioVersion*(): string = $ma_version_string()
 
@@ -208,6 +221,7 @@ type
     backends: array[2, MaBackend]
     n: int
     ctxUp, devUp: bool          ## initialised (ctxUp: by this start, or handed over so)
+    gate: StartGate             ## the io's test hold, or nil
 
 # ── The start thread's half (audio_io's start job): no GC, no raise, checks off ─────────────
 {.push stackTrace: off, checks: off.}
@@ -245,8 +259,10 @@ proc maRelease(m: ptr MaStart) {.gcsafe, raises: [].} =
 
 proc maRun(job: StartJob): int {.cdecl, gcsafe, raises: [].} =
   ## The blocking half of a start, on its start thread: the context (unless handed over), the
-  ## device, its read-back, then its start. Core Audio can hold either while a microphone
-  ## prompt stands (S11). A failure releases all of it, a handed-over context included.
+  ## device, its read-back, then its start, unless the module thread let the start go
+  ## meanwhile (StartLetGo: nothing started, all of it released). Core Audio can hold a start
+  ## while a microphone prompt stands (S11); in which call is not known. A failure releases
+  ## all of it, a handed-over context included.
   let m = cast[ptr MaStart](job.data)
   if not m.ctxUp:
     if ma_context_init(addr m.backends[0], uint32(m.n), nil, m.ctx) != MA_SUCCESS:
@@ -274,9 +290,18 @@ proc maRun(job: StartJob): int {.cdecl, gcsafe, raises: [].} =
     return StartDeviceFormat
   if job.stream == asCapture: job.buf.beginCapture()
   else: job.buf.beginPlayback(playbackTail(m.dev))
+  if m.gate != nil:                     # a test's hold, where Core Audio may hold a start
+    let held = gateWait(m.gate)
+    if held != 0:
+      maRelease(m)
+      return held
+  if wasLetGo(job):                     # given up while it initialised: start no stream
+    maRelease(m)                        # (let go after this read, startMain stops it at once)
+    return StartLetGo
   if ma_device_start(m.dev) != MA_SUCCESS:
     maRelease(m)
     return StartNoDevice
+  discard deviceStarts.fetchAdd(1, moAcquireRelease)
   0
 
 proc maStop(job: StartJob) {.cdecl, gcsafe, raises: [].} =
@@ -354,6 +379,7 @@ proc openStream(io: MiniaudioIo, s: AudioStream, buf: AudioBuffer): string =
   let m = cast[ptr MaStart](cCalloc(1, csize_t(sizeof(MaStart))))
   m.backends = list.at
   m.n = list.n
+  m.gate = io.gate
   if io.ctx != nil:                     # the context moves with the start, and back if it runs
     m.ctx = cast[ptr MaContext](io.ctx)
     m.ctxUp = true

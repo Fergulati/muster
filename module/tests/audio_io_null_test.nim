@@ -258,3 +258,52 @@ block:
   echo "   each start returned before the stop: the module thread settled it and closed its device"
 echo "6b. a start that returned before any pump, then a stop or a close: the device closed at once, ",
      "the context kept by a stop, every buffer freed OK"
+
+# 7. A start given up before its device starts never starts it (S2's review). A test's
+#    StartGate holds each start after the device's init and read-back, before the device
+#    starts, where Core Audio may hold a start behind a microphone prompt. A stop or a close
+#    then lets it go; released, the start thread finds it was let go, uninitialises what it
+#    made and never calls ma_device_start: no device starts (devicesStarted), no frame
+#    moves, the buffer is freed. A gated start the io keeps does start, once: the count is
+#    what moves when a device starts.
+block:
+  doAssert waitStarts(2_000)
+  let base = liveAudioBuffers()
+  for how in ["stop", "close"]:
+    for play in [false, true]:
+      let what = how & (if play: " playback" else: " capture")
+      let g = newStartGate()
+      let io = newMiniaudioIo(abNull, g)
+      let buf = newAudioBuffer(ClipRate)
+      if play: doAssert buf.loadPlayback(newSeq[int16](buf.cap)) == buf.cap
+      let before = devicesStarted()
+      doAssert (if play: io.startPlayback(buf) else: io.startCapture(buf)) == ""
+      doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000) < 1_000, what & ": the start reached the hold"
+      if how == "stop": doAssert (if play: io.stopPlayback() else: io.stopCapture()) == ""
+      else: doAssert io.close() == ""
+      doAssert io.stream == asIdle and not io.starting, what & ": idle at once"
+      freeAudioBuffer(buf)                    # the start thread holds its own reference
+      g.releaseStart()
+      doAssert waitStarts(2_000), what & ": the start returned"
+      doAssert devicesStarted() == before, what & ": a start let go before its device started started it: " &
+               $(devicesStarted() - before) & " device(s)"
+      doAssert liveAudioBuffers() == base, what & ": buffers left " & $(liveAudioBuffers() - base)
+      doAssert io.close() == ""
+      freeStartGate(g)
+  # the count moves when a gated start the io keeps starts its device
+  let g = newStartGate()
+  let io = newMiniaudioIo(abNull, g)
+  let buf = newAudioBuffer(ClipRate)
+  let before = devicesStarted()
+  doAssert io.startCapture(buf) == ""
+  doAssert waitUntil(proc (): bool = g.startsReached == 1, 1_000) < 1_000
+  doAssert io.pump() == "" and io.starting, "held: still starting"
+  g.releaseStart()
+  doAssert io.started() == "" and io.backendName == "Null"
+  doAssert devicesStarted() == before + 1, $(devicesStarted() - before)
+  doAssert waitUntil(proc (): bool = buf.written > 0, 1_000) < 1_000, "the device runs"
+  doAssert io.stopCapture() == "" and io.close() == ""
+  freeAudioBuffer(buf)
+  freeStartGate(g)
+  doAssert waitStarts(2_000) and liveAudioBuffers() == base
+echo "7. a start let go while held before its device starts never starts it; one the io keeps does OK"

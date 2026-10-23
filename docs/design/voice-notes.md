@@ -655,6 +655,18 @@ meet at one atomic by compare-and-swap:
   it uninitialises the device and context it started, lets go of its buffer reference and
   frees the rest.
 
+**A start let go before its device starts never starts it** (S2's review). The start thread
+reads the let-go just before `ma_device_start`: a start given up while its
+context and device initialised (or while it waited on the person there) uninitialises them
+and starts nothing, so no microphone comes on after the room said the recording ended
+(`audio_io_null_test` §7: a test's `StartGate` holds the start after the device's init, and
+`devicesStarted` does not move). A start let go in the instant after that read, or while the
+start call itself waits, starts its device, and its own thread stops it at once; its frames
+go only into the buffer that start held, which is freed unread. Which of Core Audio's calls
+waits on a microphone prompt, `ma_device_init` or `ma_device_start`, is not known (§11): in
+the second case a start given up while the prompt stands still turns the device on for a
+moment once the person answers.
+
 The voice pump settles a running start (the io takes the context and the device) or a failed
 one (its word, once; nothing is left open) on the module thread. A Stop, Discard or close that
 comes after the start returned but before any pump saw it finds nothing to let go, so the
@@ -669,7 +681,8 @@ The tests hold each of the three orders, every buffer freed in each:
 - **A stop or close before the start returned**, the start let go and finished by its own
   thread: `audio_io_test` §8 on `SyntheticAudioIo` with a held start (run or failed), and
   `audio_io_null_test` §6 on miniaudio's null device, 80 starts each stopped or closed at once,
-  every one let go before its start returned.
+  every one let go before its start returned; and §7, a start let go while held before its
+  device started, starting none.
 - **The start returned, then a stop or close before any pump saw it**, finished by the module
   thread: `audio_io_test` §8b (run or failed), `audio_io_null_test` §6b (the module thread
   closes the device the start left running, so frames stop at once), and `voice_live_test`
@@ -980,10 +993,12 @@ since nobody answered. S11's opt-in microphone test runs only with that consent.
 holds that thread only: `voice_record_start` answers at once, `voice_status` says
 `starting`, the room says "Starting the microphone…" and that nothing is recorded until it
 starts, and 15 s after the call the recording ends with `device-start-slow`, its start let
-go. If the person allows the microphone after that, the start returns, its own thread closes
-the device, and the next Record starts at once (inferred, as above: not seen with a real
-prompt). A start that never returns costs its thread and its buffer until the process ends,
-never the module thread.
+go. If the person allows the microphone after that, the start returns and its own thread
+releases the device: if the prompt held `ma_device_init`, the device is never started; if it
+held `ma_device_start`, the device comes on for a moment and that thread stops it at once
+(§9; which call it holds is not known). Either way the next Record starts at once (inferred,
+as above: not seen with a real prompt). A start that never returns costs its thread and its
+buffer until the process ends, never the module thread.
 
 ## 12. Linux
 

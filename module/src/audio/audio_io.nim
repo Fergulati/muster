@@ -209,9 +209,10 @@ const
     ## voice recorder's word for a start still pending past its bound (voice_live).
   MaxStartsInFlight* = 4
     ## Start threads that may wait at once; past them a start is refused, StartSlow.
-  StartWords = ["", "no-device", "device-format", "no-thread"]
+  StartWords = ["", "no-device", "device-format", "no-thread", "let-go"]
     ## What a start thread can report, by code: 0 runs; "no-thread" is a start thread that
-    ## could not be made.
+    ## could not be made; "let-go" a start that saw it was let go and started nothing (no one
+    ## reads it: the module thread has forgotten that job).
 
 proc startCode(word: string): int =
   for i, w in StartWords:
@@ -260,8 +261,10 @@ proc startsStopped*(g: StartGate): int = g.stopped.load(moAcquire)
   ## Starts let go while they waited, whose stream their own thread then stopped.
 
 {.push stackTrace: off, checks: off.}
-proc gateWait(g: StartGate): int {.gcsafe, raises: [].} =
-  ## The gated start's blocking half: wait until released; the code it was released with.
+proc gateWait*(g: StartGate): int {.gcsafe, raises: [].} =
+  ## A gated start's hold, on its start thread: wait until released; the code it was
+  ## released with (0 runs). SyntheticAudioIo's whole start, and the hold a test puts in
+  ## MiniaudioIo's (between the device's init and its start).
   discard g.reached.fetchAdd(1, moAcquireRelease)
   var ts = Timespec(tv_sec: Time(0), tv_nsec: 1_000_000)
   var rem: Timespec
@@ -281,7 +284,10 @@ proc gateWait(g: StartGate): int {.gcsafe, raises: [].} =
 #   * the module thread, on a stop or close before then: pending → let go (letGo), and
 #     forgets the job. The start thread's own swap then fails, so it finishes the job itself:
 #     it stops a stream its `run` started (`stop`), lets go of the job's buffer reference,
-#     frees the implementation's memory (`dispose`) and the job.
+#     frees the implementation's memory (`dispose`) and the job. A `run` may read the let-go
+#     itself (wasLetGo) before it starts a stream, and start none (MiniaudioIo does).
+#   * a stop or close after the start returned but before any pump saw it: letGo is false,
+#     and the module thread finishes the job as the pump would (audio_io_test §8b).
 # So nothing is freed twice or used after its free, and a start that never returns holds
 # its job, its buffer and its thread until the process ends: never the module thread.
 
@@ -293,7 +299,8 @@ type
   StartJob* = ptr StartJobObj
   StartRun* = proc (job: StartJob): int {.cdecl, gcsafe, raises: [].}
     ## A start's blocking half, on its start thread: 0 once the stream runs, else a code
-    ## (StartNoDevice, StartDeviceFormat), with whatever it initialised released again.
+    ## (StartNoDevice, StartDeviceFormat, StartLetGo), with whatever it initialised released
+    ## again.
   StartStop* = proc (job: StartJob) {.cdecl, gcsafe, raises: [].}
     ## Stop the stream `run` started and release what it initialised, for a start let go
     ## while it ran: on the start thread.
@@ -312,6 +319,8 @@ const
   StartNoDevice* = 1
   StartDeviceFormat* = 2
   StartNoThread = 3
+  StartLetGo* = 4
+    ## `run`'s code for a start that saw it was let go (wasLetGo) and started nothing.
 
 {.push stackTrace: off, checks: off.}
 proc endJob(job: StartJob) {.gcsafe, raises: [].} =
@@ -366,6 +375,13 @@ proc spawnStart*(buf: AudioBuffer, stream: AudioStream, run: StartRun, stop: Sta
     cFree(job)
     return (nil, StartWords[StartNoThread])
   (job, "")
+
+{.push stackTrace: off, checks: off.}
+proc wasLetGo*(job: StartJob): bool {.gcsafe, raises: [].} =
+  ## Start thread: the module thread has let this start go (atomics only). `run` reads it
+  ## before it starts a stream, so a start given up does not start one.
+  job.phase.load(moAcquire) == ord(spLetGo)
+{.pop.}
 
 proc startPhase*(job: StartJob): StartPhase = StartPhase(job.phase.load(moAcquire))
   ## Module thread: where the start stands (never spLetGo: a job let go is forgotten).

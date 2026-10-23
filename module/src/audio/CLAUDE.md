@@ -70,7 +70,11 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   at a stop or close before then, swaps pending → let go and forgets the job, never waiting.
   Whoever loses the swap's race does not touch the job again: a let-go start's own thread
   stops what it started (`stop`), lets go of its buffer reference, frees the rest
-  (`dispose`) and the job; otherwise the module thread's `pump` settles it (`finishStart`).
+  (`dispose`) and the job; otherwise the module thread's `pump` settles it (`finishStart`),
+  or a stop or close does, when the start returned before any pump saw it. `MiniaudioIo`'s
+  start reads the let-go (`wasLetGo`) just before `ma_device_start`, so a start let go while
+  it initialised never starts its device (`StartLetGo`; audio_io_null_test §7, through a
+  test's `StartGate` held between the device's init and its start, and `devicesStarted`).
   A start that fails releases everything it initialised before it reports. At most
   `MaxStartsInFlight` (4) start threads wait at once: past them a start is refused
   `device-start-slow`. A start that never returns holds its own thread, job and buffer until
@@ -121,7 +125,8 @@ Rules (the traps behind them, and how each was found: `docs/labbook/voice-notes-
   (§8b), failed, the in-flight cap, the buffers counted),
   `module/tests/audio_io_null_test.nim` (miniaudio's null device thread, its starts on the
   start thread, §6 stopping and closing 80 of them at once, §6b stopping and closing ones that
-  returned before any pump; `run-suite.sh` puts the pin's checkout on `--path`),
+  returned before any pump, §7 one let go before its device started starting none;
+  `run-suite.sh` puts the pin's checkout on `--path`),
   `module/tests/voice_device_e2e.nim` (the real devices, gated, above), and
   `module/tests/voice_live_test.nim` (the recorder over
   `SyntheticAudioIo`, `FileAudioIo` and the null device, two members over `LocalTransport`).
