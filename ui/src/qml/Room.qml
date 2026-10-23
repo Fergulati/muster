@@ -355,6 +355,7 @@ Item {
     // named) or monero.accounts.manage, and the answer comes back in moneroWallet:
     // {intent, wallet, state: asking|open|unavailable|failed|cancelled|error, error, at}.
     signal moneroWalletRequested(string wallet)
+    signal moneroWalletPresentRequested()   // bring Monero Wallet up to pay from it (basecamp.apps.launch)
     property var moneroWallet: ({})
     // When the state a wallet note describes last changed (exo-dcc.20): a newer split or
     // share answer, or a Monero request's wallet state in the projection. A note older
@@ -387,6 +388,9 @@ Item {
         var at = Number(r.at || 0);
         if (st !== "asking" && (room.moneroStateAt > at || room.moneroNow - at > 120000)) return "";
         if (st === "asking") return qsTr("Asking Monero Wallet to open…");
+        // the shell answers a launch the same way whether or not the app is there (it offers
+        // the install itself): the card's own steps say what to do next
+        if (String(r.intent || "") === "basecamp.apps.launch") return "";
         if (st === "open")
             return String(r.intent || "") === "monero.wallet.unlock"
                    ? qsTr("Your Monero wallet is open.")
@@ -1218,10 +1222,29 @@ Item {
     // where the split for someone else is paid: the address they shared — on Monero, the
     // subaddress their own wallet minted for this chain (exo-dcc.20)
     readonly property string splitForAddress: room.splitFor.length === 0 ? ""
-                                            : room.splitMonero ? room.sharedMoneroAddressOf(room.splitFor, room.splitMoneroChain)
+                                            : room.splitMonero ? (room.splitForAddressUsed ? ""
+                                                                  : room.sharedMoneroAddressOf(room.splitFor, room.splitMoneroChain))
                                             : room.splitBitcoin ? room.sharedBtcAddressOf(room.splitFor)
                                             : room.splitPrivate ? room.sharedLezAddressOf(room.splitFor)
                                             : room.sharedAddressOf(room.splitFor)
+    // Their newest shared Monero address already backs a payment in this room: their wallet
+    // confirms by amount at a subaddress, so one address can't back two payments, and the
+    // module refuses it (shared-address-used). The form asks them for a new one instead.
+    readonly property bool splitForAddressUsed: room.splitMonero && room.splitFor.length > 0
+        && room.moneroPayToUsed(room.sharedMoneroAddressOf(room.splitFor, room.splitMoneroChain))
+    // Whether a Monero payment proposed in this room pays `addr` — the module's own rule
+    // (moneroPayTosInUse): every Monero split proposed here, whatever became of it.
+    function moneroPayToUsed(addr) {
+        var a = String(addr || "");
+        if (a.length === 0) return false;
+        var its = room.intents || [];
+        for (var i = 0; i < its.length; ++i) {
+            var e = its[i] ? its[i].effect : null;
+            if (e && String(e.effect || "") === "split" && String(e.chain || "").indexOf("monero:") === 0
+                && String(e.payTo || "") === a) return true;
+        }
+        return false;
+    }
     function memberLabel(identity) {
         var id = String(identity || "").toLowerCase();
         for (var i = 0; i < room.members.length; ++i) {

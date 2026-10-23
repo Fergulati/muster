@@ -732,6 +732,7 @@ Item {
         // open the Monero wallet (exo-dcc.5): the same, for monero.wallet.unlock / manage
         moneroWallet: root.moneroWallet
         onMoneroWalletRequested: function (wallet) { root.openMoneroWallet(wallet); }
+        onMoneroWalletPresentRequested: root.presentMoneroWallet()
         objectName: "roomSurface"
         anchors.top: contentArea.top
         anchors.left: contentArea.left
@@ -974,6 +975,25 @@ Item {
         if (!root.canRaiseIntents) { finish({ ok: false, error: "unavailable" }); return; }
         root.moneroWallet = { intent: intent, wallet: w, state: "asking", error: "", at: Date.now() };
         try { logos.request(intent, w.length > 0 ? { wallet: w } : ({}), finish); }
+        catch (x) { finish({ ok: false, error: "unavailable" }); }
+    }
+    // Bring Monero Wallet up on its own view to pay from it: the shell's basecamp.apps.launch,
+    // a navigation with no consent dialog, which answers ok whether or not the app is there
+    // (it offers the install itself). Monero Wallet 0.1.1 takes no address or amount from
+    // another app, so the card copies the address and shows the amount; a prefilled Send
+    // waits on an intent the wallet provides.
+    function presentMoneroWallet() {
+        var intent = "basecamp.apps.launch";
+        var finish = function (res) {
+            var e = String((res && res.error) || "");
+            var ok = !!(res && res.ok);
+            root.moneroWallet = { intent: intent, wallet: "", error: e, at: Date.now(),
+                                  state: ok ? "open" : (e === "unavailable" || e === "cancelled") ? e
+                                         : e.length > 0 ? "failed" : "error" };
+        };
+        if (!root.canRaiseIntents) { finish({ ok: false, error: "unavailable" }); return; }
+        root.moneroWallet = { intent: intent, wallet: "", state: "asking", error: "", at: Date.now() };
+        try { logos.request(intent, { app: "monero_wallet_ui" }, finish); }
         catch (x) { finish({ ok: false, error: "unavailable" }); }
     }
     // Show the package in Package Manager (packages.show): offered when the install

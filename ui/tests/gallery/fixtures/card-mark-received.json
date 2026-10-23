@@ -1,0 +1,20 @@
+{
+  "about": "Mark received takes a second press, and Cancel undoes the first (found in the Monero send flow, 2026-10-23): the creditor's word ends a share for good, so one stray click must not.",
+  "snapshot": "data/split-alice-agreed.json",
+  "props": {},
+  "sizes": ["1440x900"],
+  "steps": [
+    {"view": "room"},
+    {"expectProp": ["cardMarkReceived", "text", "Mark received"]},
+    {"click": "cardMarkReceived"},
+    {"expectProp": ["cardMarkReceived", "text", "Yes, I have it"]},
+    {"expectProp": ["cardMarkReceivedCancel", "visible", true]},
+    {"shot": "armed"},
+    {"click": "cardMarkReceivedCancel"},
+    {"expectProp": ["cardMarkReceived", "text", "Mark received"]},
+    {"click": "cardMarkReceived"},
+    {"click": "cardMarkReceived"},
+    {"expect": {"slot": "confirmPart", "args": ["~0x", "~", ""]}},
+    {"shot": ""}
+  ]
+}
