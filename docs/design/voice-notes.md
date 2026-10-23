@@ -811,7 +811,10 @@ differ:
   no note's part: unsigned, a forged author, a malformed value, a squatted note id or a key
   of the wrong shape. Until PR 340's review the refusal took any `voice/` key in the raw log,
   and the log is append-only, so one member's junk entry switched the room's proof off for
-  good; now only a note does.
+  good; now only a note does. Any member can still do that, for good, by sending one note,
+  a broken one included: two parts of their own, signed, whose clip fails its checks on
+  purpose stand as a broken note, and a broken note refuses (`voice_live_test` §26). That
+  lasts until §18's proof question is decided.
   - **What is left.** An entry that is no note's part leaves with the proof whole, as a
     message's body does. So junk that copies a note's bytes carries them out when this
     member's view holds none of that note's own parts: a note sealed in an epoch this member
@@ -1803,10 +1806,14 @@ Still open:
   proof form carries voice parts as committed digests. Until then `coordinate_proof` refuses
   `voice-notes-present` for a room whose authentic view holds a part the fold stands, so a
   room with a voice note exports no proof at all. Since the review it no longer refuses for
-  junk: an entry under `voice/` that is no note's part refuses nothing, so no member can
-  switch a room's proof off for good, and it leaves with the proof whole, so a copy of a
-  note's bytes leaves too when this member's view holds none of that note's parts (§10). A
-  proof form that commits a part by digest would close that as well;
+  junk: an entry under `voice/` that is no note's part refuses nothing, and it leaves with
+  the proof whole, so a copy of a note's bytes leaves too when this member's view holds none
+  of that note's parts (§10). A note still refuses, whatever its state: complete, arriving,
+  or broken, as two parts of a member's own, signed, whose clip fails its checks on purpose
+  are (`voice_live_test` §26). The log is append-only, so any member can still switch a
+  room's proof off for good, by sending one note. Junk can no longer do it; a note does,
+  until this question is decided. A proof form that commits a part by digest would close
+  both;
 - **a re-send path for a note the fleet half-delivered** (§8, §15). Delivery's send is
   fire-and-forget, so a part it lost is never seen, and nothing re-publishes a voice part:
   `coordinate_reannounce` re-sends intents only. Options: a voice part joins what
