@@ -556,6 +556,14 @@ method watch*(s: LezMsigSettlement, txRef: TxRef): Finality =
       return Finality(status: fsPending, detail: "executing the queued action")
     Finality(status: fsFailed, detail: "the program refused it (included; nothing changed)")
 
+proc chainRefOf*(s: LezMsigSettlement, r: TxRef): string =
+  ## What the settlement is looked up by outside the room: the transaction's hash. A private
+  ## multisig's submit answers with the prover's job ("job:<id>"); its hash is known only once
+  ## the prover sent it, and "" until then (exo-efa).
+  let c = s.msigChainOf()
+  if c != nil and c of MsigPrivate and r.id.startsWith("job:"): MsigPrivate(c).txHashOf(r.id)
+  else: r.id
+
 method watchDeadlineS*(s: LezMsigSettlement): float =
   ## Until the proposal expires: a queued action may wait out its whole lock.
   if s.expiresMs == 0 or s.msigChainOf() == nil: return 0.0

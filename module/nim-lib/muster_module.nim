@@ -1259,7 +1259,8 @@ proc lezPump() =
         let f = p.settle.watch(p.txRef)
         # through the platform the room hears of it only once the sender broadcast: the
         # hash, never the marker (exo-d4d.5)
-        let chainRef = resolvedRef(p.txRef)
+        let chainRef = (if p.settle of LezMsigSettlement: LezMsigSettlement(p.settle).chainRefOf(p.txRef)
+                        else: resolvedRef(p.txRef))
         if not p.submitted and chainRef.len > 0:
           p.session.publish(submitEvent(p.intentId, chainRef = chainRef))
           p.submitted = true

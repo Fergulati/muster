@@ -175,6 +175,9 @@ proc settleAndWatch(i: int, id: string): tuple[f: Finality, txRef: TxRef] =
   let until = epochTime() + 300
   while true:
     result.f = st.watch(result.txRef)
+    if result.f.status == fsFinal:
+      # the room records the transaction's hash, never the prover's job id
+      doAssert st.chainRefOf(result.txRef).len == 64 and st.chainRefOf(result.txRef) == chains[i].txHashOf(result.txRef.id)
     if result.f.status != fsPending or epochTime() > until: return
     sleep(2000)
 
@@ -183,6 +186,8 @@ approve(2, pay)
 doAssert intentState(r.alice.roomEvents(), roomDriverFor, pay) == "executable", "2 of 3"
 let (f, payRef) = settleAndWatch(2, pay)
 doAssert f.status == fsFinal, $f
+doAssert payRef.id.startsWith("job:")
+doAssert chains[2].txHashOf(payRef.id).len == 64, "the room records the transaction's hash, never the job"
 doAssert rpc.getAccount(recipient).balance == before + 1200.u128, "the program paid the recipient"
 for i in 0 .. 2: chains[i].refresh(i)
 doAssert chains[0].readMsig(a).balance == 3800.u128 and not chains[0].readMsig(a).state.nonceFree(0),
