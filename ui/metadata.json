@@ -19,8 +19,7 @@
     "fee_module",
     "liblogos_lez_rln_module",
     "liblogos_rln_module",
-    "storage_module",
-    "lez_msig_module"
+    "storage_module"
   ],
   "codegen": {
     "rep": "src/muster_ui.rep"
