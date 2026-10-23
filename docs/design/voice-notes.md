@@ -1100,12 +1100,13 @@ that is not part of this PR, ran the suite on both arches and S9's voice self-te
   installed. No permission prompt is involved on Linux.
 - **A nix-built runner** (`make run`, the self-tests): nix's glibc does not read
   `/etc/ld.so.cache`, so a dlopen by soname likely finds neither library, and the review
-  expects `make run` to report no device. Then Record answers `{ok}` at once, `voice_status`
-  says `starting`, and the next pump ends the recording idle with `recording.error` and
-  `ready.capture` both `no-device`; the room says "No microphone was found on this device."
-  Play ends the same way: "No speaker was found on this device." Nothing records zeros, since
-  Null is not on the list: such a machine refuses with the device word, and never makes a
-  silent note for Send's `silent` to refuse.
+  expects `make run` to report no device. Then Record answers `{ok}` at once; once the start
+  thread returns, the next `voice_status` (it pumps before it answers) shows the recording
+  idle, with `recording.error` and `ready.capture` both `no-device`, and `starting` shows
+  only to a read that lands before that; the room says "No microphone was found on this
+  device." Play ends the same way: "No speaker was found on this device." Nothing records
+  zeros, since Null is not on the list: such a machine refuses with the device word, and
+  never makes a silent note for Send's `silent` to refuse.
   - The fix to try: `libpulseaudio` in `nix.packages.runtime`, so its lib dir joins the
     plugin's RUNPATH, which a dlopen from the plugin searches.
   - The list is flat, so it would enter the darwin closure too.
