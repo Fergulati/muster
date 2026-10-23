@@ -25,6 +25,7 @@ import ../src/drivers/lez_msig
 import ../src/intents/materialization
 import ../src/coordination/intent_events
 import ../src/coordination/attest
+import ../src/coordination/effect_summary
 import ../src/lez/msig
 import ../src/bitcoin/keys as btckeys
 
@@ -100,6 +101,11 @@ block:
   var padded = parseJson(lezMsigEffect(p))
   padded["proposal"] = %(padded["proposal"].getStr() & "00")
   doAssert "not a lez-msig proposal" in drv.signRefusal(effectFromJson($padded)), "non-canonical bytes"
+  # the card's line, read from the same bytes (RFP U.6)
+  let sm = effectSummary(lezMsigEffect(p))
+  doAssert sm.kind == "payment" and sm.amount == "400" and sm.to == hexOf(fill(0x0e)), $sm
+  doAssert "LEZ multisig payment" in sm.text and "nonce 0" in sm.text, sm.text
+  doAssert effectSummary($padded).kind == "unknown", "bytes that do not decode are named, never guessed"
   echo "2. the effect is the proposal's bytes; canonicalize commits to its id; foreign ones refused OK"
 
 # ── 3. contributions ───────────────────────────────────────────────────────────

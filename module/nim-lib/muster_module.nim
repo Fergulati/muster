@@ -2974,6 +2974,10 @@ proc musterCoordinateIntents(): string =
     # members named as the card names them ("1 person owes you", not a short id)
     let sm = effectSummary(v.effectJson, proc(who: string): string = memberName(who, mine))
     o["summary"] = %*{"kind": sm.kind, "amount": sm.amount, "unit": sm.unit, "to": sm.to, "text": sm.text}
+    if prof.family == LezMsigFamily:
+      # the card decodes the proposal from the exact bytes the approvals sign (RFP U.6)
+      try: o["msig"] = msigbytes.proposalJson(proposalOf(effectFromJson(v.effectJson)))
+      except CatchableError as e: o["msig"] = %*{"error": "does not decode: " & e.msg}
     # Who approved, named from the address book (or "you"), and whether I did — read
     # from the log + my keys (attest.approvedByMe), or an in-app approval made here.
     var whos: seq[string]
@@ -3997,11 +4001,24 @@ proc musterCoordinateProposeLezMsig(actionJson: string): string =
          "proposal": msigbytes.proposalJson(p)})
   except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
 
+var gMsigStateCache = initTable[string, tuple[at: float, json: string]]()
+proc musterLezMsigStateRead(acct: string): string
 proc musterLezMsigState(account: string): string =
-  ## The multisig's state as the program holds it, read from the user's sequencer.
+  ## The multisig's state as the program holds it, read from the user's sequencer. The UI
+  ## asks on every intents tick, so a read is reused for 4 s.
   if gSession == nil: return $(%*{"error": "not-joined"})
   var acct = account.strip()
-  if acct.len == 0: acct = splitPolicy(gCoordKind)[1]
+  if acct.len == 0:
+    let (k, a) = splitPolicy(gCoordKind)
+    if k != "lez-msig": return $(%*{"error": "not-a-lez-msig-policy"})
+    acct = a
+  if acct in gMsigStateCache and epochTime() - gMsigStateCache[acct].at < 4.0:
+    return gMsigStateCache[acct].json
+  result = musterLezMsigStateRead(acct)
+  gMsigStateCache[acct] = (epochTime(), result)
+
+proc musterLezMsigStateRead(acct: string): string =
+  ## musterLezMsigState's chain read.
   let (found, a) = findAccount(roomAccounts(), acct)
   if not found or a.family != LezMsigFamily: return $(%*{"error": "unknown-account"})
   let (ok, la, detail) = lezMsigAccountOf(a.chain, a.address, a.config)

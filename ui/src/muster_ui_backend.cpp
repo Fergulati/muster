@@ -521,6 +521,8 @@ void MusterUiBackend::loadIntents()
     loadFrostCeremonies();
     // ... and so do the Monero multisig setups and spends (the module's pump)
     loadXmrMsig();
+    // ... and lez-msig's ceremonies and its account's state (exo-0d3)
+    loadLezMsig();
     // The activity feed folds from the SAME log, so refresh it whenever the
     // intents do — every join, propose, contribute, submit, and periodic tick.
     loadActivity();
@@ -964,6 +966,31 @@ void MusterUiBackend::xmrMsigPropose(const QString &account, const QString &reci
     qInfo() << "[muster_ui] coordinate_propose_xmr_msig" << account << "->" << r;
     setXmrMsigProposeJson(asObjectJson(r, "intentId"));
     loadIntents();
+}
+
+void MusterUiBackend::lezMsigOpen(const QString &specJson)
+{
+    // lez_msig_open → the create key, or {error, detail}; the members' clients join on
+    // their intents tick, and the opener's creates and discloses the multisig.
+    const QString r = modules().muster_module.lez_msig_open(specJson.trimmed());
+    qInfo() << "[muster_ui] lez_msig_open" << specJson << "->" << r;
+    setLezMsigOpenJson(asObjectJson(r, "error"));
+    loadLezMsig();
+}
+
+void MusterUiBackend::lezMsigPropose(const QString &actionJson)
+{
+    // coordinate_propose_lez_msig → {intentId, nonce, epoch}, or {error, detail}.
+    const QString r = modules().muster_module.coordinate_propose_lez_msig(actionJson.trimmed());
+    qInfo() << "[muster_ui] coordinate_propose_lez_msig" << actionJson << "->" << r;
+    setLezMsigProposeJson(asObjectJson(r, "intentId"));
+    loadIntents();
+}
+
+void MusterUiBackend::loadLezMsig()
+{
+    setLezMsigCeremoniesJson(modules().muster_module.lez_msig_ceremonies());
+    setLezMsigStateJson(modules().muster_module.lez_msig_state(QString()));
 }
 
 void MusterUiBackend::loadXmrMsig()

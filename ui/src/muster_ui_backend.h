@@ -115,6 +115,9 @@ public:
     void xmrMsigSetupJoin(const QString &ceremonyId) override;
     void xmrMsigPropose(const QString &account, const QString &recipientsJson, const QString &feeCap, const QString &memo) override;
     void loadXmrMsig() override;
+    void lezMsigOpen(const QString &specJson) override;
+    void lezMsigPropose(const QString &actionJson) override;
+    void loadLezMsig() override;
     void loadFlow() override;
     void loadGraph(const QString &roomTopic) override;
     void setPolicy(const QString &kind) override;

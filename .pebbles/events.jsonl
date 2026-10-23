@@ -2785,3 +2785,5 @@
 {"type":"create","timestamp":"2026-10-23T14:56:43.348014165Z","issue_id":"exo-b57","payload":{"description":"Deploy the program on testnet.lez.logos.co (needs native LEZ in infra/lez/funder.sh --zone testnet account), run lez_msig_live_e2e and live_private there with real proving; rerun msig_bench on an idle machine for publication (2026-10-23's ran alongside builds).","priority":"2","title":"lez-msig: the testnet runs and an idle-machine benchmark","type":"task"}}
 {"type":"dep_add","timestamp":"2026-10-23T14:56:43.600946137Z","issue_id":"exo-0d3.15","payload":{"dep_type":"parent-child","depends_on":"exo-0d3"}}
 {"type":"rename","timestamp":"2026-10-23T14:56:43.600946137Z","issue_id":"exo-b57","payload":{"new_id":"exo-0d3.15"}}
+{"type":"status_update","timestamp":"2026-10-23T15:14:31.743883338Z","issue_id":"exo-0d3.10","payload":{"status":"in_progress"}}
+{"type":"comment","timestamp":"2026-10-23T15:14:32.023523971Z","issue_id":"exo-2a0","payload":{"body":"Draft at docs/proposals/RFP-005-lez-msig.md (uncommitted: team, contact, budget and audit quote are the operator's)."}}

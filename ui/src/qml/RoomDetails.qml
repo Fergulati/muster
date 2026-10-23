@@ -129,6 +129,17 @@ Rectangle {
                         if (details.room.backend) details.room.backend.frostCeremonyOpen(cid, network, t, n);
                     }
                     onFrostJoinRequested: function (cid) { if (details.room.backend) details.room.backend.frostCeremonyJoin(cid); }
+                    lezMsigCeremonies: details.room.lezMsigCeremonies
+                    lezMsigOpen: details.room.lezMsigOpen
+                    lezMsigPropose: details.room.lezMsigPropose
+                    lezMsigState: details.room.lezMsigState
+                    onLezMsigOpenRequested: function (specJson) { if (details.room.backend) details.room.backend.lezMsigOpen(specJson); }
+                    onLezMsigProposeRequested: function (account, actionJson) {
+                        if (!details.room.backend) return;
+                        // a proposal goes out from the room's policy: make it this multisig first
+                        details.room.backend.setPolicy("lez-msig@" + account);
+                        details.room.backend.lezMsigPropose(actionJson);
+                    }
                     xmrMsigSetups: details.room.xmrMsigSetups
                     xmrMsigSetup: details.room.xmrMsigSetup
                     xmrMsigPropose: details.room.xmrMsigPropose

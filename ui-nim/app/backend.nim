@@ -165,6 +165,11 @@ proc loadXmrMsigDo(o: MusterUi, d: Done = nil) =
   ask mm.xmr_msig_setupsAsync(proc (r: string) = o.setXmrMsigSetupsJson(r))
   ask mm.xmr_msig_spendsAsync(proc (r: string) = o.setXmrMsigSpendsJson(r); fin(d, r))
 
+proc loadLezMsigDo(o: MusterUi, d: Done = nil) =
+  # lez-msig's ceremonies, and the room's lez-msig account's state (exo-0d3)
+  ask mm.lez_msig_ceremoniesAsync(proc (r: string) = o.setLezMsigCeremoniesJson(r))
+  ask mm.lez_msig_stateAsync("", proc (r: string) = o.setLezMsigStateJson(r); fin(d, r))
+
 proc loadIntentsDo(o: MusterUi, d: Done = nil) =
   # The room's proposals folded from the shared log. The FROST ceremonies advance on
   # the same tick, and the activity feed folds from the same log.
@@ -172,6 +177,7 @@ proc loadIntentsDo(o: MusterUi, d: Done = nil) =
     o.setIntentsJson(r)
     o.loadFrostCeremoniesDo()
     o.loadXmrMsigDo()
+    o.loadLezMsigDo()
     o.loadActivityDo()
     fin(d, r))
 
@@ -1205,6 +1211,17 @@ proc xmrMsigSetupJoinImpl(o: MusterUi, ceremonyId: string) = o.xmrMsigSetupJoinD
 proc xmrMsigProposeImpl(o: MusterUi, account, recipientsJson, feeCap, memo: string) =
   o.xmrMsigProposeDo(account, recipientsJson, feeCap, memo)
 proc loadXmrMsigImpl(o: MusterUi) = o.loadXmrMsigDo()
+proc lezMsigOpenImpl(o: MusterUi, specJson: string) =
+  ask mm.lez_msig_openAsync(specJson.strip(), proc (r: string) =
+    info "lez_msig_open " & qs(specJson) & " -> " & qs(r)
+    o.setLezMsigOpenJson(asObjectJson(r, "error"))
+    o.loadLezMsigDo())
+proc lezMsigProposeImpl(o: MusterUi, actionJson: string) =
+  ask mm.coordinate_propose_lez_msigAsync(actionJson.strip(), proc (r: string) =
+    info "coordinate_propose_lez_msig " & qs(actionJson) & " -> " & qs(r)
+    o.setLezMsigProposeJson(asObjectJson(r, "intentId"))
+    o.loadIntentsDo())
+proc loadLezMsigImpl(o: MusterUi) = o.loadLezMsigDo()
 proc loadWalletSummaryImpl(o: MusterUi) = o.loadWalletSummaryDo()
 proc loadFlowImpl(o: MusterUi) = o.loadFlowDo()
 proc loadGraphImpl(o: MusterUi, roomTopic: string) = o.loadGraphDo(roomTopic)
