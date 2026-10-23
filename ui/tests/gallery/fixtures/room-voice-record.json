@@ -1,5 +1,5 @@
 {
-  "about": "Recording a voice note from the message row (docs/design/voice-notes.md §8): the module's recording shows as a banner whoever started it, with the time, the level and Stop; Stop makes a draft whose surface shows Play, Send, Discard and who will see what before anything is sent, its Play waiting while a note in the thread plays (one stream at a time, as the card's); the module's refusal and its note show as it says them; the 250 ms read of voice_status runs while not idle (recording, a draft held) and stops once idle, leaving the room's 1 s tick. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (no runner records one until S9).",
+  "about": "Recording a voice note from the message row (docs/design/voice-notes.md §8): the module's recording shows as a banner whoever started it, with the time, the level and Stop; Stop makes a draft whose surface shows Play, Send, Discard and who will see what before anything is sent, its Play waiting while a note in the thread plays (one stream at a time, as the card's); the module's refusal and its note show as it says them; the 250 ms read of voice_status runs while the microphone records or a note plays, not while a draft is only held, which the app's 1 s read of voice_status keeps (PR 340's review, a nit); the recording also shows in the indicator above every page, Muster's own words for the microphone being on, and a draft does not. voiceJson and voiceResultJson are copied from the shapes voice_status and the voice methods pin (no runner records one until S9).",
   "snapshot": "data/statement-proposed.json",
   "sizes": [
     "1440x900"
@@ -53,6 +53,27 @@
     {
       "expectProp": [
         "voicePoll",
+        "running",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicatorTitle",
+        "text",
+        "Muster is using the microphone"
+      ]
+    },
+    {
+      "expectProp": [
+        "appVoicePoll",
         "running",
         true
       ]
@@ -148,7 +169,21 @@
       "expectProp": [
         "voicePoll",
         "running",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "appVoicePoll",
+        "running",
         true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        false
       ]
     },
     {
@@ -227,6 +262,20 @@
       ]
     },
     {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        false
+      ]
+    },
+    {
       "props": {
         "voiceJson": {
           "ready": {
@@ -260,6 +309,13 @@
         "voiceDraftPlay",
         "label",
         "Play it back"
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        false
       ]
     },
     {

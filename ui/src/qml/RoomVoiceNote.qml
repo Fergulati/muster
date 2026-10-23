@@ -13,8 +13,8 @@ import Logos.Controls
 //   recording  a banner whenever voice_status says so, whoever started it (§13): the time on a
 //              clock of this view's own (the module's 60 s cap is the one that counts), the
 //              level, Stop and Discard. It is part of the room's composer, so it shows only
-//              while a room's view is on screen: on Home, Settings or Contacts nothing in
-//              Muster says the microphone is on;
+//              while a room's view is on screen; on every page, this one included, Main's
+//              strip says Muster is using the microphone while it starts or records;
 //   draft      Play, Send and Discard, and who will see what, before anything is sent;
 //   a notice   the module's refusal or note, in its own words where it has them.
 ColumnLayout {

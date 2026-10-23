@@ -1,0 +1,361 @@
+{
+  "about": "Muster says the microphone is on, on every page (docs/design/voice-notes.md §13; PR 340's review, microphone consent with co-resident modules): with the access checks off any module loaded beside Muster can start a recording, and the room's own banner shows only in a room's view. So Main reads voice_status every second whether or not a room is open (here none is joined, and the room's reads are off), and while it says starting or recording a strip above every page, Home, Settings, Contacts, Learn and the Wallet here and any room in room-voice-record, names Muster as using the microphone, with Stop and Discard; idle, or a draft held, it is not there. voiceJson is copied from the shapes voice_status pins (voice_live_test), not recorded (§15).",
+  "snapshot": "data/split-alice-final.json",
+  "sizes": [
+    "1440x900"
+  ],
+  "props": {
+    "roomTopic": "",
+    "voiceJson": {
+      "ready": {
+        "capture": "unknown",
+        "playback": "unknown",
+        "codec": "libopus 1.5.2",
+        "note": ""
+      },
+      "recording": {
+        "state": "idle",
+        "elapsedMs": 0,
+        "capMs": 60000,
+        "peak": 0,
+        "capped": false,
+        "silent": false,
+        "error": ""
+      },
+      "playing": null
+    },
+    "voiceResultJson": ""
+  },
+  "steps": [
+    {
+      "view": "home"
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "appVoicePoll",
+        "running",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voicePoll",
+        "running",
+        false
+      ]
+    },
+    {
+      "wait": 1300
+    },
+    {
+      "expect": {
+        "slot": "loadVoice"
+      }
+    },
+    {
+      "shot": "idle"
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "unknown",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "starting",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicatorTitle",
+        "text",
+        "Muster is starting the microphone…"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicatorTime",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicatorLine",
+        "text",
+        "~If you did not start this, press Discard."
+      ]
+    },
+    {
+      "expectProp": [
+        "homeSurface",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "starting"
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "recording",
+            "elapsedMs": 12400,
+            "capMs": 60000,
+            "peak": 9000,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        }
+      }
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicatorTitle",
+        "text",
+        "Muster is using the microphone"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicatorTime",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicatorTime",
+        "text",
+        "0:12 of 1:00"
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicatorLine",
+        "text",
+        "~If you did not start it, press Discard."
+      ]
+    },
+    {
+      "expectProp": [
+        "homeSurface",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "recording"
+    },
+    {
+      "view": "settings"
+    },
+    {
+      "expectProp": [
+        "settingsSurface",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        true
+      ]
+    },
+    {
+      "shot": "settings"
+    },
+    {
+      "view": "contacts"
+    },
+    {
+      "expectProp": [
+        "addressBookSurface",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        true
+      ]
+    },
+    {
+      "view": "walkthrough"
+    },
+    {
+      "expectProp": [
+        "learnView",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        true
+      ]
+    },
+    {
+      "view": "dashboard"
+    },
+    {
+      "expectProp": [
+        "walletHeader",
+        "visible",
+        true
+      ]
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        true
+      ]
+    },
+    {
+      "view": "home"
+    },
+    {
+      "click": "voiceIndicatorStop"
+    },
+    {
+      "expect": {
+        "slot": "stopVoiceRecording"
+      }
+    },
+    {
+      "click": "voiceIndicatorDiscard"
+    },
+    {
+      "expect": {
+        "slot": "discardVoiceDraft"
+      }
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "draft",
+            "elapsedMs": 12400,
+            "capMs": 60000,
+            "peak": 9000,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        },
+        "voiceResultJson": {
+          "draft": {
+            "durationMs": 12400,
+            "silent": false,
+            "peak": 9000
+          }
+        },
+        "voiceResultSeq": "1"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        false
+      ]
+    },
+    {
+      "props": {
+        "voiceJson": {
+          "ready": {
+            "capture": "ok",
+            "playback": "unknown",
+            "codec": "libopus 1.5.2",
+            "note": ""
+          },
+          "recording": {
+            "state": "idle",
+            "elapsedMs": 0,
+            "capMs": 60000,
+            "peak": 0,
+            "capped": false,
+            "silent": false,
+            "error": ""
+          },
+          "playing": null
+        },
+        "voiceResultJson": "ok",
+        "voiceResultSeq": "2"
+      }
+    },
+    {
+      "expectProp": [
+        "voiceIndicator",
+        "visible",
+        false
+      ]
+    },
+    {
+      "expectProp": [
+        "appVoicePoll",
+        "running",
+        true
+      ]
+    },
+    {
+      "dumpCalls": true
+    }
+  ]
+}

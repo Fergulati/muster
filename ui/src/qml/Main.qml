@@ -538,10 +538,118 @@ Item {
         }
     }
 
-    // Every surface fills this, beside the sidebar (or under the strip).
+    // ── the microphone, said on every page (docs/design/voice-notes.md §13) ─────────────
+    // With Basecamp's access checks off, any module loaded beside Muster can start a
+    // recording, and the room's own banner (RoomVoiceNote) shows only in a room's view. So
+    // voice_status is read here every second, whether or not a room is open, and while it
+    // says starting or recording a strip above every page says Muster is using the
+    // microphone, with Stop and Discard. It cannot say who started it, nor for which room:
+    // voice_status names neither. A room's view reads it faster while the microphone
+    // records or a note plays (Room.qml's voicePoll); this is the ordinary tick, a held
+    // draft's too. voice_status also drives the module's voice pump.
+    readonly property var voiceRec: {
+        try {
+            var v = JSON.parse(root.backend ? (root.backend.voiceJson || "{}") : "{}");
+            return (v && v.recording) ? v.recording : ({});
+        } catch (e) { return ({}); }
+    }
+    readonly property string micState: String(root.voiceRec.state || "idle")
+    readonly property bool micOn: root.micState === "starting" || root.micState === "recording"
+    function micClock(ms) {
+        var s = Math.floor(Math.max(0, Number(ms) || 0) / 1000);
+        return Math.floor(s / 60) + ":" + (s % 60 < 10 ? "0" : "") + (s % 60);
+    }
+    Timer {
+        objectName: "appVoicePoll"
+        interval: 1000
+        repeat: true
+        running: root.backend !== null
+        onTriggered: if (root.backend) root.backend.loadVoice()
+    }
+    Rectangle {
+        id: voiceIndicator
+        objectName: "voiceIndicator"
+        visible: root.micOn
+        anchors.top: drawerStrip.visible ? drawerStrip.bottom : parent.top
+        anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
+        anchors.right: parent.right
+        height: visible ? micRow.implicitHeight + 2 * Theme.spacing.small : 0
+        z: 5
+        color: MusterStyle.refusedSoft
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: micTitle.text
+        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: MusterStyle.tint(MusterStyle.refused, 0.42) }
+        RowLayout {
+            id: micRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: Theme.spacing.large
+            anchors.rightMargin: Theme.spacing.medium
+            spacing: Theme.spacing.medium
+            Rectangle {
+                implicitWidth: 10; implicitHeight: 10; radius: 5
+                // hollow while the microphone starts: nothing is recorded yet
+                color: root.micState === "starting" ? "transparent" : MusterStyle.refused
+                border.width: root.micState === "starting" ? 2 : 0
+                border.color: MusterStyle.refused
+            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 2
+                RowLayout {
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        id: micTitle
+                        objectName: "voiceIndicatorTitle"
+                        text: root.micState === "starting" ? qsTr("Muster is starting the microphone…")
+                                                           : qsTr("Muster is using the microphone")
+                        color: Theme.palette.text
+                        font.pixelSize: MusterStyle.body
+                        font.weight: Theme.typography.weightBold
+                    }
+                    LogosText {
+                        objectName: "voiceIndicatorTime"
+                        visible: root.micState === "recording"
+                        text: qsTr("%1 of %2").arg(root.micClock(root.voiceRec.elapsedMs))
+                                              .arg(root.micClock(root.voiceRec.capMs || 60000))
+                        color: Theme.palette.textSecondary
+                        font.family: MusterStyle.mono
+                        font.pixelSize: MusterStyle.caption
+                    }
+                }
+                LogosText {
+                    objectName: "voiceIndicatorLine"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: root.micState === "starting"
+                          ? qsTr("Nothing is recorded until it starts. If you did not start this, press Discard.")
+                          : qsTr("A voice note is recording. Stop keeps it unsent; you send it from its room. If you did not start it, press Discard.")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                }
+            }
+            // through the room, so its answer shows there as if pressed in the room's banner
+            ActionButton {
+                objectName: "voiceIndicatorStop"
+                compact: true
+                text: qsTr("Stop")
+                onClicked: roomSurface.stopVoice()
+            }
+            ActionButton {
+                objectName: "voiceIndicatorDiscard"
+                compact: true
+                quiet: true
+                text: qsTr("Discard")
+                onClicked: roomSurface.discardVoice()
+            }
+        }
+    }
+
+    // Every surface fills this, beside the sidebar (or under the strip), below the microphone.
     Item {
         id: contentArea
-        anchors.top: drawerStrip.visible ? drawerStrip.bottom : parent.top
+        anchors.top: voiceIndicator.bottom
         anchors.left: root.sideMode === "drawer" ? parent.left : sidebar.right
         anchors.right: parent.right
         anchors.bottom: parent.bottom

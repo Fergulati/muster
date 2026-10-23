@@ -1922,21 +1922,22 @@ Item {
             room.backend.loadMembers();
             room.backend.loadMessages();
             room.backend.loadIntents();
-            // a recording shows whoever started it: with the access policy off, any module
+            // voice_status is read by Main's appVoicePoll every second, room or none: a
+            // recording shows whoever started it, since with the access policy off any module
             // loaded beside Muster can turn the microphone on (docs/design/voice-notes.md §13)
-            room.backend.loadVoice();
         }
     }
 
-    // While not idle (a note recording, a draft held, or a note playing), voice_status is
-    // read four times a second, for the time, the level and the place; a draft can be held
-    // for hours, and it is read at that rate all the while (voice-notes.md §8). Idle, the
-    // tick above is enough. voice_status also drives the module's voice pump, as
-    // fileshare_files drives FileShare's.
+    // While the microphone starts or records, or a note plays, voice_status is read four
+    // times a second, for the time, the level and the place (voice-notes.md §8). A draft
+    // only held, which can wait for hours, and idle are read on Main's 1 s tick (PR 340's
+    // review). voice_status also drives the module's voice pump, as fileshare_files drives
+    // FileShare's.
     Timer {
         objectName: "voicePoll"
         interval: 250
-        running: room.joined && (room.voiceState !== "idle" || room.voicePlaying !== null)
+        running: room.joined && (room.voiceState === "starting" || room.voiceState === "recording"
+                                 || room.voicePlaying !== null)
         repeat: true
         onTriggered: if (room.backend) room.backend.loadVoice()
     }

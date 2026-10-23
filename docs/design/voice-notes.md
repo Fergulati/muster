@@ -587,10 +587,13 @@ thread cannot emit. So:
 - `voice_status` drives `voicePump`, as `fileshare_files` drives `fileSharePump`
   (`muster_module.nim:2776`);
 - `coordinate_intents` also calls it, from its pump list (`:2838-2846`);
-- the UI polls `voice_status` every 250 ms while not idle: a note recording, a draft held (for
-  as long as it is held), or a note playing;
-- the room's 1 s timer reads it too, so a recording any caller started shows a banner (§13),
-  while a room's view is on screen: the banner is part of the room's composer.
+- a room's view polls `voice_status` every 250 ms while the microphone starts or records, or
+  a note plays (Room's `voicePoll`). A draft only held is not read faster: until PR 340's
+  review it kept that poll going for as long as it was held, which can be hours;
+- `Main.qml` reads it every second on every page, whether or not a room is open
+  (`appVoicePoll`), so a recording any caller started shows (§13): in the strip above every
+  page, and in a room's view in the room's own banner too, which is part of its composer. A
+  held draft and idle are read at that rate.
 
 Elapsed time on screen comes from a QML clock, started when `voice_status` first says
 `recording`. The module's cap is the one that counts. While a recording is `starting`, the
@@ -1074,7 +1077,9 @@ Basecamp runs with the access policy off by default, so any loaded module can ca
 caller. So any module loaded beside Muster can:
 - call `voice_record_start` and turn on the microphone. The cap ends the recording at 60 s,
   but the device stays open until something pumps (§9), so a caller that makes no further
-  call, headless or before the UI has entered a room, keeps the microphone on past it;
+  call keeps the microphone on past it where nothing else calls the module: headless, or with
+  Muster's view not running (the view's 1 s read of `voice_status`, on every page since PR
+  340's review, pumps it);
 - choose where the note goes. `coordinate_join` makes any room the current one, one the
   module founds there and then or one whose members it admitted (`coordinate_admit`), and
   `voice_record_start` binds the draft to the current room, so the module can record there
@@ -1102,12 +1107,27 @@ who runs a Muster from before voice notes (0.3.2 or earlier), both still return 
 nothing here reaches that code (§10, "What still leaks", item 6).
 
 **The mitigations:**
-- **A banner.** The room's 1 s timer shows a recording banner from `voice_status`, whoever
-  started the recording. The banner is part of a room's composer (`RoomVoiceNote.qml`), so it
-  shows only while a room's view is on screen: on Home, Settings, Contacts or the walkthrough,
-  or before the person has entered a room, nothing in Muster says the microphone is on (the
-  operating system's own microphone indicator still shows, where capture works). In headless
-  `logoscore` nothing shows. An indicator outside the room is open (§18).
+- **A strip above every page** (since PR 340's review, which asked for "a global recording
+  indicator in `Main.qml`"). `Main.qml` reads `voice_status` every second, whether or not a
+  room is open (`appVoicePoll`). While it says `starting` or `recording`, a strip above every
+  page (Home, Settings, Contacts, Learn, the Wallet, any room) says "Muster is using the
+  microphone", or "Muster is starting the microphone…", with the time, Stop and Discard, and
+  "If you did not start it, press Discard." Its Stop and Discard go through the room's own
+  calls, so their answers show in the room as the banner's would. In a room's view the
+  room's banner (`RoomVoiceNote.qml`) shows as well. What it does not cover:
+  - Muster's view not running: headless `logoscore`, a host that has not loaded Muster's
+    view, and, in Basecamp, whether Muster's view keeps running while another app's view is
+    in front is not checked;
+  - a person who is not looking;
+  - a recording that starts and ends between two reads: Send takes 500 ms of audio at least,
+    so a caller can start, stop and send a note of about a second that the strip never shows
+    (the note itself then shows in that room's thread, as the member's);
+  - who started it, and for which room: `voice_status` names neither (§18);
+  - a draft held, or a note or the draft played aloud: the strip is for the microphone only.
+
+  The operating system's own microphone indicator still shows, where capture works. The
+  strip is seen in the gallery only (`home-voice-indicator`, and `room-voice-record` for a
+  room), against the generated fake backend: no runner or Basecamp window has shown it.
 - **The real fix** is `--access-policy enforce` with `muster_module`'s allowed callers set to
   `muster_ui` (`docs/basecamp-access-policy.md`, `infra/access-policy.json`), or Basecamp's
   capability broker.
@@ -1249,7 +1269,7 @@ unverified, built or planned:
   as a card; S8 and S7 should land in one push.
 - **S8 is seen through the gallery, on a Mac, with no module, and once in Basecamp's window.**
   The S8 fixtures (`room-voice-forged`, `-notes`, `-record`, `-refused`, `-flow`, `-starting`,
-  and `room-map-voice`) pass against the real `Main.qml` and the generated `FakeBackend.qml`,
+  `room-map-voice`, and since PR 340's review `home-voice-indicator`) pass against the real `Main.qml` and the generated `FakeBackend.qml`,
   offscreen with Qt 6.9.2's software renderer (icons draw blank there) and both design systems,
   Basecamp 0.3.2's and the runner's; their voice rows, `voiceJson`, `voiceResultJson` and its
   count `voiceResultSeq`, `flowJson` and the room map's voice entries are typed from the shapes
@@ -1259,8 +1279,8 @@ unverified, built or planned:
   between two profiles (below). The Nim backend is type-checked only against stubs made from
   the `.rep` and `muster.lidl` (ui-nim builds on Linux only), its voice autopilot run against a
   fake module (S9, below), and it has drawn no note from a real room. What S2 and its review's
-  fixes added to the QML since (the `starting` banner, the not-started words) has run in the
-  gallery only.
+  fixes added to the QML since (the `starting` banner, the not-started words), and the strip
+  above every page and the poll's new cadence (§8, §13), have run in the gallery only.
 - **The cost of store catch-up.** It returns each payload as a JSON byte array
   (`delivery.nim:309-315`), so a voice frame inside the 60 s lookback is re-fetched as several
   hundred KB of JSON per query. That should be measured before anything is added; a seen-frame
@@ -1430,7 +1450,8 @@ unverified, built or planned:
   "B never played A's note (sent: none".
 - **The voice gallery fixtures break the gallery's own rule.** `ui/tests/gallery/CLAUDE.md`
   says fixture data is recorded, never hand-typed. S8's voice fixtures (`room-voice-notes`,
-  `-record`, `-refused`, `-flow`, `-forged`, `-starting`, and `room-map-voice`) are typed from the
+  `-record`, `-refused`, `-flow`, `-forged`, `-starting`, `room-map-voice` and
+  `home-voice-indicator`) are typed from the
   module's shapes (above), and S9's recorded ones, the card complete, playing, arriving and
   broken and the message row recording and holding a draft, are not made:
   `scripts/ui-screenshot.sh record scripts/voice-self-test.sh` needs a runner, Xvfb and Qt's
@@ -1533,8 +1554,12 @@ has run, red and green, only against a stand-in runner, never a real one (§15).
   `CardVoiceNote.qml` (pure render from the row's `voice` field), the mic in the message row
   and `RoomVoiceNote.qml` above it (the recording banner whoever started it, the draft with
   Play, Send, Discard and §8's disclosure, the module's refusals and notes), Room's 250 ms
-  poll while not idle and `voice_status` on its 1 s tick, the voice words in FlowView and the
-  room map, the regenerated gallery `FakeBackend.qml`, and the unknown-kind fallback. The
+  poll while the microphone starts or records or a note plays (and, until PR 340's review,
+  while a draft was held), the voice words in FlowView and the room map, the regenerated
+  gallery `FakeBackend.qml`, and the unknown-kind fallback. Since that review `Main.qml` reads
+  `voice_status` every second on every page, room or none, and shows the microphone in a
+  strip above every page while it starts or records, with Stop and Discard (§13; gallery
+  `home-voice-indicator`). The
   gallery fixture `room-voice-forged` holds a forged `voice-note` body, and RoomThread draws
   it as plain text under its poster's name, with no voice card and no Play (§7).
 - **S9 — End to end (built; the self-test not run, its module calls run twice from one
@@ -1696,6 +1721,15 @@ Asked of the maintainer (corpetty):
   object: to the bound (15 s), to the word, or to a start thread at all for a wait today's
   Basecamp never has. A real microphone's start on that thread has not run: its test needs the
   person's consent (§15).
+- **An indicator outside the room** (§13): **done in this PR**, as the review suggested ("a
+  global recording indicator in `Main.qml` would close most of it"). `Main.qml` reads
+  `voice_status` every second on every page, room or none, and while it says `starting` or
+  `recording` a strip above every page says Muster is using the microphone, with Stop and
+  Discard. The claims registry's gap "Modules loaded beside Muster can record and send as you"
+  says what it covers and what it does not: Muster's view not running, a person not looking,
+  a recording started and sent between two reads, and who started it or for which room, which
+  `voice_status` does not say. Seen in the gallery only. The maintainer may still object to
+  its words or its place.
 - **The Linux-only checks** (§15): who runs them? This PR is built on a Mac.
 - **Scope.** This PR regenerates the stale gallery `FakeBackend.qml`, which also pulls in
   FileShare's missing slots, and fixes the unknown-card fallback. The Nim backend's missing
@@ -1744,10 +1778,6 @@ Still open:
   room removes a member yet, the gap below"), or keep it. This PR leaves it as it is on
   `main`;
 - whether to coarsen `voice_status`'s peak for co-resident callers (§13);
-- **an indicator outside the room** (§13). The recording banner is part of a room's view, so a
-  recording a co-resident caller starts while the person is on Home, Settings or Contacts shows
-  nothing in Muster. `Main.qml` could show one from `voiceJson`, which Room's 1 s tick keeps
-  fresh while a room is joined; with no room joined nothing reads `voice_status`;
 - the exact disclosure wording on the draft surface (§8);
 - whether the gaps of §10 stay registry entries of their own, as S10 added them, or fold into
   existing ones.
