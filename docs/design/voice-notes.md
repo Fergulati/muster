@@ -483,18 +483,21 @@ What this means for each kind of reader:
 ```
 
 **A device starts off the module thread** (PR 340's review; §9). `voice_record_start` and
-`voice_play` answer at once: the device's start runs on a thread of its own, and
-`voice_status` says where it stands. A recording is `starting` until the device runs, then
-`recording`; its elapsed time and its 60 s cap count from the device's start, since only the
-device side fills the buffer. A note playing carries `starting: true` until its device runs,
-at position 0. A start that fails ends the recording, or the playback, with the device's word
-(`no-device`, `device-format`), which `ready.capture` or `ready.playback` then says, and
-`recording.error` for a recording; one still pending 15 s after the call ends it the same way
-with `device-start-slow` (`StartBoundMs`: a working device starts in well under a second, the
-one slow start seen is Core Audio waiting on a microphone prompt, §11, and 15 s leaves a
-person time to read and answer one while "Starting the microphone…" does not stand longer
-than anyone would wait on it). Stop, Discard and close while a start is pending never wait on
-it: they let it go, and its thread closes whatever it opens if its start ever returns (§9).
+`voice_play` answer at once: the device's start runs on a thread of its own, and `voice_status`
+says where it stands. A recording is `starting` until the device runs, then `recording`; its
+elapsed time and its 60 s cap count from the device's start, since only the device side fills
+the buffer. A note playing carries `starting: true` until its device runs, at position 0. While
+a start is on its way, `ready.capture` (or `ready.playback`) says `unknown`: nothing is known
+yet of the device it starts, and the word an earlier start left (`ok`, or a failure's) would
+not be true of this one (`voice_live_test` §29d). The pump then sets `ok` when the device runs.
+A start that fails ends the recording, or the playback, with the device's word (`no-device`,
+`device-format`), which `ready.capture` or `ready.playback` then says, and `recording.error`
+for a recording; one still pending 15 s after the call ends it the same way with
+`device-start-slow` (`StartBoundMs`: a working device starts in well under a second, the one
+slow start seen is Core Audio waiting on a microphone prompt, §11, and 15 s leaves a person
+time to read and answer one while "Starting the microphone…" does not stand longer than anyone
+would wait on it). Stop, Discard and close while a start is pending never wait on it: they let
+it go, and its thread closes whatever it opens if its start ever returns (§9).
 
 **The draft.** It lives in module memory only: never on disk, never over IPC. A crash loses
 it. There is one draft at a time. Nothing is posted without Send. The draft surface shows Play,
@@ -1127,6 +1130,10 @@ outside Basecamp and with no UI (below). What is unverified, built or planned:
     "the buffer freed at once: 1 left"), and `MiniaudioIo` forgetting it instead of settling
     it (§6b red, the context not kept by the stop; §29c red on the null device, "1 left");
     green on the code as it is;
+  - also from that review: `voice_live_test` §29d, `ready` saying `unknown` for a device
+    whose start is on its way (red before: `ready.capture` still `device-start-slow` from
+    the last start while the next one was `starting`), and `audio_io_null_test` §7, a start
+    let go before its device started starting none (red before: "1 device(s)");
   - the host probe (`probe_return_marshalling_host`): its `voice_status` and the six voice
     methods as before, with no room joined;
   - `ui-nim/tests/autovoice/run.sh`, against a fake module whose recording is `starting`

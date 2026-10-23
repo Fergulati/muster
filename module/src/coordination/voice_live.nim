@@ -96,7 +96,8 @@ const
                         "value holds its audio, which never leaves the module. Until that is " &
                         "decided, a room with a voice note exports no proof."
   DeviceUnknown* = "unknown"
-    ## A device's readiness before anything opened one.
+    ## A device's readiness before anything opened one, and while a start of it is on its
+    ## way: never the word an earlier start left.
   DeviceOk* = "ok"
     ## The last open of that device succeeded.
   DraftNote* = "draft"
@@ -304,9 +305,10 @@ proc voiceStatus*(v: VoiceRecorder): JsonNode =
      "playing": playing}
 
 proc recordStart*(v: VoiceRecorder, s: CoordinationSession): JsonNode =
-  ## voice_record_start: {ok} at once, the device's start on its way (state starting until
-  ## the pump sees it run, then recording; a start that fails or passes StartBoundMs ends in
-  ## idle with recording.error and ready.capture its word), or {error}: not-joined (no room:
+  ## voice_record_start: {ok} at once, the device's start on its way (state starting, and
+  ## ready.capture unknown, until the pump sees it run, then recording and ok; a start that
+  ## fails or passes StartBoundMs ends in idle with recording.error and ready.capture its
+  ## word), or {error}: not-joined (no room:
   ## nothing opens), busy (a recording, a playback or a draft held), codec, or the device
   ## seam's own word at once (no-device, no-source, device-start-slow, …), which
   ## ready.capture then says. The recording, and its draft, belong to `s`'s room.
@@ -334,6 +336,7 @@ proc recordStart*(v: VoiceRecorder, s: CoordinationSession): JsonNode =
   if v.io.starting:                   # the device starts on a thread of its own
     v.state = rsStarting
     v.startedAt = v.clock()
+    v.capture = DeviceUnknown         # not known until it lands; never the last start's word
   else:
     v.state = rsRecording
     v.capture = DeviceOk
@@ -485,12 +488,13 @@ proc roomProof*(s: CoordinationSession): JsonNode =
 proc play*(v: VoiceRecorder, s: CoordinationSession, noteId: string): JsonNode =
   ## voice_play: play the draft (`noteId` "draft") or a complete note of the joined room,
   ## decoded whole in the module. {ok} at once, the device's start on its way (playing names
-  ## the note, `starting` until the pump sees the device run; a start that fails or passes
-  ## StartBoundMs ends it, playing null and ready.playback its word), or {error}: busy
-  ## (recording, starting one, or playing), no-draft, not-joined (a note with no room),
-  ## unknown-note, incomplete (one part so far), broken (the fold's verdict, or a clip
-  ## libopus refuses), codec, or the device seam's own word at once, which ready.playback
-  ## then says.
+  ## the note, `starting`, and ready.playback unknown, until the pump sees the device run,
+  ## then ok; a start that fails or passes StartBoundMs ends it, playing null and
+  ## ready.playback its word), or {error}: busy (recording, starting one, or playing),
+  ## no-draft, not-joined (a note with no room), unknown-note, incomplete (one part so far),
+  ## broken (the fold's verdict, or a clip libopus refuses), codec, or the device seam's own
+  ## word at once (no-device, device-start-slow while four earlier starts have not returned,
+  ## …), which ready.playback then says.
   discard v.pump()                    # a playback heard to its end is not busy
   if v.state in {rsStarting, rsRecording} or v.playNote.len > 0: return refusal("busy")
   var pcm: seq[int16]
@@ -529,7 +533,9 @@ proc play*(v: VoiceRecorder, s: CoordinationSession, noteId: string): JsonNode =
   v.playNote = noteId
   v.playMs = durMs
   v.playStarting = v.io.starting      # the device starts on a thread of its own
-  if v.playStarting: v.playStartedAt = v.clock()
+  if v.playStarting:
+    v.playStartedAt = v.clock()
+    v.playback = DeviceUnknown        # not known until it lands; never the last start's word
   else: v.playback = DeviceOk
   %*{"ok": true}
 

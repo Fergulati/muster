@@ -101,6 +101,8 @@
 ##      read saw it, the recorder still starting: idle at once, the io finishing the start on
 ##      the module thread, the buffer freed at once; on the null device its running device
 ##      and context released too
+##  29d. while a start is on its way ready says unknown for its device, not the word the last
+##      start left (device-start-slow), for a recording and for Play
 ##  30. the same for Play: playing names the note, starting, at 0 ms; released, it plays to
 ##      done as before; Stop lets it go; a failure says no-device in ready.playback; past the
 ##      bound device-start-slow
@@ -1175,6 +1177,46 @@ block:
         freeStartGate(g)
   echo "29c. Discard and close after the device's start returned, before any read saw it: idle at once, ",
        "the module thread finishing the start, the buffer freed at once, the null device's closed OK"
+
+# ── 29d. while a device starts, ready says nothing of it yet: unknown, never the last word ─
+# A start that was too slow leaves its word in ready.capture (ready.playback for Play). The
+# next start on its way knows nothing of its own device yet, so while it is `starting` ready
+# says unknown, until the pump sees the device run (ok) or fail (its word). The gate stays
+# held throughout, so each start stays pending as long as the test needs (a released gate
+# would let the next start fail or run before the status read).
+block:
+  let base = liveAudioBuffers()
+  let vc = VirtualClock()
+  let g = newStartGate()
+  var net: Thread[Net]
+  createThread(net, netMain, Net(g: g, ms: 1_500))
+  let io = newSyntheticAudioIo(sine(1000.0, Second), vc.clock, g)
+  let a = newVoiceRecorder(io, vc.clock)
+  doAssert a.recordStart(aliceS).ck.ok
+  vc.advance(StartBoundMs)
+  var st = a.status()
+  doAssert st["recording"]["state"].getStr() == "idle" and st["ready"]["capture"].getStr() == "device-start-slow", $st
+  doAssert a.recordStart(aliceS).ck.ok
+  st = a.status()
+  doAssert st["recording"]["state"].getStr() == "starting" and st["ready"]["capture"].getStr() == "unknown",
+           "a capture start on its way says unknown, not the last start's word: " & $st
+  doAssert a.draftDiscard() == "ok"
+  doAssert a.play(aliceS, nid1).ck.ok
+  vc.advance(StartBoundMs)
+  st = a.status()
+  doAssert st["playing"].kind == JNull and st["ready"]["playback"].getStr() == "device-start-slow", $st
+  doAssert a.play(aliceS, nid1).ck.ok
+  st = a.status()
+  doAssert st["playing"]{"starting"}.getBool() and st["ready"]["playback"].getStr() == "unknown",
+           "a playback start on its way says unknown, not the last start's word: " & $st
+  doAssert a.playStop() == "ok"
+  doAssert startsInFlight() == 4, "four starts let go, each still held: " & $startsInFlight()
+  g.releaseStart()
+  doAssert waitStarts(1_000) and g.startsStopped == 4 and liveAudioBuffers() == base
+  joinThread(net)
+  freeStartGate(g)
+  echo "29d. while a start is on its way, ready.capture and ready.playback say unknown, not the word ",
+       "the last start left (device-start-slow) OK"
 
 # ── 30. voice_play answers at once; the note plays when the device starts ────────────
 block:
