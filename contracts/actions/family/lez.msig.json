@@ -1,0 +1,631 @@
+{
+  "actions": [
+    {
+      "id": "lez.msig/create",
+      "name": "Create a multisig together, in the room",
+      "area": "family",
+      "family": "lez.msig",
+      "kind": "lez-msig",
+      "status": "built",
+      "summary": "A member opens a ceremony naming who is in it, k, roles, weights and a time lock; every invited member's client joins with a fresh approval key for this multisig, proved by its own signature and author-signed in the room; the opener's client creates it on chain from their own account and discloses it.",
+      "steps": [
+        {
+          "step": "ceremony",
+          "who": "the opener",
+          "does": "lez_msig_open: publishes lmsig/<create key>/open (a random create key; the program and zone from Settings) and joins.",
+          "signs": "the opener's approval key signs tagged('muster-msig/v1/bind', room ‖ create key ‖ their room identity)",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "each invited member — automatic",
+          "does": "On the intents tick their client derives an approval key for this multisig (keystore label lez-msig/<create key>, never exported) and publishes lmsig/<ck>/key/<who>, author-signed by their room identity, with the key's proof over the room, the create key and their identity. A key without its proof, or from someone not invited, is not counted.",
+          "signs": "the bind message above, with their own approval key",
+          "reveals": [
+            {
+              "field": "the member's approval key for this multisig",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "the opener's client — automatic once every member joined",
+          "does": "Sends Create from the opener's own funded LEZ account: the program's plan re-derives the multisig's PDA from the create key and refuses any other account (the counterfeit-state defence); apply refuses an invalid config or an account that already holds one. Once the chain holds the state, the client discloses the account into the room; every reader re-derives the PDA, and the disclosure's signers and k must be the config's.",
+          "signs": "the opener's LEZ account signs the Create transaction as its fee payer",
+          "reveals": [
+            {
+              "field": "the config: every approval key, k, roles, weights, time lock",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "the opener's account",
+              "observer": "chain-observer"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim",
+            "programs/lez-msig/host/tests/v03_state.rs"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a state written at any account but the multisig's PDA",
+          "why": "the plan re-derives the account from (program, the create key's seed, the placement) and refuses the row: 'wrong-account' — so no counterfeit config is ever granted the multisig's seed (the exo-325 class)",
+          "evidence": [
+            "programs/lez-msig/host/tests/v03_state.rs"
+          ]
+        },
+        {
+          "what": "a config whose threshold its approvers cannot reach, duplicate keys, a key that is not a BIP-340 point",
+          "why": "'invalid-config', naming the rule",
+          "evidence": [
+            "programs/lez-msig/core/tests/rules.rs"
+          ]
+        },
+        {
+          "what": "a disclosure whose address is not the PDA its config derives, or whose signers / k are not its config's",
+          "why": "refused at disclosure and when the room resolves lez-msig@<account>",
+          "evidence": [
+            "module/tests/lez_msig_driver_test.nim",
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "lez_msig_open",
+        "lez_msig_ceremonies",
+        "coordinate_disclose_account",
+        "coordinate_accounts",
+        "lez_member_account"
+      ],
+      "ui": "Not yet on screen: the room's accounts panel will open the ceremony (exo-e38).",
+      "invariants": [
+        2,
+        4,
+        7,
+        8,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "Each member's approval key is bound to their room identity by both keys' signatures, inside the room only; on chain the key names no person",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A state at any account but the multisig's own PDA is never granted its seed",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_live_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_bytes_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/core/tests/rules.rs"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/host/tests/v03_state.rs"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/profile_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/v0.3.0/lee/state_machine/core/src/program/mod.rs",
+          "what": "LEZ v0.3: run_program(plan, apply), validity windows, public and private PDAs"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0340.mediawiki",
+          "what": "BIP-340: the approval signature the program checks"
+        }
+      ],
+      "unverified": [
+        "The ceremony has not been clicked through in the UI (no UI yet)."
+      ],
+      "try": [],
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "lez:<zone>",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:<zone>",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez-rpc",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-msig-program",
+          "party": "instance",
+          "class": "infra",
+          "target": "the program's account id on the zone (Settings → lez-msig-program)",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "kind": "authority",
+          "name": "lez-msig-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "each member's approval key for this multisig, derived in their keystore",
+          "field": "members",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "kind": "asset",
+          "name": "native LEZ for the Create fee",
+          "party": "proposer",
+          "class": "asset",
+          "target": "lez:<zone>",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "each member's approval key, k, roles, weights, time lock",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ],
+          "observer": "chain-observer"
+        },
+        {
+          "field": "each member's approval key and its binding to their room identity",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ],
+          "observer": "room-member"
+        },
+        {
+          "field": "the opener's own LEZ account (it pays the Create)",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ],
+          "observer": "chain-observer"
+        }
+      ]
+    },
+    {
+      "id": "lez.msig/transfer",
+      "name": "Pay from the multisig's vault",
+      "area": "family",
+      "family": "lez.msig",
+      "kind": "lez-msig",
+      "status": "built",
+      "summary": "A member proposes a payment in the room (no chain write); members approve with their approval keys; one transaction carries the proposal and its approvals, and the program verifies them all before it pays.",
+      "generated": "lez-msig/transfer",
+      "effect": {
+        "schema": "muster.effect.lez-msig.v1",
+        "fields": [
+          {
+            "name": "proposal",
+            "means": "the proposal's exact borsh bytes: {multisig, zone, epoch, nonce, action: Transfer {to, amount}, expires_ms, proposer} — what every approval signs, decoded for the card"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "a member holding PROPOSE",
+          "does": "coordinate_propose_lez_msig: reads the multisig's epoch from the chain, takes the lowest nonce free on chain and in the room, builds the proposal and proposes its bytes; proposing is their approval (the program refuses an action its proposer did not sign).",
+          "signs": "BIP-340 by their approval key over tagged('muster-msig/v1/approve', proposal_id)",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            },
+            {
+              "field": "the multisig's state (the epoch read)",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each member holding APPROVE",
+          "does": "Approve on the card: the driver re-derives proposal_id from the bytes the card shows and the member's keystore signs it with their approval key for this multisig; the same key attests the room's record (msig:<key>).",
+          "signs": "BIP-340 over tagged('muster-msig/v1/approve', proposal_id) — the id commits to zone, account, config epoch, nonce and expiry (invariant 2)",
+          "reveals": [
+            {
+              "field": "approval",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim",
+            "module/tests/lez_msig_driver_test.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "any member — Settle on-chain",
+          "does": "coordinate_submit: settlement reads the multisig's state from the user's sequencer (the program's own copy is the one that counts), then sends ONE public transaction from the member's own funded LEZ account (lez-member/0), which pays its fee: Execute with the driver-verified approvals; or, under a time lock, Queue (landing no later than its claimed time, so the ETA is never early) and later ExecuteQueued. It refuses, by name, a stale epoch, a spent nonce, an expired proposal, a missing proposer signature, or too little weight. The program pays through the native token, granted the multisig's own seed and nothing else.",
+          "signs": "the settling member's LEZ account signs the public transaction (BIP-340 over the v0.3 message hash) as its fee payer; the multisig's account signs nothing",
+          "reveals": [
+            {
+              "field": "the proposal, every approval and its key",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "the settling member's account",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the state is read",
+          "does": "Final when the state shows the nonce spent and nothing queued under it: a refused call is included on v0.3 too, so inclusion alone never counts. A queued action's own watch executes it once the lock ends.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "fewer approvals than the threshold (by weight)",
+          "why": "settlement sends nothing ('approvals weigh 1; the threshold is 2'); the program refuses it too ('below-threshold'), and nothing moves",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim",
+            "programs/lez-msig/core/tests/rules.rs",
+            "programs/lez-msig/host/tests/v03_state.rs"
+          ]
+        },
+        {
+          "what": "approvals gathered before a configuration change (R.2)",
+          "why": "'stale-epoch: approvals were gathered under epoch 0 …' — every approval commits to the config epoch, and any change bumps it",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim",
+            "programs/lez-msig/core/tests/rules.rs",
+            "programs/lez-msig/host/tests/v03_state.rs"
+          ]
+        },
+        {
+          "what": "executing a time-locked action early, or after it expires",
+          "why": "'queued: its time lock ends at …'; the sequencer's validity window refuses an early or late landing, and apply checks the claim",
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim",
+            "programs/lez-msig/host/tests/v03_state.rs"
+          ]
+        },
+        {
+          "what": "the same proposal twice, or a signature over another proposal",
+          "why": "'nonce-spent'; 'bad-signature'",
+          "evidence": [
+            "programs/lez-msig/core/tests/rules.rs",
+            "programs/lez-msig/host/tests/v03_state.rs"
+          ]
+        },
+        {
+          "what": "rows that are not the outflow's own (another payee)",
+          "why": "'wrong-rows': the plan checks the transaction's rows are exactly the ones its chained call selects",
+          "evidence": [
+            "programs/lez-msig/host/tests/v03_state.rs"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_propose_lez_msig",
+        "coordinate_intents",
+        "coordinate_contribute",
+        "coordinate_submit",
+        "lez_msig_state",
+        "lez_pending"
+      ],
+      "ui": "Not yet on screen (exo-e38): the composer and the card's decode of the proposal's bytes.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The program checks every approval at execution: distinct current members holding APPROVE, by weight, over exactly this proposal",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Approving costs nothing on chain and names no one there until execution; then (public posture) every approval and its key is public",
+          "credibility": "exposed",
+          "party": "chain-observer"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_live_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_bytes_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/core/tests/rules.rs"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/host/tests/v03_state.rs"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/profile_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/v0.3.0/lee/state_machine/core/src/program/mod.rs",
+          "what": "LEZ v0.3: run_program(plan, apply), validity windows, public and private PDAs"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0340.mediawiki",
+          "what": "BIP-340: the approval signature the program checks"
+        }
+      ],
+      "unverified": [
+        "The card's decode and the composer are not built yet (exo-e38)."
+      ],
+      "try": []
+    },
+    {
+      "id": "lez.msig/config",
+      "name": "Change the multisig's members, threshold, roles or time lock",
+      "area": "family",
+      "family": "lez.msig",
+      "kind": "lez-msig",
+      "status": "built",
+      "summary": "A configuration change is a proposal like any other, through the same quorum and time lock; executing it bumps the config epoch, so every approval gathered before it stops counting (R.2). An action already queued survives; the current quorum can cancel it at once.",
+      "generated": "lez-msig/config",
+      "effect": {
+        "schema": "muster.effect.lez-msig.v1",
+        "fields": [
+          {
+            "name": "proposal",
+            "means": "the proposal's exact borsh bytes, its action a list of ConfigChange (add/remove member, set roles/weight/threshold/time lock/open execution, add/remove spending limit)"
+          }
+        ]
+      },
+      "steps": [
+        {
+          "step": "propose",
+          "who": "a member holding PROPOSE",
+          "does": "coordinate_propose_lez_msig with {kind: config, changes: […]}.",
+          "signs": "BIP-340 over the approve message",
+          "reveals": [
+            {
+              "field": "effect",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "approve",
+          "who": "each member holding APPROVE",
+          "does": "As for a payment.",
+          "signs": "BIP-340 over the approve message",
+          "reveals": [
+            {
+              "field": "approval",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "any member — Settle on-chain",
+          "does": "coordinate_submit: settlement reads the multisig's state from the user's sequencer (the program's own copy is the one that counts), then sends ONE public transaction from the member's own funded LEZ account (lez-member/0), which pays its fee: Execute with the driver-verified approvals; or, under a time lock, Queue (landing no later than its claimed time, so the ETA is never early) and later ExecuteQueued. It refuses, by name, a stale epoch, a spent nonce, an expired proposal, a missing proposer signature, or too little weight. apply runs every change, refuses the whole change if the result is invalid (a threshold its approvers cannot reach; a member who still signs for a spending limit), and bumps the epoch.",
+          "signs": "the settling member's LEZ account signs the public transaction (BIP-340 over the v0.3 message hash) as its fee payer; the multisig's account signs nothing",
+          "reveals": [
+            {
+              "field": "the proposal, every approval and its key",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "the settling member's account",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "signed-tx",
+              "observer": "rpc-provider"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        },
+        {
+          "step": "final",
+          "who": "no one — the state is read",
+          "does": "Final when the state shows the nonce spent and nothing queued under it: a refused call is included on v0.3 too, so inclusion alone never counts. A queued action's own watch executes it once the lock ends.",
+          "signs": "",
+          "reveals": [],
+          "evidence": [
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a change that would leave the multisig unusable",
+          "why": "'invalid-config' (or 'member-in-limit'): refused whole; the epoch does not move",
+          "evidence": [
+            "programs/lez-msig/core/tests/rules.rs"
+          ]
+        },
+        {
+          "what": "a pending action after a removal",
+          "why": "a queued action survives (the cutoff is the queue); a Cancel, never time-locked, stops it at once",
+          "evidence": [
+            "programs/lez-msig/core/tests/rules.rs"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_set_policy",
+        "coordinate_propose_lez_msig",
+        "coordinate_contribute",
+        "coordinate_submit",
+        "lez_msig_state"
+      ],
+      "ui": "Not yet on screen (exo-e38).",
+      "invariants": [
+        1,
+        2,
+        4,
+        7,
+        8
+      ],
+      "claims": [
+        {
+          "claim": "A configuration change cannot bypass the quorum, and voids every approval gathered under the old configuration",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_live_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_bytes_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/core/tests/rules.rs"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/host/tests/v03_state.rs"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/profile_test.nim"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/v0.3.0/lee/state_machine/core/src/program/mod.rs",
+          "what": "LEZ v0.3: run_program(plan, apply), validity windows, public and private PDAs"
+        },
+        {
+          "kind": "source",
+          "url": "https://raw.githubusercontent.com/bitcoin/bips/master/bip-0340.mediawiki",
+          "what": "BIP-340: the approval signature the program checks"
+        }
+      ],
+      "unverified": [
+        "The room does not yet re-key out a removed member automatically when the change executes (§8 reconcile)."
+      ],
+      "try": []
+    }
+  ]
+}

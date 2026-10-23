@@ -28,6 +28,9 @@ import ../../src/coordination/attest
 import ../../src/coordination/authorship   # the room's authentic view (exo-f76)
 import ../../src/coordination/accounts
 import ../../src/frost/chilldkg          # frostTestRecoveryHex: a real ceremony, once
+import ../../src/lez/msig as msigbytes    # lezMsigTestConfig (exo-0d3)
+import ../../src/drivers/lez_msig
+import std/json
 import std/sequtils
 export log, keystore, driver, signing_payload, session, intents, live, attest, tables, strutils,
        transport, epoch_crypto, binding, authorship
@@ -123,6 +126,22 @@ proc frostTestRecoveryHex*(): string =
     const hexd = "0123456789abcdef"
     for b in rec: (gFrostRecovery.add hexd[int(b shr 4)]; gFrostRecovery.add hexd[int(b and 0x0F)])
   gFrostRecovery
+
+proc lezMsigTestConfig*(): JsonNode =
+  ## A lez-msig account's registry config (exo-0d3): a 2-of-3 over BIP-340 test-vector keys.
+  proc fill(x: byte): seq[byte] = (result = newSeq[byte](32); for i in 0 ..< 32: result[i] = x)
+  let keys = @["f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+               "dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659",
+               "dd308afec5777e13121fa72b9cc1b7cc0139715309b086c960e18fd969774eb8"]
+  var members: seq[MsigMember]
+  for k in keys:
+    var b: seq[byte]
+    for i in 0 ..< 32: b.add byte(parseHexInt(k[2*i .. 2*i+1]))
+    members.add MsigMember(key: b, roles: RoleAll, weight: 1)
+  let a = LezMsigAccount(chain: "lez:local", program: fill(0x11), createKey: fill(0x22), zone: fill(0x2e),
+                         address: multisigPublic(fill(0x11), fill(0x22)), epoch: 0,
+                         config: MsigConfig(members: members, threshold: 2, openExecution: true, actions: ActAll))
+  %*{"chain": "lez:local", "config": configJsonOf(a)}
 
 proc bindCtx*(): LinkContext = LinkContext(account: SafeAddr, slot: "0", expiry: Now + 86_400)
 

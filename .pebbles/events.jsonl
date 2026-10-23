@@ -2761,3 +2761,10 @@
 {"type":"status_update","timestamp":"2026-10-23T13:50:35.892762455Z","issue_id":"exo-0d3.2","payload":{"status":"in_progress"}}
 {"type":"status_update","timestamp":"2026-10-23T13:50:36.129315251Z","issue_id":"exo-0d3.3","payload":{"status":"in_progress"}}
 {"type":"close","timestamp":"2026-10-23T13:50:36.412868592Z","issue_id":"exo-0d3.1","payload":{}}
+{"type":"close","timestamp":"2026-10-23T14:27:18.878175632Z","issue_id":"exo-0d3.2","payload":{}}
+{"type":"close","timestamp":"2026-10-23T14:27:18.878175632Z","issue_id":"exo-0d3.3","payload":{}}
+{"type":"status_update","timestamp":"2026-10-23T14:27:19.243900523Z","issue_id":"exo-0d3.6","payload":{"status":"in_progress"}}
+{"type":"status_update","timestamp":"2026-10-23T14:27:19.654708754Z","issue_id":"exo-0d3.5","payload":{"status":"in_progress"}}
+{"type":"comment","timestamp":"2026-10-23T14:27:20.06579181Z","issue_id":"exo-c5b0","payload":{"body":"Landed 0606611: driver, room ceremony, chain seam, settlement; lez_msig_live_e2e green against the real program on the local v0.3 zone. Remaining: hosted lidl methods + muster_module wiring (settlementFor, myNames, disclosure/accounts checks, the intents-tick pump: auto-join + opener create/disclose), family registry entry, kinds/profile/conformance tests, action corpus."}}
+{"type":"close","timestamp":"2026-10-23T14:50:25.643468515Z","issue_id":"exo-0d3.5","payload":{}}
+{"type":"comment","timestamp":"2026-10-23T14:50:25.925251872Z","issue_id":"exo-b58","payload":{"body":"Real proving, 64-core EPYC, accelerated k256: private pay M=1 150.7s, M=3 171.5s, M=5 208.5s, M=10 288.1s; tx constant 228,010 B; unaccelerated M=1 439s. programs/lez-msig/BENCHMARKS.md. Rerun on an idle machine before publishing externally."}}

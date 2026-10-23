@@ -209,6 +209,7 @@ block:
 
 # ── the family profile: every driver the registry builds declares one (exo-a50.1.1) ──
 import ../src/drivers/profile
+import ./probes/live_room   # lezMsigTestConfig (exo-0d3)
 block:
   let roster = %*["0x" & repeat("01", 32), "0x" & repeat("02", 32)]
   let owners = %*["0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
@@ -219,7 +220,8 @@ block:
                       ("invoke", %*{"roster": roster, "k": 1}), ("eip191", %*{"signers": owners, "threshold": 1}),
                       ("stub", %*{"rounds": 2, "threshold": 2}),
                       ("evm-split", %*{"chain": "eip155:31337"}), ("lez-split", %*{"chain": "lez:testnet"}),
-                      ("monero-split", %*{"chain": "monero:76ee3cc98646292206cd3e86f74d88b4"})]:
+                      ("monero-split", %*{"chain": "monero:76ee3cc98646292206cd3e86f74d88b4"}),
+                      ("lez-msig", lezMsigTestConfig())]:
     let r = checkProfileConformance(newDriver(kind, cfg))
     doAssert r.allPass(), kind & " must declare a consistent family profile: failed " & $r.failed()
   echo "10. every driver the registry builds declares a consistent family profile OK"

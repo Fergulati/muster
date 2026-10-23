@@ -287,7 +287,18 @@ The `ConversationCrypto` seam is where a chat-module binding goes once chat ship
 | D11 | removal | revoke (impossible, there is no key revocation); migrate | migrate, with the GMS's limits documented (§7) |
 | D12 | spending limits | any asset; native only | native first; a token limit is a `Call` whose decoded amount the limit would have to trust, which waits on the registry (U.6) |
 
-## 10. Sources
+## 10. Measured (RFP P.1, P.2)
+
+`programs/lez-msig/BENCHMARKS.md`, real proving, 2026-10-23, on a 64-core CPU:
+
+- A private payment carrying M approvals proves in 150.7 s at M = 1, 208.5 s at M = 5, and
+  288.1 s at M = 10: about 15 s per approval.
+- The transaction is a constant 228 KB.
+- RISC Zero's accelerated k256 is 2.9× faster than stock (439 s at M = 1).
+
+M ≥ 5 is viable. The ceiling is the 32-member limit, not the block.
+
+## 11. Sources
 
 - RFP-005, and the nine bids reviewed on 2026-10-23 (`logos-co/rfp` #211–#233).
 - LEZ v0.3.1:

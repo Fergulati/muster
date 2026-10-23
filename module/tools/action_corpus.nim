@@ -34,6 +34,8 @@ import ../src/drivers/btc_multisig
 import ../src/drivers/btc_frost
 import ../src/drivers/lez_multisig
 import ../src/drivers/lez_frost
+import ../src/drivers/lez_msig     # lez-msig (exo-0d3)
+import ../src/lez/msig as msigbytes
 import ../src/drivers/xmr_msig               # xmrMsigSpendJson (exo-dcc.34)
 import ../src/drivers/split                  # evenShares / splitEffectJson (exo-a90.3)
 import ../src/coordination/readiness        # toJson(ActionManifest), toJson(DriverDescriptor)
@@ -106,6 +108,20 @@ proc frostFixtureRecoveryHex(): string =
 
 let frostRecovery = frostFixtureRecoveryHex()
 
+proc lezMsigFill(x: byte): seq[byte] = (result = newSeq[byte](32); for i in 0 ..< 32: result[i] = x)
+let lezMsigCfg = block:
+  ## a 2-of-3 lez-msig over BIP-340 test-vector keys, a one-hour time lock (exo-0d3)
+  var members: seq[MsigMember]
+  for k in ["f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+            "dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659",
+            "dd308afec5777e13121fa72b9cc1b7cc0139715309b086c960e18fd969774eb8"]:
+    members.add MsigMember(key: hexToBytes(k), roles: RoleAll, weight: 1)
+  let a = LezMsigAccount(chain: "lez:local", program: lezMsigFill(0x11), createKey: lezMsigFill(0x22),
+                         zone: lezMsigFill(0x2e), address: multisigPublic(lezMsigFill(0x11), lezMsigFill(0x22)),
+                         config: MsigConfig(members: members, threshold: 2, timelockMs: 3_600_000,
+                                            openExecution: true, actions: ActAll))
+  %*{"chain": "lez:local", "config": configJsonOf(a)}
+
 proc configOf(kind: string): JsonNode =
   case kind
   of "safe": %*{"chainId": 31337, "safe": SafeAddr, "owners": owners, "threshold": 2}
@@ -114,6 +130,7 @@ proc configOf(kind: string): JsonNode =
   of "eip191": %*{"signers": owners, "threshold": 1}
   of "btc-p2wsh", "btc-tapscript": %*{"network": "regtest", "k": 2, "keys": BtcKeys}
   of "lez-multisig": lezMultisigCfg
+  of "lez-msig": lezMsigCfg
   of "btc-frost": %*{"network": "regtest", "recovery": frostRecovery}
   of "lez-frost": %*{"chain": "lez:local", "recovery": frostRecovery}
   of "evm-split": %*{"chain": "eip155:31337", "members": [SplitCreditor, SplitDebtors[0], SplitDebtors[1]]}
@@ -253,6 +270,14 @@ proc effectJsonFor(kind, variant: string, d: Driver): string =
     let covers = @[Cover(intent: s1, debtor: SplitDebtors[0], creditor: SplitCreditor, amount: "300000", payTo: credTo),
                    Cover(intent: s2, debtor: SplitCreditor, creditor: SplitDebtors[0], amount: "200000", payTo: debtTo)]
     settleUpEffectJson(BtcRegtest, "BTC", covers, netTransfers(covers), "Cabin")
+  of "lez-msig/transfer", "lez-msig/config":
+    # a proposal as the room composes it: the multisig's epoch and next nonce, expiring in a
+    # day; a payment of 0.000001 LEZ, or a config change that removes the time lock
+    let a = LezMsigDriver(d).account
+    let action = (if variant == "transfer": MsigAction(kind: akTransfer, to: lezMsigFill(0x0e), amount: 1000.u128)
+                  else: MsigAction(kind: akConfig, changes: @[MsigChange(kind: ccSetTimelock, timelockMs: 0)]))
+    lezMsigEffect(MsigProposal(multisig: a.address, zone: a.zone, epoch: 0, nonce: 0, action: action,
+                               expiresMs: 1_800_000_000_000'u64, proposer: a.config.members[0].key))
   of "xmr-msig/spend":
     # a spend from the members' 2-of-3 Monero multisig wallet: 0.25 XMR to one subaddress,
     # in atomic units, the network fee capped at 0.001 XMR (ADR-020)
@@ -267,6 +292,7 @@ const Variants* = [
   ("invoke", "module-call"), ("invoke", "lez-transfer"),
   ("btc-p2wsh", "spend"), ("btc-tapscript", "spend"), ("btc-frost", "spend"),
   ("lez-multisig", "transfer"), ("lez-multisig", "vault-init"), ("lez-frost", "transfer"),
+  ("lez-msig", "transfer"), ("lez-msig", "config"),
   ("evm-split", "split"), ("evm-split", "settle-up"), ("lez-split", "split"), ("btc-split", "split"), ("btc-split", "settle-up"),
   ("monero-split", "request"), ("xmr-msig", "spend")]
 
