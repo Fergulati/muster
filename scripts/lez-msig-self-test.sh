@@ -66,22 +66,23 @@ CFG_B=$(ui_peer_config "$D/A.log") || exit 1
 ui_launch "$D/B" "$D/B.log" HOME="$D/B-home" QT_FORCE_STDERR_LOGGING=1 "${LEZ[@]}" \
   MUSTER_DELIVERY_CONFIG="$CFG_B" MUSTER_AUTOJOIN_TOPIC="$TOPIC" LOGOS_INSTANCE_ID=msigB MUSTER_AUTOMSIG_APPROVE=1
 
-funded=""; vault=""; ok=0
+funded=""; vault=""; ok=0; T0=$SECONDS
 echo "running the ceremony, create, fund, propose, approve, settle (up to 360s)..."
-for i in $(seq 1 360); do
+while [ $((SECONDS - T0)) -lt 360 ]; do
   sleep 1
   for who in A B; do   # fund each runner's own LEZ account once it names it
     case " $funded " in *" $who "*) continue ;; esac
     acct=$(lg "$D/$who.log" | grep -a 'MSIG payer' | grep -o '"account":"[0-9a-f]\{64\}"' | head -1 | cut -d'"' -f4)
     [ -n "$acct" ] && "$FUNDER" --zone "$RPC" fund "$acct" 1000000000 >/dev/null && funded="$funded $who" &&
-      echo "funded $who's account $acct after ~${i}s"
+      echo "funded $who's account $acct after $((SECONDS - T0))s"
   done
   if [ -z "$vault" ]; then
     vault=$(lg "$D/A.log" | grep -a 'MSIG account' | head -1 | grep -o 'lez:local:[0-9a-f]\{64\}' | head -1 | cut -d: -f3)
-    [ -n "$vault" ] && "$FUNDER" --zone "$RPC" fund "$vault" 5000 >/dev/null && echo "the multisig $vault is on chain and disclosed after ~${i}s; vault funded"
+    [ -n "$vault" ] && "$FUNDER" --zone "$RPC" fund "$vault" 5000 >/dev/null && echo "the multisig $vault is on chain and disclosed after $((SECONDS - T0))s; vault funded"
   fi
   bal=$(rpc getAccountBalance "[\"$(b58 "$TO")\"]")
-  if [ "$bal" = "$PAY" ] && lg "$D/A.log" | grep -aq 'MSIG intent .* final' && lg "$D/B.log" | grep -aq 'MSIG intent .* final'; then
+  # grep the files themselves: under pipefail, `lg … | grep -q` fails when grep exits first (SIGPIPE)
+  if [ "$bal" = "$PAY" ] && grep -aq 'MSIG intent .* final' "$D/A.log" && grep -aq 'MSIG intent .* final' "$D/B.log"; then
     ok=1; break
   fi
 done
@@ -89,7 +90,7 @@ ui_cleanup
 echo "A: $(lg "$D/A.log" | grep -a 'MSIG intent' | tail -1 | cut -c1-120)"
 echo "B: $(lg "$D/B.log" | grep -a 'MSIG intent' | tail -1 | cut -c1-120)"
 if [ "$ok" = 1 ]; then
-  echo "SUCCESS: a 2-of-2 lez-msig made in the room paid exactly $PAY, both runners final after ~${i}s."
+  echo "SUCCESS: a 2-of-2 lez-msig made in the room paid exactly $PAY, both runners final after $((SECONDS - T0))s."
   [ "${KEEP_LOGS:-0}" = 1 ] || rm -rf "$D"
 else
   echo "FAIL (recipient holds ${bal:-?}): logs kept in $D"
