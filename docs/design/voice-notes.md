@@ -373,13 +373,35 @@ the repo), per call, before the header memo and after it:
 - Play's lookup, about 26 ms before (two header passes, the second with no memo, and the
   verdict again), 3 ms after (one pass, and the two halves read back).
 
-What a warm memo still pays is the pass itself: each voice event's id, whose memo key copies
-the whole value (`log.nim:71-75`), the canonical order, and the copies a pass makes.
-`coordinate_messages` polls each second, `coordinate_conversations` folds every room,
-`coordinate_flow` polls every 5 s and `coordinate_graph` every 2 s while the map is open, all
-on the module thread, so a room of 20 full notes now costs a few ms a second, not tens. The
-flow and the map through the memo are not measured: §17 and §28 count their parses, not their
-time.
+What a warm memo still pays is the pass itself, and that grows with the bytes of the room's
+voice history, not with its parses: each voice event's id, whose memo key copies the whole
+value and hashes it (`log.nim:71-76`), the authentic view's checks and copies, the
+canonical order, and the copies a pass makes. Measured in the final check of PR 340's review
+fixes (darwin-arm64, Apple M5, `run-suite.sh`'s `-d:release` flags, 20 notes of 60 s and 20
+messages over `LocalTransport`, read as the second member, a bench outside the repo), per
+call with a warm memo:
+- `eventId` of one part (84,346 B of value) from its memo, about 23 µs (a message's, 1.3 µs;
+  the digest itself, uncached, about 470 µs), so about 0.9 ms for the room's 40 parts, in
+  each pass that names them;
+- `roomEvents`, the authentic view, its caches warm: about 3.0 ms;
+- `coordinate_messages`' rows (`rows`: `roomEvents`, then `threadRows`): about 6.4 ms, each
+  second; `threadRows` alone about 3.3 ms;
+- `coordinate_conversations`' `lastTs` for the room (`roomEvents`, then `threadLastTs`):
+  about 6.4 ms, every 2 s (Main's timer), for each joined room, before that method's other
+  folds, which were not timed;
+- `coordinate_flow` (`flowRows`, over the view the method has read): about 7.6 ms, and that
+  `roomEvents` besides, every 5 s;
+- `coordinate_graph` (`graphOf`, over the view the method has read): about 27 ms, and that
+  `roomEvents` besides, every 2 s while the map is open.
+
+The same room with notes of 1 s (1,745 B parts) gives 0.4 ms, 0.4 ms, 0.5 ms and 1.9 ms for
+the last four, so the cost is the values' bytes. On the module thread, a room of 20 full
+notes therefore costs about 12 ms of each second with the room map closed and about 27 ms
+with it open, plus the other joined rooms' `lastTs`. It should grow with the bytes its
+notes hold, so with each full note, but only one room size was timed, at two note lengths.
+Carrying each event's id with it from ingest, one digest per event ever, would take the
+values' bytes out of every pass; that changes the kind-agnostic log's `Event`, so it is not
+in this PR (§15, "The cost of the fold").
 
 S7 measured the hosted reads the same way, before the header memo (20 notes of 60 s, a
 member's session over `LocalTransport`, `-d:release`, darwin-arm64, outside the repo), per
@@ -1307,12 +1329,18 @@ Basecamp's window. What is unverified, built or planned:
   (`delivery.nim:309-315`), so a voice frame inside the 60 s lookback is re-fetched as several
   hundred KB of JSON per query. That should be measured before anything is added; a seen-frame
   short-circuit only if it matters.
-- **The cost of the fold.** `eventId`'s memo key concatenates the whole value (`log.nim:71-75`),
-  and every hosted read re-runs `roomEvents` with no fold cache (the cache is
-  `side-modules.md` S4, `exo-ff5.4`, not built). `voice.nim`'s own cost is measured, with the
-  room's memo of part headers and verdicts and without it (§6), but `roomEvents`' authorship
-  checks over 84 KB values are not, and nor is the whole hosted read since the header memo,
-  nor the flow and the room map through it (their parses are counted, not timed).
+- **The cost of the fold.** `eventId`'s memo key concatenates the whole value
+  (`log.nim:71-76`), and every hosted read re-runs `roomEvents` with no fold cache (the cache
+  is `side-modules.md` S4, `exo-ff5.4`, not built). Since the final check of the review's
+  fixes this is measured (§6), in a bench outside the repo, for one room of 20 notes of 60 s
+  with a warm memo: `roomEvents` about 3.0 ms, `coordinate_messages`' rows and
+  `coordinate_conversations`' `lastTs` about 6.4 ms each, the flow about 7.6 ms and the room
+  map about 27 ms past their own `roomEvents`: about 12 ms of each second with the map closed
+  and 27 ms with it open. No part is parsed; the values' bytes are copied and hashed in each
+  pass, so it should grow with each full note (notes of 1 s cost about a fifteenth of it). Not
+  measured: the whole of `coordinate_conversations` (its other folds), a room of more notes,
+  and any host but this Mac. The fix to try is an event id carried with the
+  event from ingest, a change to the log's `Event` that this PR does not make.
 - **The room's memo in the hosted methods.** `voice_live_test` §27 and §28 drive the
   recorder procs the hosted methods call (`rows`, `lastTs`, `flowRows`, `graphOf`,
   `provenanceOf`) and `forgetRoom`, over the room's memo. No test runs the hosted lines
