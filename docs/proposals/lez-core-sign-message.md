@@ -1,7 +1,8 @@
-# Draft issue: domain-separated message signing in lez_core
+# Issue: domain-separated message signing in lez_core
 
-Status: **draft, not filed.** For `logos-blockchain/logos-execution-zone-module`. File it only after the
-operator reviews it.
+Status: **filed 2026-10-24** as
+[logos-blockchain/logos-execution-zone-module#73](https://github.com/logos-blockchain/logos-execution-zone-module/issues/73),
+after the operator's review. The text below is what was filed.
 
 ---
 
