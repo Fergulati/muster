@@ -59,6 +59,8 @@ import ../src/drivers/lez_msig         # lez-msig: approvals verified in-program
 import ../src/lez/msig as msigbytes    # its bytes
 import ../src/wallet/lez_msig_chain    # its chain seam
 import ../src/coordination/msig_room   # its creation ceremony, proposing
+import ../src/coordination/member_accounts   # a member's own accounts, disclosed to the room (exo-1f9)
+import ../src/crypto/account_labels          # …and the keystore labels they live under
 import ../src/wallet/lez_msig_private  # its private posture (exo-efa)
 import ../src/wallet/msig_prover       # …proved by the lez_msig_module
 import ../src/wallet/msig_prover_lp    # …over lp_*
@@ -3892,8 +3894,8 @@ proc msigMyNames(): seq[string] =
   try:
     for a in roomAccounts():
       if a.family == LezMsigFamily:
-        let ck = hexToBytes(parseJson(a.config){"createKey"}.getStr())
-        result.add ContributorPrefix & msigbytes.hexOf(moduleKeystore().lezMemberKey(msigLabel(ck)))
+        let (ok, la, _) = lezMsigAccountOf(a.chain, a.address, a.config)
+        if ok: result.add ContributorPrefix & msigbytes.hexOf(moduleKeystore().lezMemberKey(myMsigLabel(moduleKeystore(), la)))
   except CatchableError: discard
 
 proc msigMemberOf(who: string): string =
@@ -4019,11 +4021,16 @@ proc musterLezMsigOpen(specJson: string): string =
   if private and msigProver() == nil:
     return $(%*{"error": "no-prover", "install": "lez_msig_module",
                 "detail": "a private multisig's transactions are proved by the lez_msig_module: install it first"})
+  # an account a member disclosed in this room, picked as their approval key (exo-1f9)
+  var accounts = initTable[string, string]()
+  if spec{"accounts"} != nil and spec{"accounts"}.kind == JObject:
+    for id, key in spec{"accounts"}.pairs:
+      if key.getStr().len > 0: accounts[id.toLowerAscii()] = key.getStr().toLowerAscii()
   try:
     let ck = msigOpen(gSession, moduleKeystore(), gLezChain, program, msigZoneTag(gLezChain), members,
                       uint32(k), uint64(spec{"timelockMs"}.getBiggestInt(0)), spec{"openExecution"}.getBool(true),
-                      private = private)
-    gSession.msigJoin(moduleKeystore(), ck)
+                      private = private, accounts = accounts)
+    discard joinInvited(gSession, moduleKeystore())   # a fresh key, unless the opener picked an account of mine
     $(%*{"createKey": ck, "chain": gLezChain, "members": ids, "threshold": k, "private": private})
   except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
 
@@ -4040,6 +4047,56 @@ proc musterLezMsigCeremonies(): string =
     j["createSent"] = %(c.createKey in gMsigCreated)
     arr.add j
   $arr
+
+# ── a member's own accounts, disclosed to the room (exo-1f9) ─────────────────
+proc musterCoordinateDiscloseMyAccountImpl(specJson: string): string =
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  var spec: JsonNode
+  try: spec = (if specJson.strip().len == 0: newJObject() else: parseJson(specJson))
+  except CatchableError: return $(%*{"error": "bad-spec", "detail": "not JSON"})
+  let kind = spec{"kind"}.getStr(KindLezKey)
+  if kind != KindLezKey: return $(%*{"error": "unknown-kind", "detail": "only lez-key accounts can be disclosed yet"})
+  let chain = spec{"chain"}.getStr(gLezChain)
+  let ks = moduleKeystore()
+  gSession.poll()
+  let label = case spec{"which"}.getStr("new")
+              of "payer": PayerLabel
+              of "new": nextFreeLabel(ks, gSession.roomEvents(), gSession.topic)
+              else: return $(%*{"error": "bad-spec", "detail": "which is new or payer"})
+  let me = memberId(ks)
+  let key = ks.lezMemberKey(label)
+  if hasAccount(gSession.roomEvents(), gSession.topic, me, key):
+    return $(%*{"error": "already-disclosed", "detail": "that account is already in this room"})
+  let a = discloseAccount(gSession, ks, label, chain, spec{"name"}.getStr().strip())
+  $accountJson(a, me)
+
+proc musterCoordinateDiscloseMyAccount(specJson: string): string =
+  try: musterCoordinateDiscloseMyAccountImpl(specJson)
+  except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
+
+proc musterCoordinateMemberAccounts(): string =
+  if gSession == nil: return "[]"
+  try:
+    gSession.poll()
+    let me = memberId(moduleKeystore())
+    var arr = newJArray()
+    for a in memberAccounts(gSession.roomEvents(), gSession.topic):
+      var j = accountJson(a, me)
+      j["memberName"] = %memberName(a.member, myIds())
+      arr.add j
+    $arr
+  except CatchableError as e: $(%*{"error": "failed", "detail": e.msg})
+
+proc musterCoordinateRetractMyAccount(accountId: string): string =
+  if gSession == nil: return $(%*{"error": "not-joined"})
+  try:
+    let me = memberId(moduleKeystore())
+    let id = accountId.strip().toLowerAscii()
+    if not accountsOf(gSession.roomEvents(), gSession.topic, me).anyIt(it.id == id):
+      return $(%*{"error": "unknown-account", "detail": "no account of yours by that id in this room"})
+    retractAccount(gSession, moduleKeystore(), id)
+    $(%*{"retracted": id})
+  except CatchableError as e: $(%*{"error": "refused", "detail": e.msg})
 
 proc msigAccountOfPolicy(): tuple[ok: bool, drv: LezMsigDriver, err: string] =
   let (pkind, pacct) = splitPolicy(gCoordKind)
@@ -4110,7 +4167,7 @@ proc musterCoordinateProposeLezMsig(actionJson: string): string =
     if j.hasKey("expiresInS"): ttlMs = uint64(j["expiresInS"].getBiggestInt()) * 1000
   except CatchableError as e: return $(%*{"error": "bad-action", "detail": e.msg})
   let ks = moduleKeystore()
-  let mine = ks.lezMemberKey(msigLabel(d.account.createKey))
+  let mine = ks.lezMemberKey(myMsigLabel(ks, d.account))
   let m = d.account.config.memberOf(mine)
   if m.isNone or (m.get.roles and RolePropose) == 0:
     return $(%*{"error": "not-a-proposer", "detail": "your approval key for this multisig may not propose"})
@@ -4154,7 +4211,7 @@ proc musterLezMsigStateRead(acct: string): string =
   try:
     let r = msigLiveOf(la).readMsig(la.address)
     if not r.found: return $(%*{"error": "not-on-chain"})
-    let me = moduleKeystore().lezMemberKey(msigLabel(la.createKey))
+    let me = moduleKeystore().lezMemberKey(myMsigLabel(moduleKeystore(), la))
     $(%*{"account": a.id, "private": la.private, "epoch": $r.state.epoch, "nonceBase": $r.state.nonceBase, "balance": $r.balance,
          "config": msigbytes.configJson(r.state.config), "myKey": msigbytes.hexOf(me),
          "queue": r.state.queue.mapIt(%*{"nonce": $it.nonce, "proposalId": msigbytes.hexOf(it.proposalId),

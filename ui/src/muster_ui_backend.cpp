@@ -1011,6 +1011,24 @@ void MusterUiBackend::loadLezMsig()
 {
     setLezMsigCeremoniesJson(modules().muster_module.lez_msig_ceremonies());
     setLezMsigStateJson(modules().muster_module.lez_msig_state(QString()));
+    setMemberAccountsJson(modules().muster_module.coordinate_member_accounts());
+}
+
+void MusterUiBackend::discloseMyAccount(const QString &specJson)
+{
+    // coordinate_disclose_my_account → the disclosed account, or {error, detail} (exo-1f9)
+    const QString r = modules().muster_module.coordinate_disclose_my_account(specJson.trimmed());
+    qInfo() << "[muster_ui] coordinate_disclose_my_account" << specJson << "->" << r;
+    setDiscloseAccountJson(asObjectJson(r, "id"));
+    loadLezMsig();
+}
+
+void MusterUiBackend::retractMyAccount(const QString &accountId)
+{
+    const QString r = modules().muster_module.coordinate_retract_my_account(accountId.trimmed());
+    qInfo() << "[muster_ui] coordinate_retract_my_account" << accountId << "->" << r;
+    setDiscloseAccountJson(asObjectJson(r, "retracted"));
+    loadLezMsig();
 }
 
 void MusterUiBackend::loadXmrMsig()

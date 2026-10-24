@@ -13,7 +13,11 @@ Both are built from the same commit, and the AppImage contains exactly the two `
 
 1. **Version.** Bump `"version"` in `module/metadata.json` and `ui/metadata.json` (both the same), merge it, and update a clean local `main`.
 2. **Green.** `module/tests/run-suite.sh` and `scripts/ui-parity.sh` (`MUSTER_FLEET=local` needs no fleet; the split test needs foundry on `PATH`, e.g. `nix shell nixpkgs#foundry`).
-3. **The packages and the catalogue.** `scripts/catalog-release.sh`. It builds both `.#lgx-portable` from the committed tree into `.run/catalog-release/muster-v<version>/` and writes `catalog/index.json` and `catalog/icons/`. The release targets this commit, so it must be on GitHub. To carry every platform the `lgx variants` workflow builds (`linux-amd64`, `linux-arm64`, `darwin-arm64`), run it as `scripts/catalog-release.sh --from-run <run id>` with a successful run of that workflow on this commit instead ([`docs/design/platforms.md`](docs/design/platforms.md)).
+3. **The packages and the catalogue.** `scripts/catalog-release.sh`. The release targets this commit, so it must be on GitHub.
+   - **Every platform by default** (exo-04f). `muster_module` and `muster_ui` come from the `lgx variants` workflow's build of this commit: `linux-amd64`, `linux-arm64` and `darwin-arm64`, merged into one `.lgx` per package ([`docs/design/platforms.md`](docs/design/platforms.md)). When no run built this commit, the script dispatches one on its branch and waits for it (about 20 minutes). `--from-run <id>` names a run.
+   - **`lez_msig_module`** is built here, for `linux-amd64` only.
+   - **Output.** Everything goes into `.run/catalog-release/muster-v<version>/`, and the script writes `catalog/index.json` and `catalog/icons/`.
+   - **`--here`** builds the two packages on this machine, for its platform only.
 4. **The AppImage, from those same files.**
 
    ```bash

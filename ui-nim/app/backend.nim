@@ -168,6 +168,7 @@ proc loadXmrMsigDo(o: MusterUi, d: Done = nil) =
 proc loadLezMsigDo(o: MusterUi, d: Done = nil) =
   # lez-msig's ceremonies, and the room's lez-msig account's state (exo-0d3)
   ask mm.lez_msig_ceremoniesAsync(proc (r: string) = o.setLezMsigCeremoniesJson(r))
+  ask mm.coordinate_member_accountsAsync(proc (r: string) = o.setMemberAccountsJson(r))
   ask mm.lez_msig_stateAsync("", proc (r: string) = o.setLezMsigStateJson(r); fin(d, r))
 
 proc loadIntentsDo(o: MusterUi, d: Done = nil) =
@@ -1230,6 +1231,16 @@ proc lezMsigRecoverImpl(o: MusterUi, account: string) =
   ask mm.lez_msig_recoverAsync(account.strip(), proc (r: string) =
     info "lez_msig_recover " & qs(account) & " -> " & qs(r)
     o.setLezMsigRecoverJson(asObjectJson(r, "job"))
+    o.loadLezMsigDo())
+proc discloseMyAccountImpl(o: MusterUi, specJson: string) =
+  ask mm.coordinate_disclose_my_accountAsync(specJson.strip(), proc (r: string) =
+    info "coordinate_disclose_my_account " & qs(specJson) & " -> " & qs(r)
+    o.setDiscloseAccountJson(asObjectJson(r, "id"))
+    o.loadLezMsigDo())
+proc retractMyAccountImpl(o: MusterUi, accountId: string) =
+  ask mm.coordinate_retract_my_accountAsync(accountId.strip(), proc (r: string) =
+    info "coordinate_retract_my_account " & qs(accountId) & " -> " & qs(r)
+    o.setDiscloseAccountJson(asObjectJson(r, "retracted"))
     o.loadLezMsigDo())
 proc loadLezMsigImpl(o: MusterUi) = o.loadLezMsigDo()
 proc loadWalletSummaryImpl(o: MusterUi) = o.loadWalletSummaryDo()

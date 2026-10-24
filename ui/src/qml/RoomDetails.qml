@@ -135,6 +135,14 @@ Rectangle {
                     lezMsigState: details.room.lezMsigState
                     lezMsigFund: details.room.lezMsigFund
                     lezMsigRecover: details.room.lezMsigRecover
+                    memberAccounts: details.room.memberAccounts
+                    discloseAccount: details.room.discloseAccount
+                    onDiscloseMyAccountRequested: function (specJson) {
+                        if (details.room.backend) details.room.backend.discloseMyAccount(specJson);
+                    }
+                    onRetractMyAccountRequested: function (accountId) {
+                        if (details.room.backend) details.room.backend.retractMyAccount(accountId);
+                    }
                     onLezMsigRecoverRequested: function (account) {
                         if (details.room.backend) details.room.backend.lezMsigRecover(account);
                     }

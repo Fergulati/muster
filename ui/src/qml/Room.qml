@@ -868,6 +868,14 @@ Item {
         try { return JSON.parse(backend ? backend.lezMsigRecoverJson : "{}"); }
         catch (e) { return ({}); }
     }
+    readonly property var memberAccounts: {
+        try { return JSON.parse(backend ? backend.memberAccountsJson : "[]"); }
+        catch (e) { return []; }
+    }
+    readonly property var discloseAccount: {
+        try { return JSON.parse(backend ? backend.discloseAccountJson : "{}"); }
+        catch (e) { return ({}); }
+    }
     readonly property var lezMsigState: {
         try { return JSON.parse(backend ? backend.lezMsigStateJson : "{}"); }
         catch (e) { return ({}); }

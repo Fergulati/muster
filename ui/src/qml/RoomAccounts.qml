@@ -76,6 +76,36 @@ Item {
     signal lezMsigProposeRequested(string account, string actionJson)
     signal lezMsigFundRequested(string account, string amount)
     signal lezMsigRecoverRequested(string account)
+
+    // a member's own accounts, disclosed to the room (exo-1f9): anyone may pick one where an
+    // account of that member is needed, e.g. as their approval key in a LEZ multisig
+    property var memberAccounts: []
+    property var discloseAccount: ({})
+    property var msigPicks: ({})            // room identity -> the disclosed key picked for them
+    signal discloseMyAccountRequested(string specJson)
+    signal retractMyAccountRequested(string accountId)
+    function bareId(s) {
+        var h = String(s || "").toLowerCase();
+        return h.indexOf("0x") === 0 ? h.slice(2) : h;
+    }
+    function lezAccountsOf(identity) {
+        var out = [];
+        for (var i = 0; i < acc.memberAccounts.length; ++i) {
+            var a = acc.memberAccounts[i];
+            if (a.kind === "lez-key" && acc.bareId(a.member) === acc.bareId(identity)) out.push(a);
+        }
+        return out;
+    }
+    function shortB58(s) {
+        var t = String(s || "");
+        return t.length > 14 ? t.slice(0, 6) + "…" + t.slice(-6) : t;
+    }
+    function msigSpec(isPrivate) {
+        var spec = { threshold: Number(msigK.text.trim()), timelockMs: Number(msigLock.text.trim()) * 60000 };
+        if (isPrivate) spec.private = true;
+        if (Object.keys(acc.msigPicks).length > 0) spec.accounts = acc.msigPicks;
+        return JSON.stringify(spec);
+    }
     readonly property var msigAccount: {
         for (var i = 0; i < acc.accounts.length; ++i)
             if (acc.accounts[i] && acc.accounts[i].family === "lez.msig") return acc.accounts[i];
@@ -900,6 +930,95 @@ Item {
             }
         }
 
+        // ── accounts members disclosed (exo-1f9) ──
+        ColumnLayout {
+            objectName: "memberAccountsSection"
+            Layout.fillWidth: true
+            spacing: Theme.spacing.small
+
+            LogosText {
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.spacing.small
+                text: qsTr("Members' own accounts")
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.caption
+            }
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("Share an account of your own with this room, and anyone here can use it where an account of yours is needed, for example as your approval key when setting up a LEZ multisig. Only this room sees it, until a public multisig that uses it puts it on chain; using one account in several multisigs links them there.")
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.caption
+                wrapMode: Text.WordWrap
+            }
+            Repeater {
+                model: acc.memberAccounts
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        objectName: "memberAccount"
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 0          // the row's width is the column's, never the text's
+                        wrapMode: Text.WordWrap
+                        text: (modelData.mine ? qsTr("You") : String(modelData.memberName || acc.bareId(modelData.member).slice(0, 10)))
+                              + " · " + (String(modelData.name || "").length > 0 ? String(modelData.name) + " · " : "")
+                              + qsTr("LEZ account %1").arg(acc.shortB58(modelData.base58))
+                        color: Theme.palette.text
+                        font.pixelSize: MusterStyle.caption
+                    }
+                    ActionButton {
+                        objectName: "memberAccountRetract"
+                        visible: modelData.mine === true
+                        text: qsTr("Stop sharing")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.retractMyAccountRequested(String(modelData.id))
+                    }
+                }
+            }
+            LogosText {
+                Layout.fillWidth: true
+                visible: acc.memberAccounts.length === 0
+                text: qsTr("No one has shared an account of their own yet.")
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.caption
+            }
+            LogosTextField {
+                id: accountName
+                objectName: "memberAccountName"
+                Layout.fillWidth: true
+                placeholderText: qsTr("a name for it (optional)")
+            }
+            // a Flow, not a row: the panel is narrow, and a row's width would widen the column
+            Flow {
+                Layout.fillWidth: true
+                spacing: Theme.spacing.small
+                ActionButton {
+                    objectName: "memberAccountShareNew"
+                    text: qsTr("Share a new LEZ account")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: { acc.discloseMyAccountRequested(JSON.stringify({ which: "new", name: accountName.text.trim() })); accountName.text = ""; }
+                }
+                ActionButton {
+                    objectName: "memberAccountSharePayer"
+                    text: qsTr("Share my paying account")
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: { acc.discloseMyAccountRequested(JSON.stringify({ which: "payer", name: accountName.text.trim() })); accountName.text = ""; }
+                }
+            }
+            LogosText {
+                objectName: "memberAccountResult"
+                Layout.fillWidth: true
+                visible: !!(acc.discloseAccount && acc.discloseAccount.error)
+                text: acc.discloseAccount && acc.discloseAccount.error
+                      ? "⚠ " + String(acc.discloseAccount.error) + (acc.discloseAccount.detail ? " — " + String(acc.discloseAccount.detail) : "")
+                      : ""
+                color: Theme.palette.error
+                font.pixelSize: MusterStyle.caption
+                wrapMode: Text.WordWrap
+            }
+        }
+
         // ── lez-msig (exo-0d3, docs/design/lez-msig.md) ──
         // Members approve in the room with a key of their own for this multisig; one
         // transaction carries the proposal and its approvals, and the program checks them.
@@ -932,7 +1051,7 @@ Item {
                 spacing: Theme.spacing.small
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("Every member of this room takes part, each with a new key for this multisig. How many must approve, and how long must an approved action wait?")
+                    text: qsTr("Every member of this room takes part, each with a new key for this multisig unless you pick an account they shared below. How many must approve, and how long must an approved action wait?")
                     color: Theme.palette.text
                     font.pixelSize: Theme.typography.secondaryText
                     font.weight: Theme.typography.weightMedium
@@ -955,20 +1074,70 @@ Item {
                         placeholderText: qsTr("time lock, minutes")
                         text: "0"
                     }
-                    ActionButton {
-                        id: msigOpenButton
-                        objectName: "msigOpen"
+                }
+                // each member's approval key: a new one, or an account they shared (exo-1f9)
+                Repeater {
+                    model: acc.roomMembers
+                    delegate: ColumnLayout {
+                        id: pickRow
+                        required property var modelData
+                        readonly property string ident: acc.bareId(modelData.identity)
+                        readonly property var shared: acc.lezAccountsOf(ident)
                         Layout.fillWidth: true
-                        readonly property int n: Math.max(acc.roomMembers.length, 1)
-                        readonly property bool valid: /^[0-9]+$/.test(msigK.text.trim()) && Number(msigK.text.trim()) >= 1
-                                 && Number(msigK.text.trim()) <= n && /^[0-9]+$/.test(msigLock.text.trim())
-                        enabled: valid
-                        text: qsTr("Create a %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(n)
-                        variant: LogosButton.Variant.Secondary
-                        onClicked: acc.lezMsigOpenRequested(JSON.stringify({
-                            threshold: Number(msigK.text.trim()),
-                            timelockMs: Number(msigLock.text.trim()) * 60000 }))
+                        visible: shared.length > 0
+                        spacing: Theme.spacing.tiny
+                        LogosText {
+                            Layout.fillWidth: true
+                            text: pickRow.modelData.self ? qsTr("Your approval key")
+                                  : qsTr("%1's approval key").arg(pickRow.modelData.alias && String(pickRow.modelData.alias).length > 0
+                                                                 ? String(pickRow.modelData.alias) : pickRow.ident.slice(0, 10) + "…")
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: MusterStyle.caption
+                        }
+                        Flow {
+                            Layout.fillWidth: true
+                            spacing: Theme.spacing.tiny
+                            ActionButton {
+                                objectName: "msigPickNew_" + pickRow.ident.slice(0, 8)
+                                text: qsTr("A new key for this multisig")
+                                variant: acc.msigPicks[pickRow.ident] ? LogosButton.Variant.Secondary
+                                                                            : LogosButton.Variant.Primary
+                                onClicked: {
+                                    var o = Object.assign({}, acc.msigPicks);
+                                    delete o[pickRow.ident];
+                                    acc.msigPicks = o;
+                                }
+                            }
+                            Repeater {
+                                model: pickRow.shared
+                                delegate: ActionButton {
+                                    required property var modelData
+                                    objectName: "msigPick_" + String(modelData.id).slice(0, 8)
+                                    text: (String(modelData.name || "").length > 0 ? String(modelData.name) + " · " : "")
+                                          + acc.shortB58(modelData.base58)
+                                    variant: acc.msigPicks[acc.bareId(modelData.member)] === String(modelData.key)
+                                             ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                                    onClicked: {
+                                        var o = Object.assign({}, acc.msigPicks);
+                                        o[acc.bareId(modelData.member)] = String(modelData.key);
+                                        acc.msigPicks = o;
+                                    }
+                                }
+                            }
+                        }
                     }
+                }
+                ActionButton {
+                    id: msigOpenButton
+                    objectName: "msigOpen"
+                    Layout.fillWidth: true
+                    readonly property int n: Math.max(acc.roomMembers.length, 1)
+                    readonly property bool valid: /^[0-9]+$/.test(msigK.text.trim()) && Number(msigK.text.trim()) >= 1
+                             && Number(msigK.text.trim()) <= n && /^[0-9]+$/.test(msigLock.text.trim())
+                    enabled: valid
+                    text: qsTr("Create a %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(n)
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: acc.lezMsigOpenRequested(acc.msigSpec(false))
                 }
                 // the private posture (exo-efa): the same rules over a private account
                 LogosText {
@@ -984,9 +1153,7 @@ Item {
                     enabled: msigOpenButton.valid
                     text: qsTr("Create a private %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(msigOpenButton.n)
                     variant: LogosButton.Variant.Secondary
-                    onClicked: acc.lezMsigOpenRequested(JSON.stringify({
-                        threshold: Number(msigK.text.trim()),
-                        timelockMs: Number(msigLock.text.trim()) * 60000, private: true }))
+                    onClicked: acc.lezMsigOpenRequested(acc.msigSpec(true))
                 }
             }
 

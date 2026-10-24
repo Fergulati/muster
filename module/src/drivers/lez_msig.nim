@@ -26,6 +26,7 @@ import std/[json, options, strutils, sequtils, algorithm]
 import ../dcbor/dcbor
 import ../intents/materialization
 import ../crypto/keystore
+import ../crypto/account_labels
 import ./driver
 import ./manifest
 import ./profile
@@ -229,10 +230,17 @@ method mayContribute*(d: LezMsigDriver, e: Effect, names: seq[string]): Eligibil
     if ContributorPrefix & hexOf(m.key) in mine: return elYes
   elNo
 
+proc myMsigLabel*(ks: Keystore, a: LezMsigAccount): string =
+  ## The label of THIS member's approval key for the multisig: the key derived for it at its
+  ## ceremony, or an account of theirs the room set it up with (exo-1f9), whichever the
+  ## multisig's config holds. The derived one when it holds neither (the member is not in it).
+  let own = msigLabel(a.createKey)
+  labelAmong(ks, a.config.members.mapIt(it.key), @[own]).get(own)
+
 method signInApp*(d: LezMsigDriver, e: Effect, ks: Keystore, attestDigest: array[32, byte]): InAppSig =
   ## The member's approval key for THIS multisig signs the approve message, and attests the
   ## room's record (P) with the same key: an approval and its attestation come from one key.
-  let label = msigLabel(d.account.createKey)
+  let label = myMsigLabel(ks, d.account)
   let key = ks.lezMemberKey(label)
   var msg: array[32, byte]
   let id = proposalId(proposalOf(e))

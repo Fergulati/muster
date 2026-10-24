@@ -16,6 +16,7 @@
 ##   intent/<id>/part/<part>/<step>       a part report (exo-a90.2): the value's "author"
 ##   intent/<id>/proposer/<who>           who proposed the intent (exo-770)
 ##   lmsig/<ck>/key/<who>                 a member's lez-msig approval key (exo-0d3)
+##   member/<who>/account/<id>[/retract]  an account of <who>'s own, disclosed or taken back (exo-1f9)
 ##   lmsig/<ck>/gms/<who>                 a private lez-msig's group secret, sealed to <who>,
 ##                                        and the value's "author" the opener (exo-efa)
 ##   lmsig/<ck>/note/<n>/<who>            its note after its n-th transaction, sealed to <who>;
@@ -145,6 +146,7 @@ proc authorOf*(e: Event): tuple[authored: bool, author: string] =
     if p[0] == "frost" and p[2] == "join": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "intent" and p[2] == "proposer": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "lmsig" and p[2] == "key": return (true, (if p.len >= 4: p[3] else: ""))
+    if p[0] == "member" and p[2] == "account": return (true, p[1])
     if p[0] == "xmsig" and p[2] == "join": return (true, (if p.len >= 4: p[3] else: ""))
     if p[0] == "xmsig" and p[2] == "kex": return (true, (if p.len >= 5: p[4] else: ""))
     if p[0] == "intent" and p[2] in ["xsync", "xtx"]: return (true, (if p.len >= 4: p[3] else: ""))
