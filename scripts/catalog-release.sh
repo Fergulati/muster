@@ -5,7 +5,8 @@
 # the way the Logos Forum catalogue (edenbd1/logos-forum-catalog) does it: a committed
 # index.json, the .lgx files as GitHub release assets.
 #
-#   scripts/catalog-release.sh                       # a release: catalog/ + .run/catalog-release/<tag>/
+#   scripts/catalog-release.sh                       # a release: catalog/ + .run/catalog-release/<tag>/,
+#                                                    # every platform, from CI's build of HEAD (exo-04f)
 #   scripts/catalog-release.sh --local DIR --base-url https://127.0.0.1:8443
 #                                                    # everything under DIR, for a local server
 #
@@ -21,16 +22,20 @@
 #                      with a certificate Basecamp trusts (SSL_CERT_FILE; see
 #                      docs/runbooks/install-from-catalogue.md, "Testing a release locally").
 #   --allow-dirty      build even if module/ or ui/ has uncommitted changes (never for a release)
+#   --here             build muster_module and muster_ui here, for this host's platform only,
+#                      instead of taking every platform from CI (the default for a release)
 #   --from-run ID      take the packages from a successful run of the `lgx variants` workflow
 #                      (.github/workflows/lgx-variants.yml) instead of building here: one .lgx
 #                      per package holding every variant it builds (linux-amd64, linux-arm64,
 #                      darwin-arm64). The run must have built exactly HEAD. Assets are then
 #                      named <package>-<version>.lgx, as the official catalogue names its own.
 #
-# Without --from-run the packages are built here, for this host's platform
-# (scripts/lib/portable.sh): linux-amd64, linux-arm64 or darwin-arm64. A release carries
-# linux-amd64, as every published muster version does, so a release built on any other host
-# is refused; --local is open to every platform, e.g. for a Mac to test its own build.
+# A release ships every platform by default (exo-04f): muster_module and muster_ui come from
+# the `lgx variants` run that built HEAD, and when there is none the workflow is dispatched on
+# HEAD's branch (which must be pushed, at HEAD) and waited for. With --here, or with --local,
+# the packages are built here for this host's platform (scripts/lib/portable.sh): a release
+# built that way still must carry linux-amd64; --local is open to every platform, e.g. for a
+# Mac to test its own build.
 #
 # The catalogue publishes muster_module and muster_ui, and lez_msig_module (programs/lez-msig,
 # exo-e77): the private lez-msig's prover, an OPTIONAL dependency of muster_module, built for
@@ -62,7 +67,7 @@ INDEX_URL=https://raw.githubusercontent.com/corpetty/muster/main/catalog/index.j
 RELEASES=https://github.com/corpetty/muster/releases/download
 SUB=(--extra-substituters https://cache.nix.logos.co)
 
-TAG=""; URL_BASE=""; LOCAL=""; BASE_URL=""; ALLOW_DIRTY=0; FROM_RUN=""
+TAG=""; URL_BASE=""; LOCAL=""; BASE_URL=""; ALLOW_DIRTY=0; FROM_RUN=""; HERE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --tag) TAG=${2:?--tag needs a value}; shift ;;
@@ -71,6 +76,7 @@ while [ $# -gt 0 ]; do
     --base-url) BASE_URL=${2:?--base-url needs a URL}; shift ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
     --from-run) FROM_RUN=${2:?--from-run needs a workflow run id}; shift ;;
+    --here) HERE=1 ;;
     -h|--help) awk 'NR > 1 { if (/^set -euo/) exit; print }' "$0"; exit 0 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
@@ -90,6 +96,30 @@ VERSION=$(ver module/metadata.json)
   echo "module/metadata.json ($VERSION) and ui/metadata.json ($(ver ui/metadata.json)) disagree; bump both" >&2; exit 1; }
 TAG=${TAG:-muster-v$VERSION}
 URL_BASE=${URL_BASE:-$RELEASES/$TAG}
+# A release takes every platform from CI's build of HEAD, unless asked to build here.
+if [ -z "$FROM_RUN" ] && [ -z "$LOCAL" ] && [ $HERE = 0 ]; then
+  HEAD_SHA=$(git rev-parse HEAD)
+  FROM_RUN=$(gh run list --repo corpetty/muster --workflow "lgx variants" --commit "$HEAD_SHA" --status success \
+               --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+  if [ -z "$FROM_RUN" ]; then
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    git fetch -q origin "$BRANCH" 2>/dev/null || true
+    [ "$(git rev-parse "origin/$BRANCH" 2>/dev/null)" = "$HEAD_SHA" ] || {
+      echo "no lgx variants run built $HEAD_SHA, and origin/$BRANCH is not HEAD: push it, or build here with --here" >&2; exit 1; }
+    echo "no lgx variants run built ${HEAD_SHA:0:8}: dispatching one on $BRANCH and waiting (every platform, about 20 minutes)"
+    gh workflow run lgx-variants.yml --repo corpetty/muster --ref "$BRANCH"
+    for _ in $(seq 30); do
+      sleep 10
+      FROM_RUN=$(gh run list --repo corpetty/muster --workflow "lgx variants" --commit "$HEAD_SHA" --event workflow_dispatch \
+                   --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+      [ -n "$FROM_RUN" ] && break
+    done
+    [ -n "$FROM_RUN" ] || { echo "the dispatched lgx variants run did not appear" >&2; exit 1; }
+    gh run watch "$FROM_RUN" --repo corpetty/muster --exit-status >/dev/null \
+      || { echo "lgx variants run $FROM_RUN failed: gh run view $FROM_RUN --repo corpetty/muster --log-failed" >&2; exit 1; }
+  fi
+  echo "every platform from lgx variants run $FROM_RUN (commit ${HEAD_SHA:0:8})"
+fi
 # The variants each package must carry: every one the workflow builds, or this host's.
 if [ -n "$FROM_RUN" ]; then PLATFORMS="linux-amd64 linux-arm64 darwin-arm64"; else PLATFORMS=$(lgx_variant); fi
 if [ -z "$LOCAL" ]; then

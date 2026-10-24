@@ -272,6 +272,17 @@ The coordination room is muster's room. Each multisig is created *from* a room.
    A removed member is evicted and the room re-keys forward. An added member is admitted (after
    they disclose a key).
 
+**Approval keys from accounts members shared (built, exo-1f9).** By default each member's
+client derives a fresh approval key for each multisig. A member may instead share an account
+of their own with the room (`coordinate_disclose_my_account`): its key signs a hash-input
+record of (room, member, chain, kind, key), so it counts only for that member and only in
+this room, and the disclosure is author-signed. The opener may then pick, for any member, one
+of the accounts that member shared (`lez_msig_open {accounts}`). A picked account counts as
+that member's join. Their client finds its keystore label by deriving its own candidates
+(`crypto/account_labels.nim`), so the room never sees a label. The cost is linkability: the
+public posture puts every member key on chain at creation, so one account used in several
+multisigs links them. The fresh key stays the default.
+
 **The private posture in the room (built, exo-efa).** The opener's `lez_msig_open {private:
 true}` generates the GMS and seals one copy to each invited member's room identity. Each copy is
 author-signed, and only the opener's counts:
