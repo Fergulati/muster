@@ -18,6 +18,13 @@ The LEZ *wallet* rails (public / shield / deshield / private transfers) live in
   - It is also a `ChainAdapter`, so the settlement seam can hold it.
   - `FakeLezMultisig` reproduces the program handlers with the program messages, over borsh
     accounts at their PDAs. A refused transaction changes and charges nothing.
+- `msig.nim`: lez-msig's bytes (epic exo-0d3, `docs/design/lez-msig.md`).
+  - The types its program stores and its members sign, their borsh, and the tagged hashes an
+    approval covers.
+  - The multisig's public PDA, and the card's decode of a proposal (RFP U.6).
+  - It is held byte for byte to vectors the program's own host generates
+    (`tests/vectors/lez-msig`). The rules are the program's (`programs/lez-msig/core`), not
+    re-implemented here.
 - `tx.nim`: a LEZ v0.2.4 public transaction as bytes.
   - The multisig instruction in risc0 serde words.
   - The borsh message and its domain-separated hash.

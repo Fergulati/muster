@@ -5,7 +5,7 @@ A release is one GitHub release, `muster-v<version>`, carrying two ways to run M
 | Asset | For whom | What it is |
 |---|---|---|
 | `Muster-<version>-Basecamp-<tag>-linux-x86_64.AppImage` | someone who wants to download one file and run it | Basecamp's own released AppImage with Muster and the Logos Official modules it needs already installed inside. `chmod +x`, run, click **Muster**. |
-| `muster_module-<version>-linux-amd64.lgx`, `muster_ui-<version>-linux-amd64.lgx` (or `muster_module-<version>.lgx`, `muster_ui-<version>.lgx`, one per package holding every platform, from `--from-run`) | someone who already runs Basecamp, or `logoscore` | the two portable packages. Basecamp installs them from Muster's catalogue (`catalog/`, [`docs/runbooks/install-from-catalogue.md`](docs/runbooks/install-from-catalogue.md)) and fetches the dependencies from Logos Official; `lgpm install --file` installs them by hand. |
+| `muster_module-<version>-linux-amd64.lgx`, `muster_ui-<version>-linux-amd64.lgx`, and `lez_msig_module-<its version>-linux-amd64.lgx`, the private LEZ multisig's prover (optional; since 0.3.3) (or `muster_module-<version>.lgx`, `muster_ui-<version>.lgx`, one per package holding every platform, from `--from-run`) | someone who already runs Basecamp, or `logoscore` | the two portable packages. Basecamp installs them from Muster's catalogue (`catalog/`, [`docs/runbooks/install-from-catalogue.md`](docs/runbooks/install-from-catalogue.md)) and fetches the dependencies from Logos Official; `lgpm install --file` installs them by hand. |
 
 Both are built from the same commit, and the AppImage contains exactly the two `.lgx` files the release publishes.
 

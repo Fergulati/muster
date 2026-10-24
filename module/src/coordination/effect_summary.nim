@@ -8,9 +8,10 @@
 ## accounts) — the same inference the card always drew, now in one place. Anything else
 ## is named for what it is, never dressed up as a payment.
 
-import std/[json, strutils]
+import std/[json, strutils, sequtils]
 import stint
 import ../bitcoin/[bech32, network, tx]
+import ../lez/msig as msigbytes   # a lez-msig proposal, decoded from the bytes approvals sign (exo-0d3)
 
 type
   EffectSummary* = object
@@ -127,6 +128,32 @@ proc effectSummary*(effectJson: string, label: proc (who: string): string = nil,
     let n = argCount(j{"args"})
     return EffectSummary(kind: "action", to: call,
                          text: "an action: " & call & " (" & $n & (if n == 1: " arg)" else: " args)"))
+  of "lez-msig":
+    # a lez-msig proposal (exo-0d3): read from its exact bytes, the ones every approval signs
+    # (RFP U.6), never from a description someone attached
+    var p: msigbytes.MsigProposal
+    try: p = msigbytes.decodeProposal(hexToBytes(j{"proposal"}.getStr()))
+    except CatchableError: return EffectSummary(kind: "unknown", text: "a LEZ multisig proposal that does not decode")
+    let tail = "  ·  proposal #" & $p.nonce
+    case p.action.kind
+    of msigbytes.akTransfer:
+      let to = msigbytes.hexOf(p.action.to)
+      return EffectSummary(kind: "payment", amount: inDecimals($p.action.amount, 9), unit: "LEZ", to: to,
+        text: "a LEZ multisig payment: " & inDecimals($p.action.amount, 9) & " LEZ → " & short(to) & tail)
+    of msigbytes.akCall:
+      let prog = msigbytes.hexOf(p.action.program)
+      return EffectSummary(kind: "contract-call", to: prog,
+        text: "a LEZ multisig call: program " & short(prog) & ", " & $p.action.rows.len & " accounts, a " &
+              $p.action.data.len & "-byte instruction" & tail)
+    of msigbytes.akConfig:
+      var parts: seq[string]
+      for c in p.action.changes:
+        let cj = msigbytes.changeJson(c)
+        parts.add cj{"change"}.getStr()
+      return EffectSummary(kind: "policy", text: "a LEZ multisig configuration change: " & parts.join(", ") & tail)
+    of msigbytes.akCancel:
+      return EffectSummary(kind: "policy", text: "cancel LEZ multisig proposals at nonce " &
+        p.action.nonces.mapIt($it).join(", ") & tail)
   of "btc-spend":
     return btcSummary(j)
   of "monero-multisig-spend":

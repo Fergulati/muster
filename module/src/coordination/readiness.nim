@@ -391,6 +391,13 @@ proc probeFromFacts*(f: HostFacts): ReadinessProbe =
     of "roster-member":
       if facts.myEd in facts.roster: (rdMet, "your encryption identity is on the room roster")
       else: (rdMissing, "your encryption identity is not on the room roster")
+    of "lez-msig-key":
+      # this member's approval key for THIS multisig is one of its members' (exo-0d3): the
+      # driver's own answer, from the disclosed config; whether anyone else holds one, never
+      case facts.contributes
+      of elYes: (rdMet, "your approval key for this multisig is a member's")
+      of elNo: (rdMissing, "your approval key for this multisig is not a member's: your approval would not count")
+      of elUnknown: (rdUnknown, "cannot tell whether your approval key is a member's")
     of "split-party":
       # a split names its parties in the effect — each debtor and the creditor (exo-770) —
       # so the driver's own answer grades it; whether anyone ELSE is named, it never says

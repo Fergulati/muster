@@ -1,0 +1,11 @@
+[package]
+name = "msig_v03"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The lez-msig program's LEZ v0.3 wire types: the instruction envelope, the effect, and the multisig's account."
+
+[dependencies]
+msig_core.workspace = true
+lee_core.workspace = true
+borsh.workspace = true

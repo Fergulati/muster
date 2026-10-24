@@ -1,0 +1,560 @@
+{
+  "actions": [
+    {
+      "id": "lez.msig-private/create",
+      "name": "Create a private multisig together, in the room",
+      "area": "family",
+      "family": "lez.msig-private",
+      "kind": "lez-msig",
+      "status": "built",
+      "summary": "The public ceremony with one addition: the opener's client seals a fresh group secret to each invited member. The multisig is a private PDA that secret derives; the opener's client creates it through the prover in one privacy-preserving transaction signed by nobody, seals its first note to every member, and discloses the account, private.",
+      "steps": [
+        {
+          "step": "ceremony",
+          "who": "the opener",
+          "does": "lez_msig_open {private: true}: publishes lmsig/<ck>/open (private) and lmsig/<ck>/gms/<member> for every invited member, the group secret sealed to that member's room identity and author-signed; refused with no-prover when the lez_msig_module is not loaded.",
+          "signs": "the opener's room identity signs each sealed copy (authorship); their approval key signs the bind message",
+          "reveals": [
+            {
+              "field": "that a private multisig is being made, and who is in it",
+              "observer": "room-member"
+            },
+            {
+              "field": "the group secret",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "step": "ceremony",
+          "who": "each invited member — automatic",
+          "does": "Joins with a fresh approval key, as in the public posture; opens the copy of the group secret sealed to them. Only a copy the opener sealed counts.",
+          "signs": "the bind message, with their own approval key",
+          "reveals": [
+            {
+              "field": "the member's approval key for this multisig",
+              "observer": "room-member"
+            },
+            {
+              "field": "timing",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "step": "settle",
+          "who": "the opener's client — automatic once every member joined",
+          "does": "Hands Create to the lez_msig_module, which proves the program's plan and apply over the private PDA and sends one privacy-preserving transaction; once the chain includes it, the client seals the note (the multisig's account, decrypted) to every member as lmsig/<ck>/note/0/<member>, and discloses the account with placement private. A member holding the group secret checks the address through the prover; anyone else in the room reads it as unknown.",
+          "signs": "nothing on chain: a privacy-preserving Create carries no signer and pays no fee on v0.3",
+          "reveals": [
+            {
+              "field": "a nullifier, a commitment and a proof",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "the note: config, approval keys, balance",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a group secret sealed by anyone but the opener",
+          "why": "groupSecretOf counts only the opener's author-signed copy",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "what": "a private multisig opened with no prover loaded",
+          "why": "lez_msig_open answers no-prover and names the package to install",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        },
+        {
+          "what": "a disclosed private address the group secret does not derive",
+          "why": "the host of a member holding the secret derives it through the prover: disagrees",
+          "evidence": [
+            "module/nim-lib/muster_module.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "lez_msig_open",
+        "lez_msig_ceremonies",
+        "coordinate_accounts",
+        "coordinate_disclose_account"
+      ],
+      "ui": "The accounts panel's \"Create a private M-of-N LEZ multisig\"; the vault's \"Put in from my account\" and \"Read it from the chain\". Seen on a display (two runners): create, deposit, approve, settle.",
+      "invariants": [
+        2,
+        4,
+        7,
+        8,
+        9
+      ],
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "lez:<zone>",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:<zone>",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez-rpc",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-msig-program",
+          "party": "instance",
+          "class": "infra",
+          "target": "the program's account id on the zone (Settings → lez-msig-program)",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "module",
+          "name": "lez_msig_module",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "authority",
+          "name": "lez-msig-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "each member's approval key for this multisig, derived in their keystore",
+          "field": "members",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "the group secret, the note (config, approval keys, balance)",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ],
+          "observer": "room-member"
+        },
+        {
+          "field": "a nullifier, a commitment and a proof; no key, config or create key",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ],
+          "observer": "chain-observer"
+        }
+      ],
+      "claims": [
+        {
+          "claim": "The group secret reaches only the members the opener invited, each copy sealed to that member's room identity",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "On chain a private Create names no member, no key, no config and no create key",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "Every member holding the group secret can read the multisig's state and history from then on",
+          "credibility": "motivational",
+          "party": "room-member"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_private_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_driver_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_bytes_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/host/tests/live_private.rs"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/module/tests/module.rs"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/v0.3.0/lee/state_machine/core/src/program/mod.rs",
+          "what": "LEZ v0.3: run_program(plan, apply), public and private PDAs"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/v0.3.0/key_protocol/src/key_management/group_key_holder.rs",
+          "what": "GroupKeyHolder::derive_keys_for_pda: the private PDA's keys from a group secret"
+        }
+      ],
+      "unverified": [
+        "Run in dev mode only (RISC0_DEV_MODE); real proving is benchmarked in programs/lez-msig/BENCHMARKS.md but not driven from a room yet."
+      ],
+      "try": []
+    },
+    {
+      "id": "lez.msig-private/deposit",
+      "name": "Deposit into the private multisig",
+      "area": "family",
+      "family": "lez.msig-private",
+      "kind": "lez-msig",
+      "status": "built",
+      "summary": "A member moves LEZ from their own public account into the private vault: the prover proves a native transfer over the vault's note, their keystore signs its hash, the prover sends it, and the new note reaches every member.",
+      "steps": [
+        {
+          "step": "settle",
+          "who": "the depositing member",
+          "does": "lez_msig_fund(account, amount): the lez_msig_module proves the transfer (mode fund, the payer's public key only); the client signs the message hash with the member's own LEZ key (lez-member/0) and the module sends it (send). Once included, the client seals the new note to every member.",
+          "signs": "the member's LEZ key signs the privacy-preserving message's hash (BIP-340)",
+          "reveals": [
+            {
+              "field": "the depositor's public account and the amount leaving it",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "the new balance",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a deposit signature that does not sign the proved message",
+          "why": "send checks every signature against the message before anything is sent: bad-signature",
+          "evidence": [
+            "programs/lez-msig/host/src/exec.rs"
+          ]
+        }
+      ],
+      "hosted": [
+        "lez_msig_fund",
+        "lez_msig_state"
+      ],
+      "ui": "The private vault's \"Put in from my account\".",
+      "invariants": [
+        3,
+        8
+      ],
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "lez:<zone>",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:<zone>",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez-rpc",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-msig-program",
+          "party": "instance",
+          "class": "infra",
+          "target": "the program's account id on the zone (Settings → lez-msig-program)",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "module",
+          "name": "lez_msig_module",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "asset",
+          "name": "native LEZ in the member's own account",
+          "party": "proposer",
+          "class": "asset",
+          "target": "lez:<zone>",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "the depositor's public account and the amount",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ],
+          "observer": "chain-observer"
+        }
+      ],
+      "claims": [
+        {
+          "claim": "No key leaves the keystore: the prover gets the payer's public key and the signature, never its secret",
+          "credibility": "imperative"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_private_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/module/tests/module.rs"
+        }
+      ],
+      "unverified": [
+        "Run in dev mode only."
+      ],
+      "try": []
+    },
+    {
+      "id": "lez.msig-private/transfer",
+      "name": "Pay from the private multisig",
+      "area": "family",
+      "family": "lez.msig-private",
+      "kind": "lez-msig",
+      "status": "built",
+      "summary": "As in the public posture, a member proposes and members approve in the room; settlement hands Execute, with every approval, to the prover, which verifies them inside the proof over the vault's note and sends one privacy-preserving transaction. The payee is paid; the chain sees no member, approval or config.",
+      "steps": [
+        {
+          "step": "settle",
+          "who": "any member, through Settle on-chain",
+          "does": "coordinate_submit: the settlement reads the state from the newest note, gathers the approvals, builds Execute (or Queue, then ExecuteQueued under a time lock), and the lez_msig_module proves and sends it; a refusal surfaces while proving and nothing is sent. Once included, the settling member's client seals the new note to every member.",
+          "signs": "nothing on chain; the approvals are verified inside the proof",
+          "reveals": [
+            {
+              "field": "a nullifier, a commitment and a proof; a public payee's credit (payee, amount)",
+              "observer": "chain-observer"
+            },
+            {
+              "field": "the new balance and the spent nonce",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "a payment the vault cannot cover, or any rule the program refuses",
+          "why": "the proof cannot be made: settlement reports it refused while proving, and nothing is sent",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "what": "fewer approvals than the threshold",
+          "why": "settlement refuses before the prover: insufficient-signatures",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "what": "a stale note, when the member whose transaction landed never sealed the new one into the room",
+          "why": "the proof cannot be made over a spent note; the member's client reads the newest note from the chain with the group's viewing key (lez_msig_recover, also started by itself on that failure) and seals it in",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_propose_lez_msig",
+        "coordinate_contribute",
+        "coordinate_submit",
+        "lez_msig_state",
+        "lez_msig_recover"
+      ],
+      "ui": "The same card and Settle on-chain as the public posture.",
+      "invariants": [
+        1,
+        2,
+        4,
+        5,
+        8,
+        10
+      ],
+      "claims": [
+        {
+          "claim": "The program checks every approval inside the proof: distinct current members holding APPROVE, by weight, over exactly this proposal",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "On chain a private payment names no member key, approval or create key",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A public payee's credit shows its payee and amount",
+          "credibility": "exposed",
+          "party": "chain-observer"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_private_e2e.nim"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/host/tests/live_private.rs"
+        },
+        {
+          "kind": "test",
+          "path": "programs/lez-msig/core/tests/rules.rs"
+        },
+        {
+          "kind": "source",
+          "url": "https://github.com/logos-blockchain/logos-execution-zone/blob/v0.3.0/lee/state_machine/core/src/program/mod.rs",
+          "what": "LEZ v0.3: run_program(plan, apply), public and private PDAs"
+        }
+      ],
+      "unverified": [
+        "Run in dev mode only."
+      ],
+      "try": [],
+      "requirements": [
+        {
+          "kind": "environment",
+          "name": "lez:<zone>",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez:<zone>",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-rpc",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez-rpc",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "infra",
+          "name": "lez-msig-program",
+          "party": "instance",
+          "class": "infra",
+          "target": "the program's account id on the zone (Settings → lez-msig-program)",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "module",
+          "name": "lez_msig_module",
+          "party": "instance",
+          "class": "infra",
+          "target": "lez_msig_module (LEZ's prover as a Logos module), loaded by the host",
+          "field": "",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        },
+        {
+          "kind": "authority",
+          "name": "lez-msig-key",
+          "party": "contributor",
+          "class": "authority",
+          "target": "each member's approval key for this multisig, derived in their keystore",
+          "field": "members",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ]
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "a nullifier, a commitment and a proof; a public payee's credit (payee, amount)",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ],
+          "observer": "chain-observer"
+        },
+        {
+          "field": "the proposal, every approval, the new note",
+          "when": "act",
+          "evidence": [
+            "module/tests/lez_msig_private_e2e.nim"
+          ],
+          "observer": "room-member"
+        }
+      ]
+    }
+  ]
+}

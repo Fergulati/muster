@@ -882,6 +882,67 @@ ColumnLayout {
         font.pixelSize: MusterStyle.cardCaption
     }
 
+    // ── lez-msig (exo-0d3): what the approval signs, decoded from those very bytes (RFP U.6) ──
+    ColumnLayout {
+        objectName: "cardMsig"
+        Layout.fillWidth: true
+        visible: cardRoot.msig !== null
+        spacing: 2
+        readonly property var m: cardRoot.msig || ({})
+        readonly property var a: (cardRoot.msig && cardRoot.msig.action) ? cardRoot.msig.action : ({})
+        function abbr(h) { h = String(h || ""); return h.length > 16 ? h.slice(0, 8) + "…" + h.slice(-6) : h; }
+        // base units → LEZ as an exact decimal string (9 decimals), never through a float
+        function lez(base) {
+            var t = String(base || "0").replace(/^0+(?=[0-9])/, "");
+            if (!/^[0-9]+$/.test(t)) return "?";
+            while (t.length < 10) t = "0" + t;
+            var whole = t.slice(0, t.length - 9), frac = t.slice(t.length - 9).replace(/0+$/, "");
+            return frac.length > 0 ? whole + "." + frac : whole;
+        }
+        LogosText {
+            objectName: "cardMsigAction"
+            Layout.fillWidth: true
+            wrapMode: Text.WrapAnywhere
+            text: parent.m.error ? "⚠ " + String(parent.m.error)
+                : parent.a.kind === "transfer"
+                  ? qsTr("Pays %1 LEZ to %2").arg(parent.lez(parent.a.amount)).arg(String(parent.a.to))
+                : parent.a.kind === "call"
+                  ? qsTr("Calls program %1 with %2 accounts and instruction %3").arg(String(parent.a.program))
+                        .arg((parent.a.rows || []).length).arg(String(parent.a.data))
+                : parent.a.kind === "config"
+                  ? qsTr("Changes the multisig: %1").arg((parent.a.changes || []).map(function (c) {
+                        return String(c.change) + (c.timelockMs !== undefined ? " " + Number(c.timelockMs) / 60000 + " min"
+                                                 : c.threshold !== undefined ? " " + c.threshold
+                                                 : c.key !== undefined ? " " + parent.abbr(c.key) : ""); }).join(", "))
+                : parent.a.kind === "cancel"
+                  ? qsTr("Cancels proposal #%1").arg((parent.a.nonces || []).join(", #"))
+                : ""
+            color: parent.m.error ? Theme.palette.error : Theme.palette.text
+            font.pixelSize: MusterStyle.cardBody
+        }
+        LogosText {
+            objectName: "cardMsigBinding"
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: !parent.m.error
+            text: qsTr("Proposal #%1 · settings v%2 · expires %3 · id %4")
+                  .arg(String(parent.m.nonce)).arg(String(parent.m.epoch))
+                  .arg(new Date(Number(parent.m.expiresMs)).toLocaleString(Qt.locale(), Locale.ShortFormat))
+                  .arg(parent.abbr(parent.m.proposalId))
+            color: Theme.palette.textSecondary
+            font.family: MusterStyle.mono
+            font.pixelSize: MusterStyle.cardCaption
+        }
+        LogosText {
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: !parent.m.error
+            text: qsTr("Decoded from the exact bytes your approval signs. Any change to the multisig's settings voids it; so does its expiry.")
+            color: Theme.palette.textTertiary
+            font.pixelSize: MusterStyle.cardCaption
+        }
+    }
+
     // Committed vs unattested, in words — only when something was pasted in, so a
     // card whose approvals were all signed in muster stays quiet.
     LogosText {

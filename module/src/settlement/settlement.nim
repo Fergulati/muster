@@ -24,6 +24,10 @@ import ../drivers/safe_rpc
 import ../drivers/btc_multisig
 import ../drivers/btc_frost        # the aggregate locus (Phase D)
 import ../drivers/lez_frost        # a FROST group acting on LEZ (exo-55e)
+import ../drivers/lez_msig         # lez-msig: approvals verified in-program (exo-0d3)
+import ../lez/msig
+import ../wallet/lez_msig_chain
+import ../wallet/lez_msig_private  # its private posture, through the prover (exo-efa)
 import stint
 import ../drivers/lez_multisig
 import ../lez/multisig
@@ -61,6 +65,11 @@ method submit*(s: Settlement, tx: PreparedTx, ks: Keystore): TxRef {.base.} =
 
 method watch*(s: Settlement, txRef: TxRef): Finality {.base.} =
   s.adapter.finality(txRef)
+
+method watchDeadlineS*(s: Settlement): float {.base.} =
+  ## How long a watch may legitimately stay pending; 0 = the host's default. A time-locked
+  ## action waits out its lock before it can be final.
+  0.0
 
 proc watchWithin*(s: Settlement, txRef: TxRef, windowS: float, pollMs = 200): Finality =
   ## Finality, waited for within a wall-clock window: what a hosted call may spend on it
@@ -357,6 +366,214 @@ method watch*(s: LezFrostSettlement, txRef: TxRef): Finality =
   ## which can only take effect (exo-eb6.4.6).
   s.adapter.finality(txRef)
 
+# ── lez-msig (exo-0d3): one transaction carries the proposal and its approvals ──
+type LezMsigSettlement* = ref object of Settlement
+  ## What the last submit sent, so watch can judge it by the state it changed and, for a
+  ## time-locked action, send ExecuteQueued itself once the lock ends.
+  sentKind: InstrKind
+  proposal: MsigProposal
+  driver: LezMsigDriver
+  etaMs, expiresMs: uint64
+  queueSlackMs*: uint64     ## how late a Queue may land; 0 = QueueSlackMs
+  queuedRef: string         ## the ExecuteQueued this settlement sent itself, once the lock ended
+
+const QueueSlackMs = 120_000'u64   ## a Queue claims to land within two minutes
+
+proc msigChainOf(s: LezMsigSettlement): MsigChain =
+  if s.adapter of MsigChain: MsigChain(s.adapter) else: nil
+
+proc myExecutor(c: MsigChain, d: LezMsigDriver, p: MsigProposal): tuple[ok: bool, signed: Option[MsigSigned], why: string] =
+  ## An execution signature, when the multisig asks for one: THIS member's approval key,
+  ## which must hold EXECUTE.
+  if d.account.config.openExecution: return (true, none(MsigSigned), "")
+  if not (c of MsigLive): return (false, none(MsigSigned), "no keystore to sign the execution with")
+  let ks = MsigLive(c).ks
+  let label = msigLabel(d.account.createKey)
+  let key = ks.lezMemberKey(label)
+  let m = d.account.config.memberOf(key)
+  if m.isNone or (m.get.roles and RoleExecute) == 0:
+    return (false, none(MsigSigned), "this multisig asks an EXECUTE member to sign the execution, and you are not one")
+  var h: array[32, byte]
+  let em = executeMsg(proposalId(p))
+  for i in 0 ..< 32: h[i] = em[i]
+  (true, some(MsigSigned(key: key, sig: ks.lezMemberSign(label, h))), "")
+
+proc isoMs(ms: uint64): string = $fromUnix(int64(ms div 1000)).utc
+
+method assemble*(s: LezMsigSettlement, drv: Driver, effect: Effect,
+                 contributions: seq[SettleContribution]): Assembled =
+  ## Read the multisig's state (the program's own copy is the one that counts), then build
+  ## the one instruction this proposal needs now: ExecuteQueued if it is queued and its lock
+  ## has ended; Queue if the multisig has a time lock; else Execute. Approvals are the
+  ## driver-verified ones, one per member, the proposer's included.
+  if not (drv of LezMsigDriver):
+    return Assembled(ok: false, error: "not-settleable", detail: "a lez-msig settlement needs a lez-msig driver")
+  let c = s.msigChainOf()
+  if c == nil: return Assembled(ok: false, error: "not-settleable", detail: "no LEZ chain to send through")
+  let d = LezMsigDriver(drv)
+  let refusal = d.signRefusal(effect)
+  if refusal.len > 0: return Assembled(ok: false, error: "not-settleable", detail: refusal)
+  let p = proposalOf(effect)
+  let id = proposalId(p)
+  var r: MsigRead
+  try: r = c.readMsig(d.account.address)
+  except CatchableError as e:
+    return Assembled(ok: false, error: "not-settleable", detail: "could not read the multisig: " & e.msg)
+  if not r.found: return Assembled(ok: false, error: "not-settleable", detail: "the multisig is not on chain")
+  let st = r.state
+  let now = c.nowMs()
+  var ins: MsigInstruction
+  var have, need = 0
+  var queued = -1
+  for i, q in st.queue:
+    if q.nonce == p.nonce and q.proposalId == id: queued = i
+  if queued >= 0:
+    let q = st.queue[queued]
+    if now < q.etaMs:
+      return Assembled(ok: false, error: "not-settleable",
+                       detail: "queued: its time lock ends at " & isoMs(q.etaMs))
+    if now >= q.expiresMs:
+      return Assembled(ok: false, error: "not-settleable", detail: "expired: the proposal expired at " & isoMs(q.expiresMs))
+    ins = MsigInstruction(kind: ikExecuteQueued, proposal: p, atMs: q.etaMs)
+  else:
+    if p.epoch != st.epoch:
+      return Assembled(ok: false, error: "not-settleable",
+        detail: "stale-epoch: approvals were gathered under epoch " & $p.epoch & "; the configuration changed since (epoch " &
+                $st.epoch & "): propose again")
+    if not st.nonceFree(p.nonce):
+      return Assembled(ok: false, error: "not-settleable", detail: "nonce-spent: nonce " & $p.nonce & " was already executed, queued or cancelled")
+    if now >= p.expiresMs:
+      return Assembled(ok: false, error: "not-settleable", detail: "expired: the proposal expired at " & isoMs(p.expiresMs))
+    let msg = approveMsg(id)
+    var approvals: seq[MsigSigned]
+    var proposerSigned = false
+    for ct in contributions:
+      let sg = signedOf(Contribution(bytes: ct.bytes))
+      if sg.isNone or approvals.anyIt(it.key == sg.get.key): continue
+      let m = st.config.memberOf(sg.get.key)
+      if m.isNone or not verifySig(sg.get.key, msg, sg.get.sig): continue
+      if (m.get.roles and RoleApprove) == 0 and sg.get.key != p.proposer: continue
+      if sg.get.key == p.proposer: proposerSigned = true
+      approvals.add sg.get
+    let weight = approvalWeight(st.config, approvals.mapIt(it.key))
+    have = int(weight)
+    need = int(st.config.threshold)
+    if not proposerSigned:
+      return Assembled(ok: false, error: "insufficient-signatures", have: have, need: need,
+                       detail: "the proposer's own approval is missing")
+    if weight < st.config.threshold:
+      return Assembled(ok: false, error: "insufficient-signatures", have: have, need: need,
+                       detail: "approvals weigh " & $weight & "; the threshold is " & $st.config.threshold)
+    if st.config.timelockMs > 0 and p.action.kind != akCancel:
+      let at = now + (if s.queueSlackMs > 0: s.queueSlackMs else: QueueSlackMs)
+      if at + st.config.timelockMs >= p.expiresMs:
+        return Assembled(ok: false, error: "not-settleable",
+          detail: "the time lock (" & $(st.config.timelockMs div 1000) & " s) would end after the proposal expires")
+      ins = MsigInstruction(kind: ikQueue, proposal: p, approvals: approvals, atMs: at)
+    else:
+      ins = MsigInstruction(kind: ikExecute, proposal: p, approvals: approvals)
+  let ex = c.myExecutor(d, p)
+  if not ex.ok: return Assembled(ok: false, error: "not-settleable", have: have, need: need, detail: ex.why)
+  ins.executor = ex.signed
+  let env = envelopePublic(d.account.createKey, ins)
+  let rows = msigShards(c.program, d.account.address, ins)
+  s.sentKind = ins.kind
+  s.proposal = p
+  s.driver = d
+  s.expiresMs = p.expiresMs
+  s.etaMs = (if ins.kind == ikQueue: ins.atMs + st.config.timelockMs else: 0)
+  Assembled(ok: true, have: have, need: need,
+    tx: PreparedTx(chain: d.account.chain, frm: s.relayer, to: hexOf(d.account.address),
+                   payload: $(%*{"lez": "v0.3", "msig": $ins.kind, "envelope": hexOf(env), "op": hexOf(borsh(ins)),
+                                 "rows": rows.mapIt(%*{"account": hexOf(it.account), "program": hexOf(it.program)}),
+                                 "proposal": proposalJson(p)})))
+
+proc rowsOf(p: JsonNode): seq[LezShard] =
+  proc unz(h: string): seq[byte] =
+    for i in 0 ..< h.len div 2: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
+  for r in p["rows"]: result.add LezShard(account: unz(r["account"].getStr()), program: unz(r["program"].getStr()))
+
+method submit*(s: LezMsigSettlement, tx: PreparedTx, ks: Keystore): TxRef =
+  ## From this member's own funded LEZ account; a refusal to send raises.
+  proc unz(h: string): seq[byte] =
+    for i in 0 ..< h.len div 2: result.add byte(parseHexInt(h[2*i .. 2*i+1]))
+  let p = parseJson(tx.payload)
+  let c = s.msigChainOf()
+  # a private multisig's instruction goes to its prover, which builds the envelope with the
+  # group's keys and proves it over the latest note (exo-efa)
+  let r = (if c of MsigPrivate: MsigPrivate(c).sendOp(unz(p["op"].getStr()))
+           else: c.sendMsig(rowsOf(p), unz(p["envelope"].getStr())))
+  if not r.ok: raise newException(WalletError, "the sequencer refused it: " & r.error)
+  TxRef(chain: tx.chain, id: r.hash)
+
+method watch*(s: LezMsigSettlement, txRef: TxRef): Finality =
+  ## Judged by the state, never by inclusion: a refused instruction is included too. An
+  ## executed proposal has its nonce spent and nothing queued under it. A queued one waits
+  ## out its lock; then this member sends ExecuteQueued and watches that.
+  let c = s.msigChainOf()
+  if c == nil or s.driver == nil: return s.adapter.finality(txRef)
+  if not c.included(txRef.id):
+    if txRef.id.startsWith("job:"): return Finality(status: fsPending, detail: "proving, then sending")
+    return Finality(status: fsPending, detail: "sent; waiting for the chain to include it")
+  if c of MsigPrivate and MsigPrivate(c).failure(txRef.id).len > 0:
+    # a private execution the program refuses fails while proving: nothing was sent
+    return Finality(status: fsFailed, detail: "the program refused it while proving; nothing was sent: " &
+                                              MsigPrivate(c).failure(txRef.id))
+  if s.queuedRef.len > 0 and c of MsigPrivate:
+    # a private multisig's note moves only once the ExecuteQueued it proved lands
+    let pc = MsigPrivate(c)
+    if not pc.included(s.queuedRef): return Finality(status: fsPending, detail: "the lock ended; proving the execution")
+    if pc.failure(s.queuedRef).len > 0:
+      return Finality(status: fsFailed, detail: "the program refused the execution while proving: " & pc.failure(s.queuedRef))
+  let r = c.readMsig(s.driver.account.address)
+  if not r.found: return Finality(status: fsFailed, detail: "the multisig is no longer on chain")
+  let id = proposalId(s.proposal)
+  let isQueued = r.state.queue.anyIt(it.nonce == s.proposal.nonce and it.proposalId == id)
+  case s.sentKind
+  of ikQueue:
+    if not isQueued:
+      if r.state.nonceFree(s.proposal.nonce):
+        return Finality(status: fsFailed, detail: "the program refused the queue (included; nothing changed)")
+      return Finality(status: fsFailed, detail: "no longer queued: cancelled")
+    if c.nowMs() < s.etaMs:
+      return Finality(status: fsPending, detail: "queued: its time lock ends at " & isoMs(s.etaMs))
+    # the lock has ended: execute it, and watch that
+    var ins = MsigInstruction(kind: ikExecuteQueued, proposal: s.proposal, atMs: s.etaMs)
+    let ex = c.myExecutor(s.driver, s.proposal)
+    if not ex.ok: return Finality(status: fsPending, detail: "queued and ready, waiting on an EXECUTE member: " & ex.why)
+    ins.executor = ex.signed
+    let sent = (if c of MsigPrivate: MsigPrivate(c).sendOp(borsh(ins))
+                else: c.sendMsig(msigShards(c.program, s.driver.account.address, ins),
+                                 envelopePublic(s.driver.account.createKey, ins)))
+    if not sent.ok: return Finality(status: fsPending, detail: "the lock ended; sending failed, retrying: " & sent.error)
+    s.sentKind = ikExecuteQueued
+    s.queuedRef = sent.hash
+    return Finality(status: fsPending, detail: "the lock ended; executing (" & sent.hash & ")")
+  else:
+    if not r.state.nonceFree(s.proposal.nonce) and not isQueued:
+      return Finality(status: fsFinal, detail: "executed at height " & $r.height)
+    if s.sentKind == ikExecuteQueued and isQueued:
+      return Finality(status: fsPending, detail: "executing the queued action")
+    Finality(status: fsFailed, detail: "the program refused it (included; nothing changed)")
+
+proc msigAccountOf*(s: LezMsigSettlement): Option[LezMsigAccount] =
+  ## The multisig this settlement acted for, once it assembled.
+  if s.driver != nil: some(s.driver.account) else: none(LezMsigAccount)
+
+proc chainRefOf*(s: LezMsigSettlement, r: TxRef): string =
+  ## What the settlement is looked up by outside the room: the transaction's hash. A private
+  ## multisig's submit answers with the prover's job ("job:<id>"); its hash is known only once
+  ## the prover sent it, and "" until then (exo-efa).
+  let c = s.msigChainOf()
+  if c != nil and c of MsigPrivate and r.id.startsWith("job:"): MsigPrivate(c).txHashOf(r.id)
+  else: r.id
+
+method watchDeadlineS*(s: LezMsigSettlement): float =
+  ## Until the proposal expires: a queued action may wait out its whole lock.
+  if s.expiresMs == 0 or s.msigChainOf() == nil: return 0.0
+  let now = s.msigChainOf().nowMs()
+  if s.expiresMs <= now: 60.0 else: float(s.expiresMs - now) / 1000.0 + 60.0
+
 proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settlement =
   ## The settlement a driver's family needs — read from its PROFILE. nil when the
   ## family settles nowhere (a room family) or the driver declares nothing (unsupported).
@@ -367,4 +584,5 @@ proc settlementFor*(drv: Driver, adapter: ChainAdapter, relayer: Account): Settl
   of P2wshFamily, TapscriptFamily, FrostFamily: BitcoinSettlement(family: p.family, adapter: adapter, relayer: relayer)
   of LezMultisigFamily: LezMultisigSettlement(family: p.family, adapter: adapter, relayer: relayer)
   of LezFrostFamily: LezFrostSettlement(family: p.family, adapter: adapter, relayer: relayer)
+  of LezMsigFamily, LezMsigPrivateFamily: LezMsigSettlement(family: p.family, adapter: adapter, relayer: relayer)
   else: nil

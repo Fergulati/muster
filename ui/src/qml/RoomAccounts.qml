@@ -63,6 +63,43 @@ Item {
     }
     signal xmrMsigJoinRequested(string ceremonyId)
     signal xmrMsigProposeRequested(string account, string recipientsJson, string feeCap, string memo)
+
+    // lez-msig (exo-0d3): the room's creation ceremonies, the last open / propose results, and
+    // the room's lez-msig account's state as its program holds it
+    property var lezMsigCeremonies: []
+    property var lezMsigOpen: ({})
+    property var lezMsigPropose: ({})
+    property var lezMsigFund: ({})
+    property var lezMsigRecover: ({})
+    property var lezMsigState: ({})
+    signal lezMsigOpenRequested(string specJson)
+    signal lezMsigProposeRequested(string account, string actionJson)
+    signal lezMsigFundRequested(string account, string amount)
+    signal lezMsigRecoverRequested(string account)
+    readonly property var msigAccount: {
+        for (var i = 0; i < acc.accounts.length; ++i)
+            if (acc.accounts[i] && acc.accounts[i].family === "lez.msig") return acc.accounts[i];
+        return null;
+    }
+    // base units → LEZ as an exact decimal string (9 decimals), never through a float
+    function lezText(base) {
+        var t = String(base || "0").replace(/^0+(?=[0-9])/, "");
+        if (!/^[0-9]+$/.test(t)) return "?";
+        while (t.length < 10) t = "0" + t;
+        var whole = t.slice(0, t.length - 9), frac = t.slice(t.length - 9).replace(/0+$/, "");
+        return frac.length > 0 ? whole + "." + frac : whole;
+    }
+    // LEZ in base units (9 decimals), "" for anything else
+    function lezBase(text) {
+        var t = String(text || "").trim();
+        if (!/^[0-9]+(\.[0-9]{0,9})?$/.test(t)) return "";
+        var parts = t.split(".");
+        var frac = ((parts[1] || "") + "000000000").slice(0, 9);
+        var whole = String(parts[0]).replace(/^0+(?=[0-9])/, "");
+        var out = (whole === "0" ? "" : whole) + frac;
+        out = String(out).replace(/^0+/, "");
+        return out.length > 0 ? out : "0";
+    }
     // the room's Monero multisig account, if a member disclosed one (its CAIP-10 id is the account)
     readonly property var xmrAccount: {
         for (var i = 0; i < acc.accounts.length; ++i)
@@ -119,6 +156,7 @@ Item {
         if (f.indexOf("frost") >= 0) return "frost";
         if (f === "btc.p2wsh-sortedmulti" || f === "btc.tapscript-multi-a") return "btc";
         if (f === "lez.multisig-program") return "lez";
+        if (f === "lez.msig") return "msig";
         return "";
     }
     function formTitle(form) {
@@ -127,6 +165,7 @@ Item {
              : form === "frost" ? qsTr("Make a key in a FROST ceremony")
              : form === "lez" ? qsTr("Create or disclose a LEZ multisig")
              : form === "xmr" ? qsTr("Set up a Monero multisig")
+             : form === "msig" ? qsTr("Create a LEZ multisig (approvals in the room)")
              : qsTr("Add an account");
     }
     function expandForFamilies(fams) {
@@ -421,6 +460,13 @@ Item {
                     text: qsTr("LEZ multisig")
                     variant: acc.openForm === "lez" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
                     onClicked: acc.openForm = "lez"
+                }
+                ActionButton {
+                    objectName: "addAccountMsig"
+                    Layout.fillWidth: true
+                    text: qsTr("LEZ multisig (approvals in the room)")
+                    variant: acc.openForm === "msig" ? LogosButton.Variant.Primary : LogosButton.Variant.Secondary
+                    onClicked: acc.openForm = "msig"
                 }
                 ActionButton {
                     objectName: "addAccountXmr"
@@ -848,6 +894,307 @@ Item {
                           ? "⚠ " + String(acc.xmrMsigPropose.error) + (acc.xmrMsigPropose.detail ? " — " + String(acc.xmrMsigPropose.detail) : "")
                           : qsTr("Proposed to the room. The members approve it on its card.")
                     color: acc.xmrMsigPropose && acc.xmrMsigPropose.error ? Theme.palette.error : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
+                }
+            }
+        }
+
+        // ── lez-msig (exo-0d3, docs/design/lez-msig.md) ──
+        // Members approve in the room with a key of their own for this multisig; one
+        // transaction carries the proposal and its approvals, and the program checks them.
+        // Shown while the form is open, or once the room has a ceremony or an account.
+        ColumnLayout {
+            objectName: "msigSection"
+            Layout.fillWidth: true
+            visible: acc.openForm === "msig" || acc.lezMsigCeremonies.length > 0 || acc.msigAccount !== null
+            spacing: Theme.spacing.small
+
+            LogosText {
+                Layout.fillWidth: true
+                Layout.topMargin: Theme.spacing.small
+                text: qsTr("LEZ multisig (approvals in the room)")
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.caption
+            }
+            LogosText {
+                Layout.fillWidth: true
+                text: qsTr("Approving costs nothing and names no one on chain until it runs. One transaction then carries the proposal and every approval, and the program checks them. The members, the threshold and, when it runs, who approved are public on the chain.")
+                color: Theme.palette.textSecondary
+                font.pixelSize: MusterStyle.caption
+                wrapMode: Text.WordWrap
+            }
+
+            // the creation form, while it is the open one
+            ColumnLayout {
+                Layout.fillWidth: true
+                visible: acc.openForm === "msig"
+                spacing: Theme.spacing.small
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("Every member of this room takes part, each with a new key for this multisig. How many must approve, and how long must an approved action wait?")
+                    color: Theme.palette.text
+                    font.pixelSize: Theme.typography.secondaryText
+                    font.weight: Theme.typography.weightMedium
+                    wrapMode: Text.WordWrap
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    LogosTextField {
+                        id: msigK
+                        objectName: "msigK"
+                        Layout.preferredWidth: 60
+                        placeholderText: qsTr("M")
+                        text: "2"
+                    }
+                    LogosTextField {
+                        id: msigLock
+                        objectName: "msigTimelockMinutes"
+                        Layout.preferredWidth: 140
+                        placeholderText: qsTr("time lock, minutes")
+                        text: "0"
+                    }
+                    ActionButton {
+                        id: msigOpenButton
+                        objectName: "msigOpen"
+                        Layout.fillWidth: true
+                        readonly property int n: Math.max(acc.roomMembers.length, 1)
+                        readonly property bool valid: /^[0-9]+$/.test(msigK.text.trim()) && Number(msigK.text.trim()) >= 1
+                                 && Number(msigK.text.trim()) <= n && /^[0-9]+$/.test(msigLock.text.trim())
+                        enabled: valid
+                        text: qsTr("Create a %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(n)
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.lezMsigOpenRequested(JSON.stringify({
+                            threshold: Number(msigK.text.trim()),
+                            timelockMs: Number(msigLock.text.trim()) * 60000 }))
+                    }
+                }
+                // the private posture (exo-efa): the same rules over a private account
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("Or keep it private: only the members can see it. The chain sees a proof, never who is in it or who approved. Its transactions are proved on this device, which takes a few minutes each.")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
+                }
+                ActionButton {
+                    objectName: "msigOpenPrivate"
+                    Layout.fillWidth: true
+                    enabled: msigOpenButton.valid
+                    text: qsTr("Create a private %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(msigOpenButton.n)
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: acc.lezMsigOpenRequested(JSON.stringify({
+                        threshold: Number(msigK.text.trim()),
+                        timelockMs: Number(msigLock.text.trim()) * 60000, private: true }))
+                }
+            }
+
+            // the room's ceremonies
+            Repeater {
+                model: acc.lezMsigCeremonies
+                delegate: LogosText {
+                    required property var modelData
+                    objectName: "msigCeremony"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    readonly property int joined: (modelData.members || []).filter(function (m) { return m.joined; }).length
+                    text: (modelData.private ? qsTr("private") + " · " : "")
+                          + qsTr("%1 of %2 · joined %3 of %2").arg(modelData.threshold).arg((modelData.members || []).length).arg(joined)
+                          + (String(modelData.account || "").length > 0 ? "  ·  " + qsTr("created, disclosed")
+                             : modelData.createSent ? "  ·  " + qsTr("creating on chain…")
+                             : modelData.ready ? "  ·  " + qsTr("everyone joined; the opener creates it")
+                             : "  ·  " + qsTr("waiting for members to join"))
+                    color: Theme.palette.textSecondary
+                    font.family: MusterStyle.mono
+                    font.pixelSize: MusterStyle.caption
+                }
+            }
+            LogosText {
+                objectName: "msigOpenResult"
+                Layout.fillWidth: true
+                visible: !!(acc.lezMsigOpen && acc.lezMsigOpen.error)
+                text: acc.lezMsigOpen && acc.lezMsigOpen.error
+                      ? "⚠ " + String(acc.lezMsigOpen.error) + (acc.lezMsigOpen.detail ? " — " + String(acc.lezMsigOpen.detail) : "")
+                      : ""
+                color: Theme.palette.error
+                font.pixelSize: MusterStyle.caption
+                wrapMode: Text.WordWrap
+            }
+
+            // the account, as its program holds it, and proposing from it
+            ColumnLayout {
+                id: msigBox
+                objectName: "msigAccountBox"
+                Layout.fillWidth: true
+                visible: acc.msigAccount !== null
+                spacing: Theme.spacing.small
+                readonly property var st: acc.lezMsigState || ({})
+                readonly property string payBase: acc.lezBase(msigPayAmount.text)
+
+                LogosText {
+                    objectName: "msigState"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: parent.st.error
+                          ? (parent.st.error === "not-a-lez-msig-policy"
+                             ? qsTr("Proposals from this room go elsewhere: propose from this multisig to read it.")
+                             : "⚠ " + String(parent.st.error) + (parent.st.detail ? " — " + String(parent.st.detail) : ""))
+                          : parent.st.epoch !== undefined
+                          ? qsTr("Vault %1 LEZ  ·  %2 of %3  ·  settings v%4  ·  %5 queued").arg(acc.lezText(parent.st.balance))
+                                .arg(parent.st.config ? parent.st.config.threshold : "?")
+                                .arg(parent.st.config ? parent.st.config.members.length : "?")
+                                .arg(parent.st.epoch).arg((parent.st.queue || []).length)
+                            + (Number(parent.st.config && parent.st.config.timelockMs || 0) > 0
+                               ? "  ·  " + qsTr("time lock %1 min").arg(Number(parent.st.config.timelockMs) / 60000) : "")
+                          : qsTr("reading the multisig…")
+                    color: parent.st.error && parent.st.error !== "not-a-lez-msig-policy" ? Theme.palette.error : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                }
+                LogosText {
+                    objectName: "msigPrivateNote"
+                    Layout.fillWidth: true
+                    visible: parent.st.private === true
+                    text: qsTr("Private: only the members can read this. On chain each action is one proof, with no member, approval or settings in it; a payment to a public account shows that account and the amount.")
+                    color: Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: parent.st.private === true
+                    spacing: Theme.spacing.small
+                    LogosTextField {
+                        id: msigFundAmount
+                        objectName: "msigFundAmount"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("amount to put in, in LEZ")
+                    }
+                    ActionButton {
+                        objectName: "msigFund"
+                        readonly property string base: acc.lezBase(msigFundAmount.text)
+                        enabled: base !== "" && base !== "0"
+                        text: qsTr("Put in from my account")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.lezMsigFundRequested(String(acc.msigAccount.id), base)
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: parent.st.private === true
+                    spacing: Theme.spacing.small
+                    LogosText {
+                        objectName: "msigRecoverNote"
+                        Layout.fillWidth: true
+                        text: acc.lezMsigRecover && acc.lezMsigRecover.error
+                              ? "⚠ " + String(acc.lezMsigRecover.error) + (acc.lezMsigRecover.detail ? " — " + String(acc.lezMsigRecover.detail) : "")
+                              : acc.lezMsigRecover && acc.lezMsigRecover.job
+                              ? qsTr("Reading the multisig from the chain on this device…")
+                              : qsTr("Looks out of date? Each member shares the newest state after their transaction lands; if one did not, read it from the chain.")
+                        color: acc.lezMsigRecover && acc.lezMsigRecover.error ? Theme.palette.error : Theme.palette.textSecondary
+                        font.pixelSize: MusterStyle.caption
+                        wrapMode: Text.WordWrap
+                    }
+                    ActionButton {
+                        objectName: "msigRecover"
+                        text: qsTr("Read it from the chain")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.lezMsigRecoverRequested(String(acc.msigAccount.id))
+                    }
+                }
+                LogosText {
+                    objectName: "msigFundResult"
+                    Layout.fillWidth: true
+                    visible: !!(acc.lezMsigFund && (acc.lezMsigFund.error || acc.lezMsigFund.job))
+                    text: acc.lezMsigFund && acc.lezMsigFund.error
+                          ? "⚠ " + String(acc.lezMsigFund.error) + (acc.lezMsigFund.detail ? " — " + String(acc.lezMsigFund.detail) : "")
+                          : qsTr("Proving your deposit on this device; the vault shows it once the chain includes it.")
+                    color: acc.lezMsigFund && acc.lezMsigFund.error ? Theme.palette.error : Theme.palette.textSecondary
+                    font.pixelSize: MusterStyle.caption
+                    wrapMode: Text.WordWrap
+                }
+                LogosText {
+                    Layout.fillWidth: true
+                    text: qsTr("Pay from the vault")
+                    color: Theme.palette.text
+                    font.pixelSize: Theme.typography.secondaryText
+                    font.weight: Theme.typography.weightMedium
+                }
+                LogosTextField {
+                    id: msigPayTo
+                    objectName: "msigPayTo"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("recipient's LEZ account (hex or base58)")
+                    font.family: MusterStyle.mono
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    LogosTextField {
+                        id: msigPayAmount
+                        objectName: "msigPayAmount"
+                        Layout.fillWidth: true
+                        placeholderText: qsTr("amount, in LEZ")
+                    }
+                    ActionButton {
+                        objectName: "msigProposePay"
+                        enabled: msigPayTo.text.trim().length > 0 && msigBox.payBase !== "" && msigBox.payBase !== "0"
+                        text: qsTr("Propose this payment")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id),
+                            JSON.stringify({ kind: "transfer", to: msigPayTo.text.trim(), amount: msigBox.payBase }))
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.spacing.small
+                    LogosTextField {
+                        id: msigNewLock
+                        objectName: "msigNewTimelock"
+                        Layout.preferredWidth: 140
+                        placeholderText: qsTr("time lock, minutes")
+                    }
+                    ActionButton {
+                        objectName: "msigProposeTimelock"
+                        enabled: /^[0-9]+$/.test(msigNewLock.text.trim())
+                        text: qsTr("Propose a new time lock")
+                        variant: LogosButton.Variant.Secondary
+                        onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id), JSON.stringify({
+                            kind: "config", changes: [{ change: "set-timelock", timelockMs: Number(msigNewLock.text.trim()) * 60000 }] }))
+                    }
+                }
+                Repeater {
+                    model: (parent.st && parent.st.queue) ? parent.st.queue : []
+                    delegate: RowLayout {
+                        required property var modelData
+                        Layout.fillWidth: true
+                        spacing: Theme.spacing.small
+                        LogosText {
+                            objectName: "msigQueued"
+                            Layout.fillWidth: true
+                            text: qsTr("Queued: proposal #%1, runs from %2").arg(modelData.nonce)
+                                  .arg(new Date(Number(modelData.etaMs)).toLocaleString(Qt.locale(), Locale.ShortFormat))
+                            color: Theme.palette.textSecondary
+                            font.pixelSize: MusterStyle.caption
+                            wrapMode: Text.WordWrap
+                        }
+                        ActionButton {
+                            objectName: "msigProposeCancel"
+                            text: qsTr("Propose to cancel")
+                            variant: LogosButton.Variant.Secondary
+                            onClicked: acc.lezMsigProposeRequested(String(acc.msigAccount.id),
+                                JSON.stringify({ kind: "cancel", nonces: [Number(modelData.nonce)] }))
+                        }
+                    }
+                }
+                LogosText {
+                    objectName: "msigProposeResult"
+                    Layout.fillWidth: true
+                    visible: !!(acc.lezMsigPropose && (acc.lezMsigPropose.error || acc.lezMsigPropose.intentId))
+                    text: acc.lezMsigPropose && acc.lezMsigPropose.error
+                          ? "⚠ " + String(acc.lezMsigPropose.error) + (acc.lezMsigPropose.detail ? " — " + String(acc.lezMsigPropose.detail) : "")
+                          : qsTr("Proposed to the room with your approval. Other members approve it on its card; anyone may settle it once enough have.")
+                    color: acc.lezMsigPropose && acc.lezMsigPropose.error ? Theme.palette.error : Theme.palette.textSecondary
                     font.pixelSize: MusterStyle.caption
                     wrapMode: Text.WordWrap
                 }
