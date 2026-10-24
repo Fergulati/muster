@@ -939,13 +939,13 @@ Item {
             LogosText {
                 Layout.fillWidth: true
                 Layout.topMargin: Theme.spacing.small
-                text: qsTr("Accounts members shared")
+                text: qsTr("Members' own accounts")
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.caption
             }
             LogosText {
                 Layout.fillWidth: true
-                text: qsTr("Share an account of yours with this room, and anyone here can use it where an account of yours is needed, for example as your approval key when setting up a LEZ multisig. Only this room sees it, until a public multisig that uses it puts it on chain; using one account in several multisigs links them there.")
+                text: qsTr("Share an account of your own with this room, and anyone here can use it where an account of yours is needed, for example as your approval key when setting up a LEZ multisig. Only this room sees it, until a public multisig that uses it puts it on chain; using one account in several multisigs links them there.")
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.caption
                 wrapMode: Text.WordWrap
@@ -959,7 +959,8 @@ Item {
                     LogosText {
                         objectName: "memberAccount"
                         Layout.fillWidth: true
-                        elide: Text.ElideRight
+                        Layout.preferredWidth: 0          // the row's width is the column's, never the text's
+                        wrapMode: Text.WordWrap
                         text: (modelData.mine ? qsTr("You") : String(modelData.memberName || acc.bareId(modelData.member).slice(0, 10)))
                               + " · " + (String(modelData.name || "").length > 0 ? String(modelData.name) + " · " : "")
                               + qsTr("LEZ account %1").arg(acc.shortB58(modelData.base58))
@@ -978,19 +979,20 @@ Item {
             LogosText {
                 Layout.fillWidth: true
                 visible: acc.memberAccounts.length === 0
-                text: qsTr("No one has shared an account yet.")
+                text: qsTr("No one has shared an account of their own yet.")
                 color: Theme.palette.textSecondary
                 font.pixelSize: MusterStyle.caption
             }
-            RowLayout {
+            LogosTextField {
+                id: accountName
+                objectName: "memberAccountName"
+                Layout.fillWidth: true
+                placeholderText: qsTr("a name for it (optional)")
+            }
+            // a Flow, not a row: the panel is narrow, and a row's width would widen the column
+            Flow {
                 Layout.fillWidth: true
                 spacing: Theme.spacing.small
-                LogosTextField {
-                    id: accountName
-                    objectName: "memberAccountName"
-                    Layout.fillWidth: true
-                    placeholderText: qsTr("a name for it (optional)")
-                }
                 ActionButton {
                     objectName: "memberAccountShareNew"
                     text: qsTr("Share a new LEZ account")
