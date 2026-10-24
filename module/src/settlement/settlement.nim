@@ -388,7 +388,7 @@ proc myExecutor(c: MsigChain, d: LezMsigDriver, p: MsigProposal): tuple[ok: bool
   if d.account.config.openExecution: return (true, none(MsigSigned), "")
   if not (c of MsigLive): return (false, none(MsigSigned), "no keystore to sign the execution with")
   let ks = MsigLive(c).ks
-  let label = msigLabel(d.account.createKey)
+  let label = myMsigLabel(ks, d.account)
   let key = ks.lezMemberKey(label)
   let m = d.account.config.memberOf(key)
   if m.isNone or (m.get.roles and RoleExecute) == 0:

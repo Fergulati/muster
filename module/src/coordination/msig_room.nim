@@ -27,6 +27,7 @@ import ../intents/materialization
 import ../crypto/binding
 import ./intent_events
 import ./live
+import ./member_accounts
 
 const BindTag = "muster-msig/v1/bind"
 
@@ -43,6 +44,7 @@ type
     timelockMs*: uint64
     openExecution*: bool
     keys*: Table[string, string]  ## room identity → approval key hex (proved)
+    fromAccount*: Table[string, string]  ## room identity → the disclosed account (hex) the opener picked for them
     ready*: bool
     private*: bool                ## a group-owned private PDA: its group secret is sealed to each member
 
@@ -82,9 +84,16 @@ proc ceremonies*(events: seq[Event], room: string): seq[MsigCeremony] =
                              openExecution: j{"openExecution"}.getBool(true),
                              private: j{"private"}.getBool(false))
         for m in j{"members"}.getElems():
-          c.members.add m{"id"}.getStr().toLowerAscii()
+          let id = m{"id"}.getStr().toLowerAscii()
+          c.members.add id
           c.roles.add uint8(m{"roles"}.getInt(int(RoleAll)))
           c.weights.add uint16(m{"weight"}.getInt(1))
+          # an account the member disclosed in this room (exo-1f9), picked by the opener as
+          # their approval key: it counts as their join once the disclosure checks out
+          let k = m{"key"}.getStr().toLowerAscii()
+          if k.len == 64 and hasAccount(events, room, id, unhx(k)):
+            c.keys[id] = k
+            c.fromAccount[id] = hexOf(addressOf(KindLezKey, unhx(k)))
         if unhx(c.createKey).len == 32 and c.members.len > 0 and c.threshold >= 1:
           byCk[p[1]] = c
       except CatchableError: discard
@@ -105,22 +114,38 @@ proc ceremonies*(events: seq[Event], room: string): seq[MsigCeremony] =
 
 proc ceremonyJson*(c: MsigCeremony, me: string): JsonNode =
   %*{"createKey": c.createKey, "chain": c.chain, "opener": c.opener, "openedByMe": c.opener == me,
-     "members": c.members.mapIt(%*{"id": it, "joined": it in c.keys, "key": c.keys.getOrDefault(it, "")}),
+     "members": c.members.mapIt(%*{"id": it, "joined": it in c.keys, "key": c.keys.getOrDefault(it, ""),
+                                   "account": c.fromAccount.getOrDefault(it, "")}),
      "threshold": int(c.threshold), "timelockMs": $c.timelockMs, "openExecution": c.openExecution,
      "ready": c.ready, "invited": me in c.members, "joined": me in c.keys, "private": c.private}
 
 proc msigOpen*(s: CoordinationSession, ks: Keystore, chain: string, program, zone: seq[byte],
                members: seq[tuple[id: string, roles: uint8, weight: uint16]], threshold: uint32,
-               timelockMs: uint64, openExecution: bool, private = false): string =
+               timelockMs: uint64, openExecution: bool, private = false,
+               accounts = initTable[string, string]()): string =
   ## Open a ceremony; returns the create key. The opener joins at once. A private one
   ## (exo-efa) also seals a fresh group secret to every invited member, the opener included.
+  ## `accounts` picks, for a member, an account they disclosed in the room (its key, hex) as
+  ## their approval key instead of a fresh one (exo-1f9); it must be theirs and still stood
+  ## by, or it is refused.
   var ck = newSeq[byte](32)
   if not urandom(ck): raise newException(OSError, "no randomness for a create key")
   let me = memberId(ks)
+  let evs = s.roomEvents()
+  var memberJson: seq[JsonNode]
+  for m in members:
+    let id = m.id.toLowerAscii()
+    var mj = %*{"id": id, "roles": int(m.roles), "weight": int(m.weight)}
+    if id in accounts:
+      let k = accounts[id].toLowerAscii()
+      if not hasAccount(evs, s.topic, id, unhx(k)):
+        raise newException(ValueError, "the account picked for " & id[0 ..< 8] & " is not one they disclosed in this room")
+      mj["key"] = %k
+    memberJson.add mj
   s.publish(Event(key: "lmsig/" & hx(ck) & "/open", value: $(%*{
     "opener": me, "chain": chain, "program": hx(program), "zone": hx(zone), "threshold": int(threshold),
     "timelockMs": $timelockMs, "openExecution": openExecution, "private": private,
-    "members": members.mapIt(%*{"id": it.id.toLowerAscii(), "roles": int(it.roles), "weight": int(it.weight)})})))
+    "members": memberJson})))
   result = hx(ck)
   if private:
     var gms = newSeq[byte](32)
@@ -171,7 +196,7 @@ proc newMsigProposal*(events: seq[Event], ks: Keystore, d: LezMsigDriver, st: Ms
   ## and the next nonce free on chain and in the room.
   MsigProposal(multisig: d.account.address, zone: st.zone, epoch: st.epoch,
                nonce: st.nextNonce(takenNonces(events, d.account.address)), action: action,
-               expiresMs: expiresMs, proposer: ks.lezMemberKey(msigLabel(d.account.createKey)))
+               expiresMs: expiresMs, proposer: ks.lezMemberKey(myMsigLabel(ks, d.account)))
 
 proc liveMsigPropose*(s: CoordinationSession, ks: Keystore, driverFor: DriverFor, policy: string,
                       d: LezMsigDriver, p: MsigProposal, nowSec: int64, msgSeq: uint64,

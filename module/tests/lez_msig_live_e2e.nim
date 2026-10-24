@@ -16,7 +16,10 @@
 ##      change (a 30 s time lock) has executed: settlement names the stale epoch;
 ##   5. the time lock: a new payment is QUEUED, is not executable before its ETA, and
 ##      settlement's own watch executes it once the lock ends;
-##   6. below threshold: a proposal only its proposer approved is never sent.
+##   6. below threshold: a proposal only its proposer approved is never sent;
+##   7. member accounts (exo-1f9): Bob discloses an account of his own to the room, a second
+##      multisig is set up with it as his approval key, and the program pays on Bob's approval
+##      signed with that account.
 ## Each member pays their own transaction's fee; approvals cost nothing on chain.
 
 import std/[os, json, strutils, sequtils, times, options, tables]
@@ -33,7 +36,7 @@ import ../src/wallet/types
 import ../src/wallet/lez_multisig_live   # LezRpc
 import ../src/wallet/lez_msig_chain
 import ../src/settlement/settlement
-import ../src/coordination/[session, intent_events, intents, live, accounts, authorship, msig_room]
+import ../src/coordination/[session, intent_events, intents, live, accounts, authorship, msig_room, member_accounts]
 import ./probes/live_room
 import ./probes/lez_funding
 
@@ -198,5 +201,61 @@ let lone = propose(0, MsigAction(kind: akTransfer, to: recipient, amount: 7.u128
 let (_, loneAsm) = settle(lone)
 doAssert not loneAsm.ok and loneAsm.error == "insufficient-signatures", loneAsm.error
 echo "6. one approval of two: settlement sends nothing (", loneAsm.detail, ") OK"
+
+# ── 7. a multisig set up with an account Bob disclosed ─────────────────────────
+block:
+  let bobAcct = discloseAccount(r.bob, bobKs, nextFreeLabel(bobKs, r.bob.roomEvents(), r.topic), Chain, "bob's account")
+  pollAll()
+  var picks = initTable[string, string]()
+  picks[memberId(bobKs)] = hexOf(bobAcct.key)
+  let ck2 = msigOpen(r.alice, aliceKs, Chain, program, zone, members, 2, 0, true, accounts = picks)
+  pollAll()
+  doAssert joinInvited(r.alice, aliceKs) == 1 and joinInvited(r.carol, room3CarolKs) == 1 and joinInvited(r.bob, bobKs) == 0
+  pollAll()
+  let cer2 = ceremonyOf(r.alice.roomEvents(), r.topic, ck2).get
+  doAssert cer2.ready
+  let config2 = configOf(cer2)
+  doAssert config2.members[1].key == bobAcct.key
+  let createKey2 = hexToBytes(ck2)
+  let a2 = multisigPublic(program, createKey2)
+  let ins = MsigInstruction(kind: ikCreate, zone: zone, config: config2)
+  let sent = alice.sendMsig(msigShards(program, a2, ins), envelopePublic(createKey2, ins))
+  doAssert sent.ok, sent.error
+  waitFor("the second multisig on chain", proc(): bool = alice.readMsig(a2).found)
+  doAssert alice.readMsig(a2).state.config.members[1].key == bobAcct.key, "the program holds Bob's disclosed account"
+  let acct2 = LezMsigAccount(chain: Chain, program: program, createKey: createKey2, zone: zone, address: a2,
+                             accountId: Chain & ":" & hexOf(a2), epoch: 0, config: config2)
+  r.alice.publishAuthored(aliceKs, accountDiscloseEvent(RoomAccount(family: LezMsigFamily, chain: Chain,
+    address: hexOf(a2), label: "with bob's account", signers: config2.members.mapIt(hexOf(it.key)), threshold: 2,
+    config: configJsonOf(acct2)), memberId(aliceKs)))
+  pollAll()
+  fundFrom(url, a2, "2000")
+  waitFor("the second vault funded", proc(): bool = alice.readMsig(a2).balance >= 2000.u128)
+  let policy2 = "lez-msig@" & acct2.accountId
+  let drv2 = LezMsigDriver(roomDriverFor(policy2))
+  doAssert myMsigLabel(bobKs, drv2.account) == ownLabelOf(bobKs, bobAcct.key).get, "Bob's client signs with his account"
+  inc seqNo
+  let p2 = newMsigProposal(r.alice.roomEvents(), aliceKs, drv2, alice.readMsig(a2).state,
+                           MsigAction(kind: akTransfer, to: recipient, amount: 250.u128), uint64(epochTime() * 1000) + 3_600_000)
+  let (pay3, ap) = liveMsigPropose(r.alice, aliceKs, roomDriverFor, policy2, drv2, p2, int64(epochTime()), seqNo, bindCtx())
+  doAssert not ap.startsWith("refused"), ap
+  pollAll()
+  let res = liveContribute(r.bob, bobKs, roomDriverFor, pay3, "", "", bindCtx(), uint64(epochTime()))
+  doAssert not res.startsWith("refused") and not res.startsWith("unknown"), res
+  pollAll()
+  doAssert intentState(r.alice.roomEvents(), roomDriverFor, pay3) == "executable"
+  let before3 = rpc.getAccount(recipient).balance
+  let st3 = LezMsigSettlement(settlementFor(drv2, chainFor(0), Account(chain: Chain, form: afPublic, id: "")))
+  let asm3 = st3.assemble(drv2, effectFromJson(effectJsonOf(r.alice.roomEvents(), pay3)), contributionsOf(pay3))
+  doAssert asm3.ok, asm3.error & ": " & asm3.detail
+  let ref3 = st3.submit(asm3.tx, aliceKs)
+  var f3 = st3.watch(ref3)
+  let until3 = epochTime() + 180
+  while f3.status == fsPending and epochTime() < until3:
+    sleep(3000)
+    f3 = st3.watch(ref3)
+  doAssert f3.status == fsFinal, $f3
+  doAssert rpc.getAccount(recipient).balance == before3 + 250.u128
+echo "7. a multisig set up with Bob's disclosed account: the program paid on his approval signed with it OK"
 
 echo "lez_msig_live_e2e: all passed"

@@ -317,6 +317,12 @@ class MusterUi
     // Read a private lez-msig's newest note from the chain (exo-abc). Lands on
     // lezMsigRecoverJson ({job} or {error, detail}).
     SLOT(void lezMsigRecover(const QString &account))
+    // A member's own accounts, disclosed to the room (exo-1f9). discloseMyAccount(specJson
+    // {which: new | payer, name?, chain?}) lands on discloseAccountJson ({id, base58, …} or
+    // {error, detail}); the room's disclosed accounts on memberAccountsJson [{member,
+    // memberName, mine, id, chain, kind, name, key, base58}], refreshed with loadLezMsig.
+    SLOT(void discloseMyAccount(const QString &specJson))
+    SLOT(void retractMyAccount(const QString &accountId))
     SLOT(void loadLezMsig())
     // The information-flow view (coordinate_flow, exo-002.5): who could see what,
     // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
@@ -440,6 +446,8 @@ class MusterUi
     PROP(QString lezMsigProposeJson="{}" READONLY)
     PROP(QString lezMsigFundJson="{}" READONLY)
     PROP(QString lezMsigRecoverJson="{}" READONLY)
+    PROP(QString memberAccountsJson="[]" READONLY)
+    PROP(QString discloseAccountJson="{}" READONLY)
     PROP(QString lezMsigStateJson="{}" READONLY)
     // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
     // observer matrix + per-action rows; the store node is always present (FS-9).

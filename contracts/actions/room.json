@@ -1839,6 +1839,151 @@
       ]
     },
     {
+      "id": "room/share-my-account",
+      "name": "Share an account of your own with the room",
+      "area": "room",
+      "status": "built",
+      "summary": "A member puts an account their muster keystore holds in front of the room (a LEZ public account first), so anyone in the room can use it where an account of theirs is needed: first, as their approval key when the room sets up a LEZ multisig. The account's key proves it is this member's, in this room; the member can stop sharing it.",
+      "requirements": [
+        {
+          "kind": "authority",
+          "name": "room-member",
+          "party": "instance",
+          "class": "authority",
+          "target": "the current membership epoch key of the room",
+          "field": ""
+        }
+      ],
+      "touches": [
+        {
+          "target": "topic:/muster/1/<room>/proto",
+          "mode": "write"
+        }
+      ],
+      "disclosure": [
+        {
+          "field": "the account's key and LEZ address, its chain, the name given",
+          "observer": "room-member",
+          "when": "act"
+        },
+        {
+          "field": "topic",
+          "observer": "store-node",
+          "when": "act"
+        },
+        {
+          "field": "timing",
+          "observer": "store-node",
+          "when": "act"
+        }
+      ],
+      "steps": [
+        {
+          "step": "act",
+          "who": "the member",
+          "does": "coordinate_disclose_my_account({which: new | payer, name?, chain?}): a fresh account (keystore label lez-account/<n>, the first not yet shared in this room) or the member's paying account (lez-member/0). The key signs digest(hash-input \"muster.member-account.v1\" {room, member, chain, kind, key}); member/<who>/account/<address> carries chain, kind, key, name and that proof, author-signed. The keystore label is never sent.",
+          "signs": "BIP-340 by the account key over the record above; Ed25519 by the member's encryption identity over the event (authorSig)",
+          "reveals": [
+            {
+              "field": "the account's key and address",
+              "observer": "room-member"
+            },
+            {
+              "field": "topic",
+              "observer": "store-node"
+            }
+          ],
+          "evidence": [
+            "module/tests/member_accounts_test.nim"
+          ]
+        },
+        {
+          "step": "act",
+          "who": "any member setting up a LEZ multisig",
+          "does": "Picks, for a member, one of the accounts that member shared (lez_msig_open accounts). It counts as that member's join, so their client does not derive a fresh key; their client signs approvals with it, finding its label by deriving its own candidate labels.",
+          "signs": "nothing new",
+          "reveals": [
+            {
+              "field": "the picked key, in the multisig's config",
+              "observer": "room-member"
+            }
+          ],
+          "evidence": [
+            "module/tests/member_accounts_test.nim",
+            "module/tests/lez_msig_live_e2e.nim"
+          ]
+        }
+      ],
+      "refusals": [
+        {
+          "what": "another member's key shared as one's own",
+          "why": "the proof binds the sharer's identity, so it does not verify; the key counts only for the member who proved it first",
+          "evidence": [
+            "module/tests/member_accounts_test.nim"
+          ]
+        },
+        {
+          "what": "a proof made for another room",
+          "why": "the proof binds the room; it does not verify here",
+          "evidence": [
+            "module/tests/member_accounts_test.nim"
+          ]
+        },
+        {
+          "what": "a disclosure in someone's name that they did not author",
+          "why": "the room's authentic view drops it (authorship)",
+          "evidence": [
+            "module/tests/member_accounts_test.nim"
+          ]
+        },
+        {
+          "what": "a multisig set up with an account the member never shared, or stopped sharing",
+          "why": "lez_msig_open refuses it, and the ceremony does not count it",
+          "evidence": [
+            "module/tests/member_accounts_test.nim"
+          ]
+        }
+      ],
+      "hosted": [
+        "coordinate_disclose_my_account",
+        "coordinate_member_accounts",
+        "coordinate_retract_my_account",
+        "lez_msig_open"
+      ],
+      "ui": "The room's accounts panel: \"Accounts members shared\" (Share a new LEZ account, Share my paying account, Stop sharing), and in the LEZ multisig form a choice per member: a new key, or an account they shared.",
+      "invariants": [
+        4,
+        5,
+        7,
+        9
+      ],
+      "claims": [
+        {
+          "claim": "An account counts as a member's only if its own key proved it for that member in this room",
+          "credibility": "imperative"
+        },
+        {
+          "claim": "A public multisig puts the keys it uses on chain at creation; one account used in several multisigs links them",
+          "credibility": "exposed",
+          "party": "chain-observer"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "module/tests/member_accounts_test.nim"
+        },
+        {
+          "kind": "test",
+          "path": "module/tests/lez_msig_live_e2e.nim"
+        }
+      ],
+      "unverified": [
+        "Not yet seen on a display."
+      ],
+      "try": []
+    },
+    {
       "id": "room/frost-key-ceremony",
       "name": "Run a FROST key ceremony in the room",
       "area": "room",
