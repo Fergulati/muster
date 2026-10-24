@@ -997,13 +997,13 @@ Item {
                     objectName: "memberAccountShareNew"
                     text: qsTr("Share a new LEZ account")
                     variant: LogosButton.Variant.Secondary
-                    onClicked: acc.discloseMyAccountRequested(JSON.stringify({ which: "new", name: accountName.text.trim() }))
+                    onClicked: { acc.discloseMyAccountRequested(JSON.stringify({ which: "new", name: accountName.text.trim() })); accountName.text = ""; }
                 }
                 ActionButton {
                     objectName: "memberAccountSharePayer"
                     text: qsTr("Share my paying account")
                     variant: LogosButton.Variant.Secondary
-                    onClicked: acc.discloseMyAccountRequested(JSON.stringify({ which: "payer", name: accountName.text.trim() }))
+                    onClicked: { acc.discloseMyAccountRequested(JSON.stringify({ which: "payer", name: accountName.text.trim() })); accountName.text = ""; }
                 }
             }
             LogosText {
@@ -1051,7 +1051,7 @@ Item {
                 spacing: Theme.spacing.small
                 LogosText {
                     Layout.fillWidth: true
-                    text: qsTr("Every member of this room takes part, each with a new key for this multisig. How many must approve, and how long must an approved action wait?")
+                    text: qsTr("Every member of this room takes part, each with a new key for this multisig unless you pick an account they shared below. How many must approve, and how long must an approved action wait?")
                     color: Theme.palette.text
                     font.pixelSize: Theme.typography.secondaryText
                     font.weight: Theme.typography.weightMedium
@@ -1073,18 +1073,6 @@ Item {
                         Layout.preferredWidth: 140
                         placeholderText: qsTr("time lock, minutes")
                         text: "0"
-                    }
-                    ActionButton {
-                        id: msigOpenButton
-                        objectName: "msigOpen"
-                        Layout.fillWidth: true
-                        readonly property int n: Math.max(acc.roomMembers.length, 1)
-                        readonly property bool valid: /^[0-9]+$/.test(msigK.text.trim()) && Number(msigK.text.trim()) >= 1
-                                 && Number(msigK.text.trim()) <= n && /^[0-9]+$/.test(msigLock.text.trim())
-                        enabled: valid
-                        text: qsTr("Create a %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(n)
-                        variant: LogosButton.Variant.Secondary
-                        onClicked: acc.lezMsigOpenRequested(acc.msigSpec(false))
                     }
                 }
                 // each member's approval key: a new one, or an account they shared (exo-1f9)
@@ -1138,6 +1126,18 @@ Item {
                             }
                         }
                     }
+                }
+                ActionButton {
+                    id: msigOpenButton
+                    objectName: "msigOpen"
+                    Layout.fillWidth: true
+                    readonly property int n: Math.max(acc.roomMembers.length, 1)
+                    readonly property bool valid: /^[0-9]+$/.test(msigK.text.trim()) && Number(msigK.text.trim()) >= 1
+                             && Number(msigK.text.trim()) <= n && /^[0-9]+$/.test(msigLock.text.trim())
+                    enabled: valid
+                    text: qsTr("Create a %1-of-%2 LEZ multisig").arg(msigK.text.trim()).arg(n)
+                    variant: LogosButton.Variant.Secondary
+                    onClicked: acc.lezMsigOpenRequested(acc.msigSpec(false))
                 }
                 // the private posture (exo-efa): the same rules over a private account
                 LogosText {

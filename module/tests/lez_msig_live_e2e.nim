@@ -256,6 +256,27 @@ block:
     f3 = st3.watch(ref3)
   doAssert f3.status == fsFinal, $f3
   doAssert rpc.getAccount(recipient).balance == before3 + 250.u128
-echo "7. a multisig set up with Bob's disclosed account: the program paid on his approval signed with it OK"
+  # Bob proposes from it: the proposer key is his shared account, which the program checks
+  inc seqNo
+  let p4 = newMsigProposal(r.bob.roomEvents(), bobKs, drv2, alice.readMsig(a2).state,
+                           MsigAction(kind: akTransfer, to: recipient, amount: 75.u128), uint64(epochTime() * 1000) + 3_600_000)
+  doAssert p4.proposer == bobAcct.key
+  let (pay4, ap4) = liveMsigPropose(r.bob, bobKs, roomDriverFor, policy2, drv2, p4, int64(epochTime()), seqNo, bindCtx())
+  doAssert not ap4.startsWith("refused"), ap4
+  pollAll()
+  doAssert not liveContribute(r.alice, aliceKs, roomDriverFor, pay4, "", "", bindCtx(), uint64(epochTime())).startsWith("refused")
+  pollAll()
+  let st4 = LezMsigSettlement(settlementFor(drv2, chainFor(0), Account(chain: Chain, form: afPublic, id: "")))
+  let asm4 = st4.assemble(drv2, effectFromJson(effectJsonOf(r.alice.roomEvents(), pay4)), contributionsOf(pay4))
+  doAssert asm4.ok, asm4.error & ": " & asm4.detail
+  let ref4 = st4.submit(asm4.tx, aliceKs)
+  var f4 = st4.watch(ref4)
+  let until4 = epochTime() + 180
+  while f4.status == fsPending and epochTime() < until4:
+    sleep(3000)
+    f4 = st4.watch(ref4)
+  doAssert f4.status == fsFinal, $f4
+  doAssert rpc.getAccount(recipient).balance == before3 + 325.u128
+echo "7. a multisig set up with Bob's disclosed account: the program paid on his approval, and on his proposal, signed with it OK"
 
 echo "lez_msig_live_e2e: all passed"
