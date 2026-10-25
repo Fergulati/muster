@@ -127,7 +127,9 @@ ever advance that repo's `main`.
   cd /home/petty/logos-signer-module && EXOPHIALD_INTEGRATOR=1 git push -u origin main
   ```
 
-  Never in muster or any of its worktrees, never exported into the
+  Run the marked git command as the only git command of its call: a marker on a
+  later command after an unmarked `git log` or `git diff` on the same line is
+  not honoured. Never in muster or any of its worktrees, never exported into the
   environment, and never for a repo the table below does not list.
 - **The list is the operator's.** A repo joins it only when the operator says
   so, recorded here with the date and what the repo holds. A fork carrying a
