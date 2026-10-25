@@ -100,3 +100,5 @@
 {"type": "comment", "issue_id": "exo-dde.3", "payload": {"body": "spec: contracts/specs/derived-exo-dde.spec.json"}}
 {"type": "comment", "issue_id": "exo-4d0.4", "payload": {"body": "spec: contracts/specs/derived-exo-4d0.4.spec.json"}}
 {"type": "comment", "issue_id": "exo-4d0.4", "payload": {"body": "spec: contracts/specs/derived-exo-4d0.4.spec.json"}}
+{"type": "comment", "issue_id": "exo-805", "payload": {"body": "exophial-cli-authoring: cli"}}
+{"type": "comment", "issue_id": "exo-805", "payload": {"body": "exophial-cli-authoring-complete: "}}
