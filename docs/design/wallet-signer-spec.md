@@ -263,9 +263,20 @@ What Muster lacked is built on three branches under corpetty, proposed upstream 
 | Possession proofs | Muster's keystore | — | a record leg covers an Ed25519 proof; BIP-340 waits on LEZ messages |
 | Every platform | mixed (`lez_msig_module` linux-amd64) | the branches are pure Rust | — |
 
-Muster's side so far: `Keystore.edSignRecord` passes the routine signatures (authorship,
-after-claims, join requests) as records, so a platform backend can hand the manager something it
-can show. The backend itself (exo-833.3) waits on decisions 3 and 4 of the upstream issue.
+Muster's side so far (exo-833.3):
+- `Keystore.edSignRecord` passes the routine signatures (authorship, after-claims, join requests)
+  as records, so the manager can show what it signs.
+- `PlatformIdentityKeystore` (`module/src/crypto/platform_identity.nim`) holds the room identity
+  in the person's keystore_module, through the manager. It signs records, opens sealed grants and
+  derives the founding key with `record`, `open` and `secret` legs, inside the unlock the person
+  granted muster, and refuses a locked identity with its remedy. The authorization key and
+  everything else stay with muster's own keystore. Held byte for byte to a local keystore with the
+  same key (`platform_identity_test`).
+- `identity_platform_request` / `identity_platform_status` ask the manager's `request_identity`
+  for a key derived for `muster_module/default`, and set `identity-backend` once the person
+  approves, only while no room is joined.
+- Not yet: a key per room (the seam is not room-scoped), the approval-bearing Ed25519 signatures
+  (live, vote, Monero multisig rounds, still raw bytes), and the UI that raises the keys app.
 
 ## 6. How Muster will test the module
 

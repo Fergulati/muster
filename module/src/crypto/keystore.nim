@@ -100,9 +100,13 @@ method foundingKey*(ks: Keystore, room: string): array[32, byte] {.base.} =
   ## and open, as it holds the keys grants deliver.
   raise newException(KeystoreError, "Keystore.foundingKey is abstract")
 
-proc foundingInfo(room: string): seq[byte] =
+proc foundingRecord*(room: string): HashInput =
+  ## The record a room's founding key is derived over (the HMAC's message, in its encoding).
   if room.len == 0: raise newException(KeystoreError, "a founding key needs a room")
-  encodeHashInput(hashInput("muster.room.founding-key.v1", @[("room", cbText(room))]))
+  hashInput("muster.room.founding-key.v1", @[("room", cbText(room))])
+
+proc foundingInfo(room: string): seq[byte] =
+  encodeHashInput(foundingRecord(room))
 
 # ── keyed operations (exo-45e K2b) ─────────────────────────────────────────────
 # The keystore custodies a SET of authorization keys; a caller selects one by ref. The
