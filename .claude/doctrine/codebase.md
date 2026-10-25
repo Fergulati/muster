@@ -106,3 +106,46 @@ reaches.
   under the same cap. Say in the PR which runner the check ran against, and
   remove the link afterwards so that no later session mistakes it for this
   branch's build.
+
+## Side repos (muster)
+
+This section is muster's own; it is not in exophial's seed.
+
+Muster work sometimes needs a repo that exophiald does not integrate: no daemon
+merges into its `main`, and no pebble's worker owns its branches. The integrator
+guard (`exophial hook block_worktree_leak`, wired in this repo's
+`.claude/settings.json`) still checks every Bash command a muster session runs,
+including one that `cd`s into such a repo, so without this rule nothing could
+ever advance that repo's `main`.
+
+- **In a listed side repo, mark the one command.** The guarded git operations
+  (push or merge to `main`, creating or moving a branch) may carry the
+  integrator marker inline on that command alone, after the `cd` into the side
+  repo:
+
+  ```bash
+  cd /home/petty/logos-signer-module && EXOPHIALD_INTEGRATOR=1 git push -u origin main
+  ```
+
+  Run the marked git command as the only git command of its call: a marker on a
+  later command after an unmarked `git log` or `git diff` on the same line is
+  not honoured. Never in muster or any of its worktrees, never exported into the
+  environment, and never for a repo the table below does not list.
+- **The list is the operator's.** A repo joins it only when the operator says
+  so, recorded here with the date and what the repo holds. A fork carrying a
+  feature branch for upstream (`corpetty/logos-*`) is not a side repo: its
+  branches push without the marker, and its `main` is upstream's.
+
+| Repo | Local checkout | Holds | Listed |
+|---|---|---|---|
+| `corpetty/logos-signer-module` | `/home/petty/logos-signer-module` | specs and pebbles for the platform signer work (epic exo-833) | 2026-10-25, by the operator |
+
+**The guard defect behind this**, until it is fixed in exophial: installed as
+`exophial hook block_worktree_leak`, the hook takes its topology (the main
+checkout, the linked worktrees, the configured remotes) from its own install
+location, the uv tool's `lib/python3.x` directory, which is not a git repository.
+So it sees no remotes and no worktrees: the publish carve-out (exo-896.3, a
+plain `git push <remote> main` to a configured remote) can never apply, and no
+branch write is ever recognized as the caller's own branch (exo-439). Checked
+2026-10-25 against exophial `0.2.0+dc69cd1d`: `git push origin main` is denied
+both from a side repo and from muster's own checkout.
