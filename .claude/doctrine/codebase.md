@@ -106,3 +106,44 @@ reaches.
   under the same cap. Say in the PR which runner the check ran against, and
   remove the link afterwards so that no later session mistakes it for this
   branch's build.
+
+## Side repos (muster)
+
+This section is muster's own; it is not in exophial's seed.
+
+Muster work sometimes needs a repo that exophiald does not integrate: no daemon
+merges into its `main`, and no pebble's worker owns its branches. The integrator
+guard (`exophial hook block_worktree_leak`, wired in this repo's
+`.claude/settings.json`) still checks every Bash command a muster session runs,
+including one that `cd`s into such a repo, so without this rule nothing could
+ever advance that repo's `main`.
+
+- **In a listed side repo, mark the one command.** The guarded git operations
+  (push or merge to `main`, creating or moving a branch) may carry the
+  integrator marker inline on that command alone, after the `cd` into the side
+  repo:
+
+  ```bash
+  cd /home/petty/logos-signer-module && EXOPHIALD_INTEGRATOR=1 git push -u origin main
+  ```
+
+  Never in muster or any of its worktrees, never exported into the
+  environment, and never for a repo the table below does not list.
+- **The list is the operator's.** A repo joins it only when the operator says
+  so, recorded here with the date and what the repo holds. A fork carrying a
+  feature branch for upstream (`corpetty/logos-*`) is not a side repo: its
+  branches push without the marker, and its `main` is upstream's.
+
+| Repo | Local checkout | Holds | Listed |
+|---|---|---|---|
+| `corpetty/logos-signer-module` | `/home/petty/logos-signer-module` | specs and pebbles for the platform signer work (epic exo-833) | 2026-10-25, by the operator |
+
+**Two guard defects this rule works around**, until they are fixed in exophial:
+1. **The guard reads the session's repo, not the command's.** Its topology (main
+   checkout, worktrees, configured remotes) comes from the muster checkout even
+   when the command runs in another repo. So a side repo's push is judged
+   against muster's remotes and worktrees.
+2. **`-u` defeats the publish carve-out (exo-896.3).** The carve-out allows a
+   plain `git push <remote> main` to a configured remote, but it takes the
+   first argument as the remote, so `git push -u origin main` reads `-u` as the
+   remote and is denied.
