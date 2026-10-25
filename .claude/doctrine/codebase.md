@@ -138,12 +138,12 @@ ever advance that repo's `main`.
 |---|---|---|---|
 | `corpetty/logos-signer-module` | `/home/petty/logos-signer-module` | specs and pebbles for the platform signer work (epic exo-833) | 2026-10-25, by the operator |
 
-**Two guard defects this rule works around**, until they are fixed in exophial:
-1. **The guard reads the session's repo, not the command's.** Its topology (main
-   checkout, worktrees, configured remotes) comes from the muster checkout even
-   when the command runs in another repo. So a side repo's push is judged
-   against muster's remotes and worktrees.
-2. **`-u` defeats the publish carve-out (exo-896.3).** The carve-out allows a
-   plain `git push <remote> main` to a configured remote, but it takes the
-   first argument as the remote, so `git push -u origin main` reads `-u` as the
-   remote and is denied.
+**The guard defect behind this**, until it is fixed in exophial: installed as
+`exophial hook block_worktree_leak`, the hook takes its topology (the main
+checkout, the linked worktrees, the configured remotes) from its own install
+location, the uv tool's `lib/python3.x` directory, which is not a git repository.
+So it sees no remotes and no worktrees: the publish carve-out (exo-896.3, a
+plain `git push <remote> main` to a configured remote) can never apply, and no
+branch write is ever recognized as the caller's own branch (exo-439). Checked
+2026-10-25 against exophial `0.2.0+dc69cd1d`: `git push origin main` is denied
+both from a side repo and from muster's own checkout.
