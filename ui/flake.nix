@@ -52,10 +52,11 @@
     logos-evm-tx-sender-module.url = "github:logos-co/logos-evm-tx-sender-module/7cd2fead60a78ac9ac8a4337fd9f01e1ab5515e2";
     logos-evm-fee-module.url = "github:logos-co/logos-evm-fee-module/5bf49b768cf178d2e8c58267f17822060f813fbf";
     # The RLN modules a delivery v0.3 node on logos.test needs (exo-eb6.3 R1). The packages
-    # are delivery v0.3.2's own re-exports, so their versions are the ones it was built
-    # against; this pins only their LIDL contracts, at the same rev (logos-rln-modules
-    # 25357cf), for the code generator.
-    logos-rln-modules = { url = "github:logos-co/logos-rln-modules/25357cfd877ba18d6e0880564b8fd7ba0abf2d70"; flake = false; };
+    # are delivery v0.3.3's own re-exports, so their versions are the ones it was built
+    # against (liblogos_rln_module 0.12.0, liblogos_lez_rln_module 5.1.0); this pins only
+    # their LIDL contracts, at the same rev (logos-rln-modules a814e7f), for the code
+    # generator.
+    logos-rln-modules = { url = "github:logos-co/logos-rln-modules/a814e7feda974a16eaa5dd50667b8fd843177f0e"; flake = false; };
     # Logos Storage (exo-4d0, FileShare): muster_module uploads and fetches a room's sealed
     # blobs through storage_module over lp_*, so it rides the runner's module set. Basecamp
     # 0.3.2 bundles the same 3.0.2 (7548f41). Same pin as module/flake.nix; muster_ui does
