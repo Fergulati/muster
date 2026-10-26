@@ -38,6 +38,7 @@ import ../intents/signing_payload
 import ../intents/provenance
 import ./intent_events
 import ../crypto/keystore
+import ../bitcoin/keys as btckeys   # a lez-msig approver attests BIP-340 (exo-0d3)
 import ../crypto/binding
 export provenance.SignedInput, signing_payload.SigningContext
 
@@ -260,6 +261,12 @@ proc verifyAttestation*(who: string, p: seq[byte], sigHex: string): bool =
     for i in 0 ..< 65: s65[i] = sig[i]
     try: return ecrecover(attestationDigest(p), s65) == addressOfCompressed(pub)
     except CatchableError: return false
+  if who.startsWith("msig:"):
+    # a lez-msig approver (exo-0d3): named by its per-multisig approval key, which attests
+    # P itself — a BIP-340 signature over keccak256(P), as it signs its approval
+    let xonly = hexToBytes(who[5 .. ^1])
+    if xonly.len != 32 or sig.len != 64: return false
+    return btckeys.schnorrVerify(sig, @(attestationDigest(p)), xonly)
   if who.startsWith("lez:"):
     # a vote-locus contributor (exo-12a1): the vote's key lives in the member's chain
     # wallet, so what commits to P is the member's ROOM key — an Ed25519 signature over P,

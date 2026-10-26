@@ -84,6 +84,16 @@ proc effectFromJson*(effectJson: string): Effect =
         let chain = j{"chain"}.getStr()
         if chain.len > 0: fields.add ("chain", cbText(chain))
         return Effect(schemaId: invokeDomain(module, meth), fields: fields)
+      of "lez-msig":
+        # A lez-msig proposal (exo-0d3): its exact borsh bytes, which every approval signs
+        # (the driver decodes them, and refuses anything but canonical bytes).
+        var raw: seq[byte]
+        var h = j{"proposal"}.getStr()
+        if h.len >= 2 and h[0] == '0' and h[1] in {'x', 'X'}: h = h[2 .. ^1]
+        for i in 0 ..< h.len div 2:
+          try: raw.add byte(parseHexInt(h[2*i .. 2*i+1]))
+          except ValueError: discard
+        return Effect(schemaId: "muster.effect.lez-msig.v1", fields: @[("proposal", cbBytes(raw))])
       of "lez-multisig-proposal":
         # A pointer to on-chain proposal #index of a LEZ multisig, with the content the
         # room reviews there (exo-6cbe): the target program, its instruction words, the
@@ -286,6 +296,7 @@ proc effectSchema*(effectJson: string): tuple[id: string, known: bool] =
     of "transfer": return ("muster.effect.transfer.v1", true)
     of "safe-tx": return ("muster.effect.safe-tx.v1", true)
     of "btc-spend": return ("muster.effect.btc-spend.v1", true)
+    of "lez-msig": return ("muster.effect.lez-msig.v1", true)   # a lez-msig proposal's bytes (exo-0d3)
     of "lez-multisig-proposal":                              # v2: the LEZ v0.3 port (exo-eb6.4.4)
       return ((if j{"lez"}.getStr() == "v0.3": "muster.effect.lez-multisig-proposal.v2"
                else: "muster.effect.lez-multisig-proposal.v1"), true)

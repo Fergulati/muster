@@ -576,6 +576,8 @@ void MusterUiBackend::loadIntents()
     loadFrostCeremonies();
     // ... and so do the Monero multisig setups and spends (the module's pump)
     loadXmrMsig();
+    // ... and lez-msig's ceremonies and its account's state (exo-0d3)
+    loadLezMsig();
     // The activity feed folds from the SAME log, so refresh it whenever the
     // intents do — every join, propose, contribute, submit, and periodic tick.
     loadActivity();
@@ -1019,6 +1021,69 @@ void MusterUiBackend::xmrMsigPropose(const QString &account, const QString &reci
     qInfo() << "[muster_ui] coordinate_propose_xmr_msig" << account << "->" << r;
     setXmrMsigProposeJson(asObjectJson(r, "intentId"));
     loadIntents();
+}
+
+void MusterUiBackend::lezMsigOpen(const QString &specJson)
+{
+    // lez_msig_open → the create key, or {error, detail}; the members' clients join on
+    // their intents tick, and the opener's creates and discloses the multisig.
+    const QString r = modules().muster_module.lez_msig_open(specJson.trimmed());
+    qInfo() << "[muster_ui] lez_msig_open" << specJson << "->" << r;
+    setLezMsigOpenJson(asObjectJson(r, "error"));
+    loadLezMsig();
+}
+
+void MusterUiBackend::lezMsigPropose(const QString &actionJson)
+{
+    // coordinate_propose_lez_msig → {intentId, nonce, epoch}, or {error, detail}.
+    const QString r = modules().muster_module.coordinate_propose_lez_msig(actionJson.trimmed());
+    qInfo() << "[muster_ui] coordinate_propose_lez_msig" << actionJson << "->" << r;
+    setLezMsigProposeJson(asObjectJson(r, "intentId"));
+    loadIntents();
+}
+
+void MusterUiBackend::lezMsigFund(const QString &account, const QString &amount)
+{
+    // lez_msig_fund → {job, amount, payer}, or {error, detail}: the module proves the
+    // deposit, this member's keystore signs it, and the new note reaches every member.
+    const QString r = modules().muster_module.lez_msig_fund(account.trimmed(), amount.trimmed());
+    qInfo() << "[muster_ui] lez_msig_fund" << account << amount << "->" << r;
+    setLezMsigFundJson(asObjectJson(r, "job"));
+    loadLezMsig();
+}
+
+void MusterUiBackend::lezMsigRecover(const QString &account)
+{
+    // lez_msig_recover → {job}, or {error, detail}: the module reads the newest note from
+    // the chain with the group's viewing key, and it is sealed to every member.
+    const QString r = modules().muster_module.lez_msig_recover(account.trimmed());
+    qInfo() << "[muster_ui] lez_msig_recover" << account << "->" << r;
+    setLezMsigRecoverJson(asObjectJson(r, "job"));
+    loadLezMsig();
+}
+
+void MusterUiBackend::loadLezMsig()
+{
+    setLezMsigCeremoniesJson(modules().muster_module.lez_msig_ceremonies());
+    setLezMsigStateJson(modules().muster_module.lez_msig_state(QString()));
+    setMemberAccountsJson(modules().muster_module.coordinate_member_accounts());
+}
+
+void MusterUiBackend::discloseMyAccount(const QString &specJson)
+{
+    // coordinate_disclose_my_account → the disclosed account, or {error, detail} (exo-1f9)
+    const QString r = modules().muster_module.coordinate_disclose_my_account(specJson.trimmed());
+    qInfo() << "[muster_ui] coordinate_disclose_my_account" << specJson << "->" << r;
+    setDiscloseAccountJson(asObjectJson(r, "id"));
+    loadLezMsig();
+}
+
+void MusterUiBackend::retractMyAccount(const QString &accountId)
+{
+    const QString r = modules().muster_module.coordinate_retract_my_account(accountId.trimmed());
+    qInfo() << "[muster_ui] coordinate_retract_my_account" << accountId << "->" << r;
+    setDiscloseAccountJson(asObjectJson(r, "retracted"));
+    loadLezMsig();
 }
 
 void MusterUiBackend::loadXmrMsig()
@@ -1556,6 +1621,84 @@ void MusterUiBackend::onContextReady()
                             break;
                         }
                     }
+                }
+                // lez-msig self-test (exo-0d3): MUSTER_AUTOMSIG_OPEN=<M> opens a creation
+                // ceremony once someone else is in the room — the accounts panel's "Create a
+                // LEZ multisig" — and every runner's module joins it on its own tick; the
+                // opener's creates it on chain and discloses it. MUSTER_AUTOMSIG_PAY=<to>:<amount>
+                // proposes that payment once the vault holds the amount (the panel's "Propose
+                // this payment"); MUSTER_AUTOMSIG_APPROVE approves every lez-msig intent this
+                // member has not (the card's Approve); MUSTER_AUTOMSIG_SETTLE settles each once
+                // it is executable (the card's Settle on-chain). Logged each tick as MSIG.
+                // The private posture (exo-efa): MUSTER_AUTOMSIG_PRIVATE opens it private (the
+                // panel's "Create a private…"); MUSTER_AUTOMSIG_FUND=<amount> deposits that much
+                // from this member's own account once the private account is disclosed (the
+                // panel's "Put in from my account").
+                const QString msigOpenK = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_OPEN"));
+                const bool msigPrivate = !qgetenv("MUSTER_AUTOMSIG_PRIVATE").isEmpty();
+                const QString msigFund = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_FUND"));
+                const QString msigPay = QString::fromUtf8(qgetenv("MUSTER_AUTOMSIG_PAY"));
+                const bool msigApprove = !qgetenv("MUSTER_AUTOMSIG_APPROVE").isEmpty();
+                const bool msigSettle = !qgetenv("MUSTER_AUTOMSIG_SETTLE").isEmpty();
+                if (!msigOpenK.isEmpty() || !msigPay.isEmpty() || msigApprove || msigSettle) {
+                    static bool msigOpened = false, msigProposed = false, msigPolicySet = false, msigFunded = false;
+                    static QSet<QString> msigApproved, msigSettled;
+                    static bool msigPayerLogged = false;
+                    if (!msigPayerLogged) {   // the account this member sends (and pays) from
+                        msigPayerLogged = true;
+                        qInfo().noquote() << "[muster_ui] MSIG payer" << modules().muster_module.lez_member_account("0");
+                    }
+                    loadLezMsig();
+                    if (!msigOpenK.isEmpty() && !msigOpened && membersJson().contains("\"self\":false")) {
+                        msigOpened = true;
+                        lezMsigOpen(QString::fromUtf8(QJsonDocument(QJsonObject{{"threshold", msigOpenK.toInt()},
+                                                                             {"private", msigPrivate}})
+                                                          .toJson(QJsonDocument::Compact)));
+                        qInfo().noquote() << "[muster_ui] MSIG open ->" << lezMsigOpenJson();
+                    }
+                    QString msigAccount;
+                    for (const auto &c : QJsonDocument::fromJson(lezMsigCeremoniesJson().toUtf8()).array())
+                        if (!c.toObject().value("account").toString().isEmpty())
+                            msigAccount = c.toObject().value("account").toString();
+                    if (!msigAccount.isEmpty() && !msigPolicySet) {
+                        msigPolicySet = true;
+                        setPolicy("lez-msig@" + msigAccount);
+                        qInfo().noquote() << "[muster_ui] MSIG account" << msigAccount << "policy ->" << policyJson();
+                    }
+                    if (!msigFund.isEmpty() && !msigFunded && msigPolicySet
+                        && QJsonDocument::fromJson(lezMsigStateJson().toUtf8()).object().value("private").toBool()) {
+                        msigFunded = true;
+                        lezMsigFund(msigAccount, msigFund);
+                        qInfo().noquote() << "[muster_ui] MSIG fund ->" << lezMsigFundJson();
+                    }
+                    if (!msigPay.isEmpty() && !msigProposed && msigPolicySet) {
+                        const QStringList pay = msigPay.split(':');
+                        const QJsonObject st = QJsonDocument::fromJson(lezMsigStateJson().toUtf8()).object();
+                        if (pay.size() == 2 && st.contains("balance")
+                            && st.value("balance").toString().toDouble() >= pay[1].toDouble()) {
+                            msigProposed = true;
+                            lezMsigPropose(QString::fromUtf8(QJsonDocument(QJsonObject{
+                                {"kind", "transfer"}, {"to", pay[0]}, {"amount", pay[1]}}).toJson(QJsonDocument::Compact)));
+                            qInfo().noquote() << "[muster_ui] MSIG proposed ->" << lezMsigProposeJson();
+                        }
+                    }
+                    for (const auto &v : QJsonDocument::fromJson(intentsJson().toUtf8()).array()) {
+                        const QJsonObject it = v.toObject();
+                        if (it.value("effect").toObject().value("effect").toString() != "lez-msig") continue;
+                        const QString id = it.value("id").toString();
+                        if (msigApprove && !it.value("approvedByMe").toBool() && !msigApproved.contains(id)) {
+                            msigApproved.insert(id);
+                            contributeInRoom(id, QString(), QString());
+                            qInfo().noquote() << "[muster_ui] MSIG approved" << id << "->" << contributeJson();
+                        }
+                        if (msigSettle && it.value("state").toString() == "executable" && !msigSettled.contains(id)) {
+                            msigSettled.insert(id);
+                            submitInRoom(id);
+                            qInfo().noquote() << "[muster_ui] MSIG settle" << id << "->" << roomSubmitJson();
+                        }
+                        qInfo().noquote() << "[muster_ui] MSIG intent" << id << it.value("state").toString();
+                    }
+                    qInfo().noquote() << "[muster_ui] MSIG ceremonies" << lezMsigCeremoniesJson() << "state" << lezMsigStateJson();
                 }
                 qInfo() << "[muster_ui] SELFTEST pending=" << pendingJson()
                         << "members=" << membersJson()

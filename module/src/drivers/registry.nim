@@ -17,6 +17,8 @@ import ./invoke
 import ./eip191
 import ./btc_multisig
 import ./lez_multisig      # the LEZ multisig program (exo-6cbe)
+import ./lez_msig          # lez-msig: approvals verified in-program (exo-0d3)
+import ../lez/msig as msigbytes
 import ./btc_frost         # FROST: the aggregate locus (Phase D)
 import ./lez_frost         # a FROST group acting on LEZ (exo-55e)
 import ./split             # a split: each pays their own share (exo-a90.3)
@@ -78,6 +80,21 @@ proc newDriver*(kind: string, config: JsonNode): Driver =
     # the registry builds from the config alone: the address is the one it derives
     if not ok and not detail.startsWith("the address"): raise newException(RegistryError, detail)
     newLezMultisigDriver(acct)
+  of "lez-msig":
+    # A lez-msig account (exo-0d3): {chain, config: its disclosure config (configJsonOf)}.
+    # The registry builds a public one from the config alone: the address is the PDA it
+    # derives. A private one's address takes the group's keys, so it comes as given
+    # ({address}, exo-efa).
+    let cfgJson = config{"config"}.getStr()
+    var address = config{"address"}.getStr()
+    try:
+      let c = parseJson(cfgJson)
+      if c{"placement"}.getStr("public") != "private":
+        address = msigbytes.hexOf(msigbytes.multisigPublic(hexToBytes(c{"program"}.getStr()), hexToBytes(c{"createKey"}.getStr())))
+    except CatchableError as e: raise newException(RegistryError, "not a lez-msig config: " & e.msg)
+    let (ok, acct, detail) = lezMsigAccountOf(config{"chain"}.getStr("lez:local"), address, cfgJson)
+    if not ok: raise newException(RegistryError, detail)
+    newLezMsigDriver(acct)
   of "xmr-msig":
     # A Monero room treasury (ADR-020): {chain, address, k, members: [room identity hex]}.
     var members: seq[string]

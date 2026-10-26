@@ -32,8 +32,10 @@
     # v0.39.1) is Basecamp 0.3.2's catalog release; its store catch-up keeps to the
     # store's 24 h query limit, where v0.3.0's is refused on every first launch
     # (exo-dcc.12). Same pin as module/flake.nix. Mapped to the module name
-    # `delivery_module` below.
-    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.2";
+    # `delivery_module` below. v0.3.3 since Muster 0.3.3: Logos Official also
+    # publishes it as delivery_module 0.4.0 (the same code, released under both numbers), which
+    # Basecamp installs by default, so metadata.json accepts >=0.3.2.
+    logos-delivery-module.url = "github:logos-co/logos-delivery-module/v0.3.3";
     # The LEZ wallet (P-L3): muster_module calls lez_core over lp_* to send assets on
     # the zone, so it must be in the standalone runner's module set for
     # lp_client_create("lez_core") to resolve. lez_core 0.5.0, LEZ 0.3.0 (b89e5d2,
@@ -50,15 +52,23 @@
     logos-evm-tx-sender-module.url = "github:logos-co/logos-evm-tx-sender-module/7cd2fead60a78ac9ac8a4337fd9f01e1ab5515e2";
     logos-evm-fee-module.url = "github:logos-co/logos-evm-fee-module/5bf49b768cf178d2e8c58267f17822060f813fbf";
     # The RLN modules a delivery v0.3 node on logos.test needs (exo-eb6.3 R1). The packages
-    # are delivery v0.3.2's own re-exports, so their versions are the ones it was built
-    # against; this pins only their LIDL contracts, at the same rev (logos-rln-modules
-    # 25357cf), for the code generator.
-    logos-rln-modules = { url = "github:logos-co/logos-rln-modules/25357cfd877ba18d6e0880564b8fd7ba0abf2d70"; flake = false; };
+    # are delivery v0.3.3's own re-exports, so their versions are the ones it was built
+    # against (liblogos_rln_module 0.12.0, liblogos_lez_rln_module 5.1.0); this pins only
+    # their LIDL contracts, at the same rev (logos-rln-modules a814e7f), for the code
+    # generator.
+    logos-rln-modules = { url = "github:logos-co/logos-rln-modules/a814e7feda974a16eaa5dd50667b8fd843177f0e"; flake = false; };
     # Logos Storage (exo-4d0, FileShare): muster_module uploads and fetches a room's sealed
     # blobs through storage_module over lp_*, so it rides the runner's module set. Basecamp
     # 0.3.2 bundles the same 3.0.2 (7548f41). Same pin as module/flake.nix; muster_ui does
     # not call it.
     logos-storage-module.url = "github:logos-co/logos-storage-module/7548f41ae189917d58c37f0fb6d3a2700b99f59b";
+    # lez-msig's prover (exo-efa, exo-e77): a private lez-msig's transactions are proved by
+    # lez_msig_module, a Rust module in this repo (programs/lez-msig). muster_module calls it
+    # over lp_* (src/wallet/msig_prover_lp.nim) and declares it optional, so it rides the
+    # RUNNER's module set only (runnerUi below); the published muster_ui does not require it,
+    # since it builds for linux-amd64 alone. This tree's copy, as muster_module is; `make
+    # build` overrides it with an absolute path.
+    lez_msig_module.url = "git+file:../?dir=programs/lez-msig";
   };
 
   outputs = inputs@{ logos-module-builder, ... }:
@@ -111,9 +121,9 @@
             '';
         }) inputs.logos-delivery-module.packages;
       };
-      base = logos-module-builder.lib.mkLogosQmlModule {
+      uiWith = configFile: logos-module-builder.lib.mkLogosQmlModule {
         src = ./.;
-        configFile = ./metadata.json;
+        inherit configFile;
         # metadata.json#dependencies = ["muster_module"], resolved from the input
         # of the same name so the generated modules().muster_module client is typed,
         # and so muster_module is bundled into the standalone runner's module set.
@@ -133,6 +143,18 @@
         } // inputs;
       };
 
+      base = uiWith ./metadata.json;
+      # The runner's muster_ui: the same, with lez_msig_module among its dependencies, because
+      # the builder puts only `dependencies` in the runner's module set (exo-e77). It is a file
+      # beside metadata.json, because the runner reads the icon relative to it; evaluation
+      # refuses it unless it is metadata.json plus lez_msig_module, so the two never drift.
+      runnerUi =
+        let cfg = builtins.fromJSON (builtins.readFile ./metadata.json);
+            runnerCfg = builtins.fromJSON (builtins.readFile ./metadata.runner.json);
+        in if runnerCfg == cfg // { dependencies = cfg.dependencies ++ [ "lez_msig_module" ]; }
+           then uiWith ./metadata.runner.json
+           else throw "ui/metadata.runner.json must be ui/metadata.json with lez_msig_module appended to dependencies";
+
       nixpkgs = logos-module-builder.inputs.nixpkgs;
 
       # `.#runner`: the standalone runner (logos-standalone-app hosting the muster
@@ -145,7 +167,7 @@
       runnerPkg = system:
         let pkgs = import nixpkgs { inherit system; };
         in pkgs.writeShellScriptBin "muster-ui"
-             ''exec ${base.apps.${system}.default.program} "$@"'';
+             ''exec ${runnerUi.apps.${system}.default.program} "$@"'';
     in
       base // {
         packages = builtins.mapAttrs

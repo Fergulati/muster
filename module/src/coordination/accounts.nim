@@ -32,6 +32,8 @@ import ../drivers/btc_multisig   # Bitcoin accounts (exo-a50.2.3)
 import ../drivers/lez_multisig   # LEZ multisig accounts (exo-6cbe)
 import ../drivers/btc_frost      # FROST accounts: the ceremony's recovery data (Phase D)
 import ../drivers/lez_frost      # a FROST group's LEZ public account (exo-55e)
+import ../drivers/lez_msig       # lez-msig: approvals verified in-program (exo-0d3)
+import ../lez/msig as msigbytes
 import ../drivers/xmr_msig       # a Monero multisig, every member's wallet disclosing it (ADR-020)
 import ../lez/multisig as lezms
 import ../lez/multisig_chain
@@ -204,6 +206,15 @@ proc driverForPolicy*(policy: string, accounts: seq[RoomAccount],
     let (ok, acct, _) = lezMultisigAccountFromParts(a.chain, a.address, a.config, a.signers, a.threshold)
     if not ok: return newUnsupportedDriver(policy)
     newLezMultisigDriver(acct)
+  of "lez-msig":
+    # a lez-msig account (exo-0d3): its address must be the PDA its config derives, and the
+    # disclosure's signers and k must be the config's — refused otherwise, never trusted
+    let (ok, acct, _) = lezMsigAccountOf(a.chain, a.address, a.config)
+    if not ok: return newUnsupportedDriver(policy)
+    if a.threshold != int(acct.config.threshold) or
+       a.signers.mapIt(it.toLowerAscii()) != acct.config.members.mapIt(msigbytes.hexOf(it.key)):
+      return newUnsupportedDriver(policy)
+    newLezMsigDriver(acct)
   of "btc-frost":
     # a FROST account (Phase D): its address must be the threshold key its recovery data
     # derives — the ceremony itself, re-derived, never taken on trust
@@ -273,6 +284,20 @@ proc btcDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail: st
   let (ok, _, detail) = btcAccountOfDisclosure(a.family, a.chain, a.address, a.threshold, a.signers)
   let status = (if ok: acVerified else: acDisagrees)
   (status, detail)
+
+proc lezMsigDisclosureCheck*(a: RoomAccount): tuple[status: AccountCheck, detail: string] =
+  ## A lez-msig disclosure re-derives its PDA from its config (no chain read); the chain's
+  ## own state is read by the host (lezMsigChainView) and settlement.
+  let (ok, acct, detail) = lezMsigAccountOf(a.chain, a.address, a.config)
+  if not ok: return (acDisagrees, detail)
+  if a.threshold != int(acct.config.threshold) or
+     a.signers.mapIt(it.toLowerAscii()) != acct.config.members.mapIt(msigbytes.hexOf(it.key)):
+    return (acDisagrees, "the disclosure's signers or k are not its config's")
+  if acct.private:
+    # its address takes the group's keys to derive: the host of a member holding the group
+    # secret checks it through the prover (exo-efa); here it is only what was disclosed
+    return (acUnknown, detail)
+  (acVerified, detail)
 
 proc lezMultisigAccountOf*(a: RoomAccount): tuple[ok: bool, account: LezMultisigAccount, detail: string] =
   ## A disclosed LEZ multisig account, re-derived from its config (exo-6cbe).

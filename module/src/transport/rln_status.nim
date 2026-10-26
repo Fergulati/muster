@@ -14,12 +14,16 @@ import std/[json, strutils]
 const
   RlnPreset* = "logos.test"
     ## the one built-in delivery preset with RLN on
-  LogosTestRegistry* = "logos:testnet:841312e989c77e3f6f58a5d880a8e25b950b8b5ffba2f39748fa44622c20c893"
-    ## that preset's registry: the registration program's config account, CAIP-10
+  LogosTestRegistry* = "logos:testnet:fd322d32a46ddf57eece9db8d68e9b722262d1f770760fca63b8cb9e7775b971"
+    ## that preset's registry: the registration program's config account, CAIP-10. Since
+    ## delivery v0.3.3 (the same code as its withdrawn 0.4.0) it is on the LEZ v0.3.1
+    ## testnet; a membership in the previous registry (logos:testnet:841312e9…c893)
+    ## does not carry over
   RlnIdentifierHex* = "5e269b6a19fce081f5808b13442dcbc3522197638dd38df5a28bc4e55236b977"
     ## sha256("rln/logos-delivery/v0.0.1"), delivery's application scope
-  RegistryZone* = "209.38.241.182:3240"
-    ## the registry's own LEZ zone: not testnet.lez.logos.co, muster's wallet zone
+  RegistryZone* = "testnet.lez.logos.co"
+    ## the registry's LEZ zone (delivery v0.3.3; before it, a zone of its own at
+    ## 209.38.241.182:3240)
   FundingNative* = "200000000"
     ## what delivery's guide asks a payer to hold: the price plus a fee reserve
     ## (about 1.8e8 at base fee 8, most of it refunded)

@@ -6,7 +6,7 @@
 # its native balance, and found it short. The row names the payer (64 hex), the
 # zone, and the amount to send. No funds are needed; it is the step before them.
 #
-# It needs the RLN registry's zone (209.38.241.182:3240) to answer more than the
+# It needs the RLN registry's zone (testnet.lez.logos.co) to answer more than the
 # fleet: a v0.3 node on logos.test runs without a membership (rlnState reads "Ready")
 # but holds every send, retrying ("Failed to attach RLN proof"), which is expected
 # here. The row says the node's messages wait.
@@ -56,7 +56,7 @@ r=json.load(sys.stdin)
 assert r["level"]=="warn" and r["detail"].startswith("awaiting funding"), "not awaiting funding: %r" % r
 assert "messages wait" in r["detail"], "does not say the messages wait: %r" % r
 assert re.fullmatch(r"[0-9a-f]{64}", r.get("payer","")), "no payer: %r" % r
-assert r["payer"] in r["remedy"] and "209.38.241.182:3240" in r["remedy"] and "200000000" in r["remedy"], "remedy: %r" % r
+assert r["payer"] in r["remedy"] and "testnet.lez.logos.co" in r["remedy"] and "200000000" in r["remedy"], "remedy: %r" % r
 print("payer", r["payer"], "holds", r.get("balance"), "native LEZ")' \
   || { echo "FAIL: the row did not reach awaiting funding with the payer, the zone and the amount"; ok=0; }
 echo "── what the RLN modules said ──"
