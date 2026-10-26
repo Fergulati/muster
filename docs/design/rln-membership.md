@@ -32,10 +32,12 @@ module's docs tell applications to build against.
   keeps an encrypted keystore, registers, and makes proofs. `liblogos_lez_rln_module`
   talks to the on-chain RLN registry: chain reads, the Register transaction, and a faucet
   claim for the registry's payment token.
-- **A registry on its own LEZ zone.** The `logos.test` preset names registry
-  `logos:testnet:841312e9…c893`, on a zone with sequencer `http://209.38.241.182:3240/`
-  and its own channel. That is **not** `testnet.lez.logos.co`, the zone muster's wallet
-  uses.
+- **A registry on the LEZ testnet.** Since delivery v0.3.3 (2026-10-23 in muster) the
+  `logos.test` preset names registry `logos:testnet:fd322d32…7775b971` on the LEZ v0.3.1
+  testnet, sequencer `https://testnet.lez.logos.co/`, the zone muster's wallet uses too. A
+  membership in the earlier registry does not carry over. Until then it named
+  `logos:testnet:841312e9…c893`, on a zone of its own (`http://209.38.241.182:3240/`),
+  which the passages below about "the registry's zone" describe.
 - **Its own wallet.** The lez-rln module holds a LEZ wallet of its own, in-process,
   default home `<instance persistence path>/wallet-home`. It does not use `lez_core`,
   because a host has exactly one `lez_core` wallet handle.

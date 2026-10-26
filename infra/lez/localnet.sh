@@ -85,8 +85,23 @@ toolchain() {
     export PATH="$(nix build --no-link --print-out-paths 'nixpkgs#gcc^out')/bin:$PATH"
     GCCLIB="$(nix build --no-link --print-out-paths 'nixpkgs#gcc.cc^lib')/lib"
   fi
-  [ -n "${LIBCLANG_PATH:-}" ] || export LIBCLANG_PATH="$(nix build --no-link --print-out-paths 'nixpkgs#libclang^lib')/lib"
-  # v0.3's wallet CLI links Keycard support (pcsc-sys): libpcsclite, found by pkg-config
+  # A system libclang first: nixpkgs' needs a glibc as new as nixpkgs' own, and fails on an
+  # older host with "GLIBC_ABI_GNU2_TLS not found" (Ubuntu 24.04, glibc 2.39).
+  if [ -z "${LIBCLANG_PATH:-}" ]; then
+    local sys; sys="$(ls -d /usr/lib/llvm-*/lib 2>/dev/null | sort -V | tail -1)"
+    if [ -n "$sys" ] && ls "$sys"/libclang*.so* >/dev/null 2>&1; then export LIBCLANG_PATH="$sys"
+    else export LIBCLANG_PATH="$(nix build --no-link --print-out-paths 'nixpkgs#libclang^lib')/lib"; fi
+  fi
+  # v0.3's wallet CLI links Keycard support (pcsc-sys): libpcsclite, found by pkg-config.
+  # A host with the runtime library but not its dev package links against its own copy
+  # through a generated .pc, for the same glibc reason as libclang.
+  local syspcsc=/usr/lib/x86_64-linux-gnu/libpcsclite.so.1
+  if [ "$VERSION" != v0.2.4 ] && ! pkg-config --exists libpcsclite 2>/dev/null && [ -e "$syspcsc" ]; then
+    local pc="$DIR/.muster-pcsc"; mkdir -p "$pc"
+    ln -sf "$syspcsc" "$pc/libpcsclite.so"
+    printf 'Name: libpcsclite\nDescription: host PC/SC\nVersion: 2\nLibs: -L%s -lpcsclite\nCflags:\n' "$pc" > "$pc/libpcsclite.pc"
+    export PKG_CONFIG_PATH="$pc${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  fi
   if [ "$VERSION" != v0.2.4 ] && ! pkg-config --exists libpcsclite 2>/dev/null; then
     export PATH="$(nix build --no-link --print-out-paths 'nixpkgs#pkg-config^out')/bin:$PATH"
     export PKG_CONFIG_PATH="$(nix build --no-link --print-out-paths 'nixpkgs#pcsclite^dev')/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"

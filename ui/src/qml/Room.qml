@@ -906,6 +906,39 @@ Item {
     }
     // the room's Monero multisig setups and spends (ADR-020), parsed once; the card looks a
     // spend up by intent id, and the accounts panel shows the setups and the last results
+    // lez-msig (exo-0d3): its ceremonies, the last open / propose results, the account's state
+    readonly property var lezMsigCeremonies: {
+        try { return JSON.parse(backend ? backend.lezMsigCeremoniesJson : "[]"); }
+        catch (e) { return []; }
+    }
+    readonly property var lezMsigOpen: {
+        try { return JSON.parse(backend ? backend.lezMsigOpenJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property var lezMsigPropose: {
+        try { return JSON.parse(backend ? backend.lezMsigProposeJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property var lezMsigFund: {
+        try { return JSON.parse(backend ? backend.lezMsigFundJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property var lezMsigRecover: {
+        try { return JSON.parse(backend ? backend.lezMsigRecoverJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property var memberAccounts: {
+        try { return JSON.parse(backend ? backend.memberAccountsJson : "[]"); }
+        catch (e) { return []; }
+    }
+    readonly property var discloseAccount: {
+        try { return JSON.parse(backend ? backend.discloseAccountJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property var lezMsigState: {
+        try { return JSON.parse(backend ? backend.lezMsigStateJson : "{}"); }
+        catch (e) { return ({}); }
+    }
     readonly property var xmrMsigSetups: {
         try { return JSON.parse(backend ? backend.xmrMsigSetupsJson : "[]"); }
         catch (e) { return []; }
@@ -1067,6 +1100,8 @@ Item {
         var isInvoke = effKind === "invoke";
         var invokeArgs = (isInvoke && eff.args) ? eff.args : [];
         var isLez = effKind === "lez-multisig-proposal";
+        // a lez-msig proposal (exo-0d3): the module decodes it from the bytes approvals sign
+        var isMsig = effKind === "lez-msig";
         // a split (exo-a90): its own body on the card — who owes what, and where each stands
         var isSplit = effKind === "split";
         // a settle-up (exo-3c6): several splits netted — its own body: the net payments
@@ -1084,6 +1119,7 @@ Item {
             label: isSettleUp ? qsTr("Settle up") : isRequest ? qsTr("Request") : isSplit ? qsTr("Split")
                  : isGovernance ? qsTr("A new way to agree")
                  : isLez ? qsTr("LEZ multisig")
+                 : isMsig ? qsTr("LEZ multisig")
                  : isInvoke ? qsTr("Action")
                  : isStatement ? qsTr("Statement") : qsTr("Payment"),
             // an invoke intent's target, rendered by the card as "call module.method(…)".
@@ -1148,6 +1184,8 @@ Item {
             decliners: (it && it.decliners) ? it.decliners : [],
             declinedByMe: !!(it && it.decliners && room.myIdentity
                              && it.decliners.indexOf(room.myIdentity) >= 0),
+            // a lez-msig proposal, decoded from the bytes its approvals sign (RFP U.6)
+            msig: (isMsig && it && it.msig) ? it.msig : null,
             // a Monero multisig spend's progress (ADR-020), null for any other intent
             xmrMsig: room.xmrMsigSpendOf(it && it.id),
             // the five questions + your readiness, once asked for

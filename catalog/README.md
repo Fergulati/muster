@@ -10,7 +10,7 @@ The steps for a person installing Muster are in [`docs/runbooks/install-from-cat
 
 ## What adding it trusts
 
-- **This catalogue publishes two packages: `muster_module` and `muster_ui`.** It lists no other name. Basecamp takes the newest version of a package across every catalogue you have enabled, so a catalogue that listed `delivery_module` could replace the official one. This one never does: `scripts/catalog-release.sh` refuses to write an index that names anything else.
+- **This catalogue publishes `muster_module` and `muster_ui`, and `lez_msig_module`** (since 0.3.3, exo-e77: the private LEZ multisig's prover, an optional dependency of `muster_module`, Linux x86-64 only, versioned on its own from `programs/lez-msig/metadata.json`). It lists no other name. Basecamp takes the newest version of a package across every catalogue you have enabled, so a catalogue that listed `delivery_module` could replace the official one. This one never does: `scripts/catalog-release.sh` refuses to write an index that names anything else.
 - **Every dependency comes from the official Logos catalogue**, which Basecamp enables by default: `delivery_module`, `lez_core`, the EVM modules, the RLN modules, and the optional Monero wallet modules.
 - **Nothing is signed.** `trustedSigners` is empty, as it is in the official catalogue. Basecamp checks each download against the `rootHash` this index names, so the `.lgx` you get is the one indexed here. Nothing proves who built it.
 - **Muster runs inside your Basecamp session with no sandbox.** That is true of every Basecamp module; adding a catalogue means trusting its publisher with it.

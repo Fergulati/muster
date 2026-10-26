@@ -129,6 +129,33 @@ Rectangle {
                         if (details.room.backend) details.room.backend.frostCeremonyOpen(cid, network, t, n);
                     }
                     onFrostJoinRequested: function (cid) { if (details.room.backend) details.room.backend.frostCeremonyJoin(cid); }
+                    lezMsigCeremonies: details.room.lezMsigCeremonies
+                    lezMsigOpen: details.room.lezMsigOpen
+                    lezMsigPropose: details.room.lezMsigPropose
+                    lezMsigState: details.room.lezMsigState
+                    lezMsigFund: details.room.lezMsigFund
+                    lezMsigRecover: details.room.lezMsigRecover
+                    memberAccounts: details.room.memberAccounts
+                    discloseAccount: details.room.discloseAccount
+                    onDiscloseMyAccountRequested: function (specJson) {
+                        if (details.room.backend) details.room.backend.discloseMyAccount(specJson);
+                    }
+                    onRetractMyAccountRequested: function (accountId) {
+                        if (details.room.backend) details.room.backend.retractMyAccount(accountId);
+                    }
+                    onLezMsigRecoverRequested: function (account) {
+                        if (details.room.backend) details.room.backend.lezMsigRecover(account);
+                    }
+                    onLezMsigFundRequested: function (account, amount) {
+                        if (details.room.backend) details.room.backend.lezMsigFund(account, amount);
+                    }
+                    onLezMsigOpenRequested: function (specJson) { if (details.room.backend) details.room.backend.lezMsigOpen(specJson); }
+                    onLezMsigProposeRequested: function (account, actionJson) {
+                        if (!details.room.backend) return;
+                        // a proposal goes out from the room's policy: make it this multisig first
+                        details.room.backend.setPolicy("lez-msig@" + account);
+                        details.room.backend.lezMsigPropose(actionJson);
+                    }
                     xmrMsigSetups: details.room.xmrMsigSetups
                     xmrMsigSetup: details.room.xmrMsigSetup
                     xmrMsigPropose: details.room.xmrMsigPropose

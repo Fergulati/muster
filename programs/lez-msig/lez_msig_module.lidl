@@ -1,0 +1,24 @@
+module lez_msig_module {
+  version "0.1.0"
+  description "Proves and sends lez-msig's privacy-preserving transactions on a LEZ v0.3 zone, for Muster (docs/design/lez-msig.md). Holds no key: the group secret arrives with each request and is dropped with its job. JSON in, JSON out; a failure is {error, detail}."
+  category "blockchain"
+  depends []
+
+  method health() -> tstr description "Liveness: {ok: true, busy (a proof is running), devMode (RISC0_DEV_MODE set), prover: \"local\", programImageId (hex of the embedded program's image id)}. Never waits on a proof."
+
+  method derive(request_json: tstr) -> tstr description "{program, gms, createKey} (hex, no 0x) -> {account}: the multisig's private PDA. Proves nothing, reads nothing."
+
+  method exec(request_json: tstr) -> tstr description "{rpc, program, gms, createKey, pre (the multisig's current note, Account borsh hex, or null for Create), op (msig_core::Instruction borsh hex)} -> {job} at once. In the background it reads pre's membership proof from rpc, proves the program over the private note, and sends it; job(id) then answers {hash, post (the new note), account, root, proveMs}. One proof at a time: another exec while one runs answers {error: \"busy\"}."
+
+  method fund(request_json: tstr) -> tstr description "A deposit into the multisig's vault from a member's public account, proved but not sent: {rpc, program, gms, createKey, pre, payerKey (the payer's x-only public key), payerNonce, amount} -> {job}; job(id) then answers {sign (the message hash the payer signs, BIP-340), payer, message, proof, post, account, root, proveMs}. The payer signs in their own keystore and send() carries the signature back; no key comes here."
+
+  method send(request_json: tstr) -> tstr description "{rpc, message, proof, witnesses: [{signature, publicKey}]} -> {hash}: a proved message, signed elsewhere, sent. Each signature is checked against the message first, and a bad one answers {error: \"failed\", detail: \"bad-signature: ...\"}."
+
+  method scan(request_json: tstr) -> tstr description "{rpc, program, gms, createKey, from? (a block id, default 1)} -> {job} at once; job(id) then answers {found, post (the multisig's newest note, Account borsh hex), block, hash, scanned}. Reads every block to the tip and decrypts each private action with the group's viewing key; for a member whose room never received the newest note. Shares the one-at-a-time slot with exec and fund."
+
+  method job(job_id: tstr) -> tstr description "{job, state: proving | done | failed, startedMs, and when done the mode's answer, when failed {error, detail}}. Only the module that submitted the job may read it; an unknown id answers {error: \"unknown-job\"}."
+
+  method forget(job_id: tstr) -> tstr description "Drop a finished job, its decrypted note included. {ok: true}."
+
+  event job_done(job_id: tstr, state: tstr)
+}

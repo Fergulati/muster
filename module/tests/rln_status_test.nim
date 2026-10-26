@@ -87,3 +87,12 @@ block nodeState:
   doAssert parseRlnState("") == ("", "") and parseRlnState("{}") == ("", "")
   doAssert parseRlnState("""{"success":false,"error":"no node","value":null}""") == ("", "")
   echo "6. delivery's rlnState, however wrapped: the state and its message OK"
+
+block deliveryPreset:
+  # delivery v0.3.3 (= the withdrawn 0.4.0) moved logos.test to a new registry on the LEZ
+  # v0.3.1 testnet (logos-delivery-module docs/pages/rln.md at v0.3.3); a membership in the
+  # old registry does not carry over, so the row must ask about and fund the new one
+  doAssert LogosTestRegistry == "logos:testnet:fd322d32a46ddf57eece9db8d68e9b722262d1f770760fca63b8cb9e7775b971", LogosTestRegistry
+  doAssert RegistryZone == "testnet.lez.logos.co", RegistryZone
+  doAssert FundingNative == "200000000"
+  echo "7. the registry, its zone and the funding are delivery v0.3.3's logos.test preset OK"

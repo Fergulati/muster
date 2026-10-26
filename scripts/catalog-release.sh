@@ -5,7 +5,8 @@
 # the way the Logos Forum catalogue (edenbd1/logos-forum-catalog) does it: a committed
 # index.json, the .lgx files as GitHub release assets.
 #
-#   scripts/catalog-release.sh                       # a release: catalog/ + .run/catalog-release/<tag>/
+#   scripts/catalog-release.sh                       # a release: catalog/ + .run/catalog-release/<tag>/,
+#                                                    # every platform, from CI's build of HEAD (exo-04f)
 #   scripts/catalog-release.sh --local DIR --base-url https://127.0.0.1:8443
 #                                                    # everything under DIR, for a local server
 #
@@ -21,18 +22,25 @@
 #                      with a certificate Basecamp trusts (SSL_CERT_FILE; see
 #                      docs/runbooks/install-from-catalogue.md, "Testing a release locally").
 #   --allow-dirty      build even if module/ or ui/ has uncommitted changes (never for a release)
+#   --here             build muster_module and muster_ui here, for this host's platform only,
+#                      instead of taking every platform from CI (the default for a release)
 #   --from-run ID      take the packages from a successful run of the `lgx variants` workflow
 #                      (.github/workflows/lgx-variants.yml) instead of building here: one .lgx
 #                      per package holding every variant it builds (linux-amd64, linux-arm64,
 #                      darwin-arm64). The run must have built exactly HEAD. Assets are then
 #                      named <package>-<version>.lgx, as the official catalogue names its own.
 #
-# Without --from-run the packages are built here, for this host's platform
-# (scripts/lib/portable.sh): linux-amd64, linux-arm64 or darwin-arm64. A release carries
-# linux-amd64, as every published muster version does, so a release built on any other host
-# is refused; --local is open to every platform, e.g. for a Mac to test its own build.
+# A release ships every platform by default (exo-04f): muster_module and muster_ui come from
+# the `lgx variants` run that built HEAD, and when there is none the workflow is dispatched on
+# HEAD's branch (which must be pushed, at HEAD) and waited for. With --here, or with --local,
+# the packages are built here for this host's platform (scripts/lib/portable.sh): a release
+# built that way still must carry linux-amd64; --local is open to every platform, e.g. for a
+# Mac to test its own build.
 #
-# The catalogue publishes ONLY muster_module and muster_ui. Every dependency resolves from the
+# The catalogue publishes muster_module and muster_ui, and lez_msig_module (programs/lez-msig,
+# exo-e77): the private lez-msig's prover, an OPTIONAL dependency of muster_module, built for
+# linux-amd64 only and versioned on its own (programs/lez-msig/metadata.json). Every other
+# dependency resolves from the
 # official Logos catalogue, which Basecamp enables by default and searches alongside ours
 # (logos-package-downloader docs/spec.md, "Dependency Resolution"). Nothing here is signed.
 #
@@ -59,7 +67,7 @@ INDEX_URL=https://raw.githubusercontent.com/corpetty/muster/main/catalog/index.j
 RELEASES=https://github.com/corpetty/muster/releases/download
 SUB=(--extra-substituters https://cache.nix.logos.co)
 
-TAG=""; URL_BASE=""; LOCAL=""; BASE_URL=""; ALLOW_DIRTY=0; FROM_RUN=""
+TAG=""; URL_BASE=""; LOCAL=""; BASE_URL=""; ALLOW_DIRTY=0; FROM_RUN=""; HERE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --tag) TAG=${2:?--tag needs a value}; shift ;;
@@ -68,6 +76,7 @@ while [ $# -gt 0 ]; do
     --base-url) BASE_URL=${2:?--base-url needs a URL}; shift ;;
     --allow-dirty) ALLOW_DIRTY=1 ;;
     --from-run) FROM_RUN=${2:?--from-run needs a workflow run id}; shift ;;
+    --here) HERE=1 ;;
     -h|--help) awk 'NR > 1 { if (/^set -euo/) exit; print }' "$0"; exit 0 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
@@ -87,6 +96,30 @@ VERSION=$(ver module/metadata.json)
   echo "module/metadata.json ($VERSION) and ui/metadata.json ($(ver ui/metadata.json)) disagree; bump both" >&2; exit 1; }
 TAG=${TAG:-muster-v$VERSION}
 URL_BASE=${URL_BASE:-$RELEASES/$TAG}
+# A release takes every platform from CI's build of HEAD, unless asked to build here.
+if [ -z "$FROM_RUN" ] && [ -z "$LOCAL" ] && [ $HERE = 0 ]; then
+  HEAD_SHA=$(git rev-parse HEAD)
+  FROM_RUN=$(gh run list --repo corpetty/muster --workflow "lgx variants" --commit "$HEAD_SHA" --status success \
+               --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+  if [ -z "$FROM_RUN" ]; then
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+    git fetch -q origin "$BRANCH" 2>/dev/null || true
+    [ "$(git rev-parse "origin/$BRANCH" 2>/dev/null)" = "$HEAD_SHA" ] || {
+      echo "no lgx variants run built $HEAD_SHA, and origin/$BRANCH is not HEAD: push it, or build here with --here" >&2; exit 1; }
+    echo "no lgx variants run built ${HEAD_SHA:0:8}: dispatching one on $BRANCH and waiting (every platform, about 20 minutes)"
+    gh workflow run lgx-variants.yml --repo corpetty/muster --ref "$BRANCH"
+    for _ in $(seq 30); do
+      sleep 10
+      FROM_RUN=$(gh run list --repo corpetty/muster --workflow "lgx variants" --commit "$HEAD_SHA" --event workflow_dispatch \
+                   --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
+      [ -n "$FROM_RUN" ] && break
+    done
+    [ -n "$FROM_RUN" ] || { echo "the dispatched lgx variants run did not appear" >&2; exit 1; }
+    gh run watch "$FROM_RUN" --repo corpetty/muster --exit-status >/dev/null \
+      || { echo "lgx variants run $FROM_RUN failed: gh run view $FROM_RUN --repo corpetty/muster --log-failed" >&2; exit 1; }
+  fi
+  echo "every platform from lgx variants run $FROM_RUN (commit ${HEAD_SHA:0:8})"
+fi
 # The variants each package must carry: every one the workflow builds, or this host's.
 if [ -n "$FROM_RUN" ]; then PLATFORMS="linux-amd64 linux-arm64 darwin-arm64"; else PLATFORMS=$(lgx_variant); fi
 if [ -z "$LOCAL" ]; then
@@ -98,13 +131,17 @@ if [ -z "$LOCAL" ]; then
   esac
 fi
 # one platform: <package>-<version>-<platform>.lgx (every release before 0.3.1); several: the
-# official catalogue's <package>-<version>.lgx
-asset() { if [ "$PLATFORMS" = "${PLATFORMS%% *}" ]; then echo "$1-$VERSION-$PLATFORMS.lgx"; else echo "$1-$VERSION.lgx"; fi; }
+# official catalogue's <package>-<version>.lgx. The prover is linux-amd64 only, at its own version.
+MSIG_VERSION=$(ver programs/lez-msig/metadata.json)
+asset() {
+  if [ "$1" = lez_msig_module ]; then echo "$1-$MSIG_VERSION-linux-amd64.lgx"
+  elif [ "$PLATFORMS" = "${PLATFORMS%% *}" ]; then echo "$1-$VERSION-$PLATFORMS.lgx"; else echo "$1-$VERSION.lgx"; fi; }
+PACKAGES="muster_module muster_ui lez_msig_module"
 
 # The committed tree, never a working copy.
-if [ $ALLOW_DIRTY = 0 ] && [ -n "$(git status --porcelain -- module ui)" ]; then
-  echo "module/ or ui/ has uncommitted changes; commit them (the build reads the committed tree)" >&2
-  git status --short -- module ui >&2; exit 1
+if [ $ALLOW_DIRTY = 0 ] && [ -n "$(git status --porcelain -- module ui programs/lez-msig)" ]; then
+  echo "module/, ui/ or programs/lez-msig/ has uncommitted changes; commit them (the build reads the committed tree)" >&2
+  git status --short -- module ui programs/lez-msig >&2; exit 1
 fi
 COMMIT=$(git rev-parse HEAD)
 
@@ -152,19 +189,34 @@ MOD=$(nix build "git+file://$ROOT?dir=module#lgx-portable" "${SUB[@]}" --no-eval
   || { echo "module build failed; see $WORK/build-module.log" >&2; exit 1; }
 UI=$(nix build "git+file://$ROOT?dir=ui#lgx-portable" "${SUB[@]}" --no-eval-cache \
         --override-input muster_module "git+file://$ROOT?dir=module" \
+        --override-input lez_msig_module "git+file://$ROOT?dir=programs/lez-msig" \
         --no-link --print-out-paths 2>"$WORK/build-ui.log" | tail -1) \
   || { echo "ui build failed; see $WORK/build-ui.log" >&2; exit 1; }
 fi
+# The prover, here in every mode: the workflow does not build it, and it builds only on
+# linux-amd64 (a --local test elsewhere goes without it).
+MSIG=""
+if [ "$(lgx_variant)" = linux-amd64 ]; then
+  echo "building lez_msig_module $MSIG_VERSION from $COMMIT"
+  MSIG=$(nix build "git+file://$ROOT?dir=programs/lez-msig#lgx-portable" "${SUB[@]}" --no-eval-cache \
+          --no-link --print-out-paths 2>"$WORK/build-msig.log" | tail -1) \
+    || { echo "lez_msig_module build failed; see $WORK/build-msig.log" >&2; exit 1; }
+elif [ -z "$LOCAL" ]; then
+  echo "a release carries lez_msig_module, which builds on linux-amd64 only; release from a linux-amd64 host" >&2; exit 1
+else
+  PACKAGES="muster_module muster_ui"
+fi
 
 # Each package's embedded manifest must carry the name and version the catalogue claims.
-for pair in "muster_module:$MOD" "muster_ui:$UI"; do
+for pair in "muster_module:$MOD" "muster_ui:$UI" ${MSIG:+"lez_msig_module:$MSIG"}; do
   pkg=${pair%%:*}; f=$(ls "${pair#*:}"/*.lgx | head -1)
   lgx verify "$f" >/dev/null
   got=$(lgx manifest "$f" --json | python3 -c 'import json,sys; m=json.load(sys.stdin); print(m["name"], m["version"], " ".join(sorted(m.get("main", {}))))')
-  want="$pkg $VERSION $(tr ' ' '\n' <<<"$PLATFORMS" | sort | paste -sd' ' -)"
+  if [ "$pkg" = lez_msig_module ]; then want="$pkg $MSIG_VERSION linux-amd64"
+  else want="$pkg $VERSION $(tr ' ' '\n' <<<"$PLATFORMS" | sort | paste -sd' ' -)"; fi
   [ "$got" = "$want" ] || { echo "$f: manifest says '$got', expected '$want'" >&2; exit 1; }
   # No `declare -A` (bash 3.2 on macOS): a variable per package.
-  case $pkg in muster_module) SRC_MOD=$f ;; muster_ui) SRC_UI=$f ;; esac
+  case $pkg in muster_module) SRC_MOD=$f ;; muster_ui) SRC_UI=$f ;; lez_msig_module) SRC_MSIG=$f ;; esac
 done
 
 # 2. Where the files go.
@@ -182,8 +234,8 @@ else
   mkdir -p "$OUT"
 fi
 mkdir -p "$ASSETS"
-for pkg in muster_module muster_ui; do
-  case $pkg in muster_module) src=$SRC_MOD ;; muster_ui) src=$SRC_UI ;; esac
+for pkg in $PACKAGES; do
+  case $pkg in muster_module) src=$SRC_MOD ;; muster_ui) src=$SRC_UI ;; lez_msig_module) src=$SRC_MSIG ;; esac
   install -m 0644 "$src" "$ASSETS/$(asset "$pkg")"
 done
 
@@ -196,8 +248,9 @@ card = {
     "name": "muster",
     "displayName": "Muster",
     "description": "Muster: rooms where people agree on a payment, a bill split or a decision, "
-                   "then settle it. Publishes only muster_module and muster_ui; every dependency "
-                   "comes from the official Logos catalogue. Unsigned.",
+                   "then settle it. Publishes muster_module and muster_ui, and lez_msig_module (the "
+                   "private multisig's prover, optional, linux-amd64); every other dependency comes "
+                   "from the official Logos catalogue. Unsigned.",
     "homepage": "https://github.com/corpetty/muster/tree/main/catalog",
     "indexUrl": index_url,
     "trustedSigners": [],
@@ -206,7 +259,7 @@ open(path, "w").write(json.dumps(card, indent=2) + "\n")
 EOF
 python3 "$TOOL" validate-repo "$OUT/logos-repo.json" >/dev/null
 
-# 4. The index: add this release's two packages (a release keeps every earlier version;
+# 4. The index: add this release's packages (a release keeps every earlier version;
 #    a local index starts empty). Versions dedupe on (version, rootHash), so re-running a
 #    release is a no-op, and a rebuild that changed the bytes of a published version shows
 #    up as a second entry for it, which `validate` reports.
@@ -219,7 +272,7 @@ open(sys.argv[1], "w").write(json.dumps(idx, indent=2) + "\n")
 EOF
 fi
 PAIRS=()
-for pkg in muster_module muster_ui; do
+for pkg in $PACKAGES; do
   PAIRS+=(--with-local "$URL_BASE/$(asset "$pkg")" "$ASSETS/$(asset "$pkg")")
 done
 python3 "$TOOL" add "$OUT/index.json" --fetch none "${PAIRS[@]}"
@@ -230,14 +283,14 @@ python3 "$TOOL" list "$OUT/index.json"
 python3 - "$OUT/index.json" <<'EOF'
 import json, sys
 names = {p["name"] for p in json.load(open(sys.argv[1]))["packages"]}
-extra = names - {"muster_module", "muster_ui"}
+extra = names - {"muster_module", "muster_ui", "lez_msig_module"}
 if extra:
     sys.exit(f"index lists packages that are not ours: {sorted(extra)}")
 EOF
 
 echo
 echo "commit $COMMIT, version $VERSION"
-for pkg in muster_module muster_ui; do
+for pkg in $PACKAGES; do
   echo "  $(sha256_of "$ASSETS/$(asset "$pkg")")  $ASSETS/$(asset "$pkg")"
 done
 if [ -n "$LOCAL" ]; then
@@ -251,7 +304,7 @@ cat <<EOF
 Nothing is published. To publish $TAG:
   1. gh release create $TAG --repo corpetty/muster --target $COMMIT \\
        --title "Muster $VERSION" --notes "Muster $VERSION for Basecamp (${PLATFORMS// /, }). Install: docs/runbooks/install-from-catalogue.md" \\
-       $ASSETS/$(asset muster_module) $ASSETS/$(asset muster_ui)
+       $(for p in $PACKAGES; do printf '%s ' "$ASSETS/$(asset "$p")"; done)
   2. check each asset downloads:  curl -sSfLI $URL_BASE/$(asset muster_ui) | head -1
   3. git add catalog/index.json catalog/icons && git commit (Tested-Behavior trailer), PR to main.
 Basecamp reads $REPO_URL from main.

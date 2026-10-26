@@ -298,6 +298,32 @@ class MusterUi
     // xmrMsigSpendsJson [{intentId, state, signers, synced, signed, txids, last, wallet}].
     SLOT(void xmrMsigPropose(const QString &account, const QString &recipientsJson, const QString &feeCap, const QString &memo))
     SLOT(void loadXmrMsig())
+    // lez-msig (exo-0d3, docs/design/lez-msig.md): an M-of-N multisig on LEZ whose program
+    // checks the members' approvals at execution. Open a creation ceremony in the room
+    // (specJson {threshold, timelockMs?, members?}); every invited member's client joins
+    // with its own approval key and the opener's client creates and discloses it. The open
+    // result lands on lezMsigOpenJson ({createKey, …} or {error, detail}); the room's
+    // ceremonies on lezMsigCeremoniesJson [{createKey, members: [{id, joined}], threshold,
+    // ready, account, …}]; the room's lez-msig account's state, read from the chain, on
+    // lezMsigStateJson ({epoch, balance, config, queue, myKey} or {error}).
+    SLOT(void lezMsigOpen(const QString &specJson))
+    // Propose from the room's lez-msig account: actionJson {kind: transfer, to, amount} |
+    // {kind: config, changes} | {kind: cancel, nonces}. Lands on lezMsigProposeJson
+    // ({intentId, nonce, epoch} or {error, detail}).
+    SLOT(void lezMsigPropose(const QString &actionJson))
+    // A deposit into a PRIVATE lez-msig's vault from this member's own LEZ account (exo-efa):
+    // amount in base units. Lands on lezMsigFundJson ({job, amount, payer} or {error, detail}).
+    SLOT(void lezMsigFund(const QString &account, const QString &amount))
+    // Read a private lez-msig's newest note from the chain (exo-abc). Lands on
+    // lezMsigRecoverJson ({job} or {error, detail}).
+    SLOT(void lezMsigRecover(const QString &account))
+    // A member's own accounts, disclosed to the room (exo-1f9). discloseMyAccount(specJson
+    // {which: new | payer, name?, chain?}) lands on discloseAccountJson ({id, base58, …} or
+    // {error, detail}); the room's disclosed accounts on memberAccountsJson [{member,
+    // memberName, mine, id, chain, kind, name, key, base58}], refreshed with loadLezMsig.
+    SLOT(void discloseMyAccount(const QString &specJson))
+    SLOT(void retractMyAccount(const QString &accountId))
+    SLOT(void loadLezMsig())
     // The information-flow view (coordinate_flow, exo-002.5): who could see what,
     // for every action — {rows:[{seq,kind,intentId,field,to,members,epoch,declared}],
     // matrix:{observer:[fields]}}. A fold over the sealed log (no RPC), refreshed on
@@ -415,6 +441,14 @@ class MusterUi
     PROP(QString xmrMsigSetupJson="{}" READONLY)
     PROP(QString xmrMsigSpendsJson="[]" READONLY)
     PROP(QString xmrMsigProposeJson="{}" READONLY)
+    PROP(QString lezMsigCeremoniesJson="[]" READONLY)
+    PROP(QString lezMsigOpenJson="{}" READONLY)
+    PROP(QString lezMsigProposeJson="{}" READONLY)
+    PROP(QString lezMsigFundJson="{}" READONLY)
+    PROP(QString lezMsigRecoverJson="{}" READONLY)
+    PROP(QString memberAccountsJson="[]" READONLY)
+    PROP(QString discloseAccountJson="{}" READONLY)
+    PROP(QString lezMsigStateJson="{}" READONLY)
     // The room's information flow (loadFlow): {rows, matrix}. The Room renders the
     // observer matrix + per-action rows; the store node is always present (FS-9).
     PROP(QString flowJson="{\"rows\":[],\"matrix\":{}}" READONLY)
