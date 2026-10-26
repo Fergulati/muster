@@ -234,26 +234,54 @@ authorship signatures with this room identity", without asking each time.
 
 ## 5. What exists against what Muster needs
 
-| Need | Today | Gap |
-|---|---|---|
-| EVM tx through one sender | `tx_sender_module` | — |
-| EIP-712 typed approval and attestation | digest legs in `keystore_module` | typed legs, field display (K6c–d) |
-| EVM key derivation per context | HD groups in `keystore_module` | context derivation without disclosing paths |
-| Ed25519 / X25519 room identity | Muster's keystore only | a platform identity signer with standing grants |
-| Bitcoin PSBT signing | none | a PSBT signer |
-| LEZ public tx for any program, chosen payer | `lez_core` builds and signs its own | callers supply the call; the signer shows it |
-| LEZ domain-separated message | none | `sign_message` (drafted upstream ask) |
-| LEZ private rails | `lez_core` (synchronous calls) | jobs and progress events |
-| Group-owned private accounts | `lez_msig_module` + Muster's keystore | a signer that holds and shares group secrets |
-| FROST | Muster's keystore (demo-grade) | constant-time, signer-held ceremony state |
-| Monero request / send | `monero_wallet_backend` | — |
-| Monero multisig rounds | the member's `monero-wallet-rpc` | a platform module |
-| Possession proofs | Muster's keystore | `prove_possession` |
-| Context-derived fresh keys | Muster's labels | `derive_key(purpose, context)` |
-| One approval contract across families | EVM only | §4 for every kind |
-| Every platform | mixed (`lez_msig_module` linux-amd64) | all four |
+Updated 2026-10-25. The platform already has the aggregator this spec asks for:
+- `logos.signer/1` (logos-co/logos-signer-interface);
+- `signer_manager_module`, which has `keystore_module`'s approval contract and unlock terms,
+  "without asking" included;
+- signers behind them: the keystore, Keycard, Keycard Shell, QR, Ledger and Trezor.
 
----
+What Muster lacked is built on three branches under corpetty, proposed upstream and not yet merged
+(epic exo-833; drafts in corpetty/logos-signer-module `docs/upstream/`).
+
+| Need | Upstream today | On the branches | Gap |
+|---|---|---|---|
+| EVM tx through one sender | `tx_sender_module` | — | — |
+| EIP-712 typed approval and attestation | the manager renders typed data field by field | — | the attestation's typed form (K6c–d) |
+| Bitcoin PSBT signing | keystore (BIP84/86) and the manager read PSBTs | — | multisig inputs (P2WSH, tapscript), FROST key path |
+| Ed25519 room identity | none | keystore identity groups; manager `record` legs | merge upstream |
+| X25519 open, derived secret | none | keystore `identity_open` / `identity_secret`; manager `open` / `secret` legs | decision: where decryption lives |
+| Context-derived fresh keys | fixed BIP-44/84/86 paths | `m/7432'/0'/c0'…c7'` per purpose and context, from the kept phrase | who may ask for one (custodian only today); the purpose number |
+| Standing grants | manager unlock terms (`ttlMs`, `count`, `apps`, `confirm: false`) | used as is for identities | — |
+| One phrase, kept once | keystore kept phrases (#28) | identity groups use them | — |
+| LEZ public tx for any program, chosen payer | `lez_core` (`payer_account_id_hex`) | — | callers supply the call; the signer shows it |
+| LEZ domain-separated message | none | — | `sign_message` (drafted upstream ask) |
+| LEZ private rails | `lez_core` (synchronous calls) | — | jobs and progress events |
+| Group-owned private accounts | `lez_msig_module` + Muster's keystore | — | a signer that holds and shares group secrets |
+| FROST | Muster's keystore (demo-grade) | — | constant-time, signer-held ceremony state |
+| Monero request / send | `monero_wallet_backend` | — | — |
+| Monero multisig rounds | the member's `monero-wallet-rpc` | — | a platform module |
+| Possession proofs | Muster's keystore | — | a record leg covers an Ed25519 proof; BIP-340 waits on LEZ messages |
+| Every platform | mixed (`lez_msig_module` linux-amd64) | the branches are pure Rust | — |
+
+Muster's side so far (exo-833.3):
+- `Keystore.edSignRecord` passes the routine signatures (authorship, after-claims, join requests)
+  as records, so the manager can show what it signs.
+- `PlatformIdentityKeystore` (`module/src/crypto/platform_identity.nim`) holds the room identity
+  in the person's keystore_module, through the manager. It signs records, opens sealed grants and
+  derives the founding key with `record`, `open` and `secret` legs, inside the unlock the person
+  granted muster, and refuses a locked identity with its remedy. The authorization key and
+  everything else stay with muster's own keystore. Held byte for byte to a local keystore with the
+  same key (`platform_identity_test`).
+- `identity_platform_request` / `identity_platform_status` ask the manager's `request_identity`
+  for a key derived for `muster_module/default`, and set `identity-backend` once the person
+  approves, only while no room is joined.
+- Live under logoscore 0.3.1 (`scripts/platform-identity-logoscore-test.sh`, 2026-10-26): with
+  the forked keystore and manager, and the manager's probe as the keys app, muster asks, the keys
+  app approves, and muster founds a room and posts a message under a key derived for
+  `muster_module/default`, with no prompt; after the keys app locks it, the next post is refused
+  at once with its remedy, and nothing is left pending.
+- Not yet: a key per room (the seam is not room-scoped), the approval-bearing Ed25519 signatures
+  (live, vote, Monero multisig rounds, still raw bytes), and the UI that raises the keys app.
 
 ## 6. How Muster will test the module
 

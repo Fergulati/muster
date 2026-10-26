@@ -108,6 +108,8 @@ import ../src/coordination/settle_up    # net several splits into fewer payments
 import ../src/transport/rln_status     # the node's RLN membership as a connectivity row (exo-eb6.3)
 import ../src/transport/rln_probe      # …read from delivery and the two RLN modules
 import ../src/wallet/keystore_status   # the official EVM keystore as a status row (exo-149.1 K1)
+import ../src/crypto/platform_identity     # the room identity held by the platform (exo-833)
+import ../src/crypto/platform_identity_lp  # …reached through signer_manager_module over lp_*
 import ../src/wallet/keystore_probe    # …read from keystore_module over lp_*
 import ../src/wallet/chain_endpoint    # an EVM endpoint: a URL, or the platform's eth_rpc_module (exo-d4d.3)
 import ../src/wallet/eth_rpc_lp        # …eth_rpc_module over lp_*
@@ -369,6 +371,11 @@ var gKeystoreAccount = ""
 var gKeystoreBinding = ""
   ## …and its F-14 binding (encodeLink hex), signed once at selection; public, so it is
   ## saved beside the other settings and published beside each approval
+var gIdentityBackend = "local"
+  ## exo-833: "local" (the identity in muster's own keyfile) or "platform:<Ed25519 public key>",
+  ## an identity key the person's keystore_module holds, reached through signer_manager_module
+  ## (identity_platform_request). Changed only while this instance has joined no room: a room
+  ## knows a member by its identity, and grants sealed to the old one would not open.
 var gSettingsLoaded = false
 var gDeliverySaved = false          ## did the user persist a delivery choice? (else env/default)
 proc loadSettingsFile() =
@@ -390,6 +397,7 @@ proc loadSettingsFile() =
       if j.hasKey("keystoreBackend"): gKeystoreBackend = j["keystoreBackend"].getStr("auto")
       if j.hasKey("keystoreAccount"): gKeystoreAccount = j["keystoreAccount"].getStr()
       if j.hasKey("keystoreBinding"): gKeystoreBinding = j["keystoreBinding"].getStr()
+      if j.hasKey("identityBackend"): gIdentityBackend = j["identityBackend"].getStr("local")
       if j.hasKey("delivery"):
         gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
         gDeliverySaved = true
@@ -424,7 +432,8 @@ proc saveSettingsFile() =
                                    "lezMultisigProgram": gLezProgram, "lezMsigProgram": gLezMsigProgram,
                                    "keystoreBackend": gKeystoreBackend,
                                    "keystoreAccount": gKeystoreAccount,
-                                   "keystoreBinding": gKeystoreBinding}))
+                                   "keystoreBinding": gKeystoreBinding,
+                                   "identityBackend": gIdentityBackend}))
   except CatchableError: discard
 
 proc toSig65(b: seq[byte]): Signature65 =
@@ -521,6 +530,12 @@ proc moduleKeystore(): Keystore =
         "(scripts/demo-peer.sh … --isolate --fresh does this for you); otherwise " &
         "set the passphrase this keyfile was created with.")
     loadSettingsFile()      # infra settings live beside the identity — load them once
+    # exo-833: the room identity in the person's keystore_module, the rest of this keystore kept
+    if gIdentityBackend.startsWith("platform:"):
+      try:
+        gKeystore = newPlatformIdentityKeystore(gKeystore, managerPort(), gIdentityBackend[9 .. ^1])
+      except KeystoreError as e:
+        raise newException(KeystoreError, "identity-backend " & gIdentityBackend & ": " & e.msg)
   gKeystore
 
 proc myAddress(): Address = moduleKeystore().address()
@@ -5513,6 +5528,7 @@ proc musterSettings(): string =
     "rpc": gRpcUrl, "rpcMasked": redactUrl(gRpcUrl),
     "relayer": gRelayer,
     "evmChains": gEvmChains,                 # where EVM chains are read (exo-d4d.3)
+    "identityBackend": gIdentityBackend,     # where the room identity lives (exo-833)
     "evmPlatform": evmPlatform(),            # …and whether that is eth_rpc_module right now
     "btcRpc": gBtcRpc, "btcRpcMasked": redactUrl(gBtcRpc),
     "xmrMsigRpc": gXmrMsigRpc, "xmrMsigRpcMasked": redactUrl(gXmrMsigRpc),
@@ -5594,6 +5610,17 @@ proc musterSetSetting(key, value: string): string =
     if v.len != 64 or not v.allCharsInSet(HexDigits):
       return $(%*{"error": "lez-multisig-program is the program's image id: 64 hex characters"})
     gLezProgram = v
+  of "identity-backend":
+    # exo-833: where the room identity lives. Only while no room is joined (gIdentityBackend).
+    let v = value.strip().toLowerAscii()
+    let pk = (if v.startsWith("platform:"): v[9 .. ^1] else: "")
+    if v != "local" and (pk.len != 64 or not pk.allCharsInSet(HexDigits)):
+      return $(%*{"error": "identity-backend is \"local\" or \"platform:<Ed25519 public key, 64 hex>\" (identity_platform_status gives it)"})
+    if v != gIdentityBackend:
+      if loadJoinedRooms(joinedRoomsPath()).len > 0:
+        return $(%*{"error": "identity-backend changes only before any room is joined: each room knows this member by its identity"})
+      gIdentityBackend = v
+      gKeystore = nil        # the next use opens the keyfile again and wraps it as set
   of "keystore-backend":
     # exo-149.2: whether a keystore_module account may approve in-room. "interim" carries
     # muster's attestation as an opaque digest leg the signer cannot read (the card says
@@ -5620,3 +5647,41 @@ proc musterSetSetting(key, value: string): string =
     return $(%*{"error": "unknown setting: " & key})
   saveSettingsFile()         # persist beside the keystore, so it survives a restart
   musterSettings()
+
+# ── the room identity held by the platform (exo-833) ─────────────────────────────
+# The person's keystore_module makes muster an identity key of its own (signer_manager_module
+# request_identity, derived for muster_module/<context>) once they approve it in the keys app,
+# unlocked for muster with confirm false so authorship needs no prompt per message. The request's
+# receipt stays in this process's memory; a relaunch while it waits asks again.
+var gIdReq: tuple[handle, receipt: string]
+
+const IdentityContext = "default"
+  ## One identity for every room for now; a key per room (rule 8) needs a room-scoped seam.
+
+proc musterIdentity_platform_request(): string =
+  let params = %*{"purpose": "room-identity", "context": IdentityContext,
+                  "unlock": {"apps": ["muster_module"], "confirm": false},
+                  "reason": "Muster signs your room messages with it and opens what rooms seal to you"}
+  let r = lpCall("request_identity", %*[$params])
+  if r == nil:
+    return $(%*{"ok": false, "error": "signer_manager_module did not answer",
+                "install": "signer_manager_module"})
+  if not r{"ok"}.getBool(false): return $r
+  gIdReq = (r{"handle"}.getStr(), r{"receipt"}.getStr())
+  $(%*{"ok": true, "handle": gIdReq.handle, "state": r{"state"}.getStr("offered")})
+
+proc musterIdentity_platform_status(): string =
+  if gIdReq.handle.len == 0:
+    return $(%*{"state": "none", "backend": gIdentityBackend})
+  let f = lpCall("fetch_result", %*[gIdReq.handle, gIdReq.receipt])
+  if f == nil or not f{"ok"}.getBool(false) or f{"result"}.isNil:
+    return $(%*{"state": "waiting", "handle": gIdReq.handle, "backend": gIdentityBackend})
+  let res = f{"result"}
+  let pk = res{"publicKey"}.getStr()
+  discard lpCall("ack_result", %*[gIdReq.handle, gIdReq.receipt])
+  gIdReq = ("", "")
+  let applied = musterSetSetting("identity-backend", "platform:" & pk)
+  let ok = not parseJson(applied).hasKey("error")
+  $(%*{"state": "ready", "publicKey": pk, "account": res{"account"}.getStr(),
+       "context": res{"context"}.getStr(), "unlocked": res{"unlocked"},
+       "applied": ok, "detail": (if ok: "" else: parseJson(applied){"error"}.getStr())})

@@ -65,6 +65,14 @@ method edSign*(ks: Keystore, msg: openArray[byte]): Ed25519Sig {.base.} =
   ## never leaves the keystore — a Keycard backend signs on the card.
   raise newException(KeystoreError, "Keystore.edSign is abstract")
 
+method edSignRecord*(ks: Keystore, hi: HashInput): Ed25519Sig {.base.} =
+  ## Ed25519 over SHA-256 of a domain-separated record: the routine signatures (authorship,
+  ## after-claims, join requests). The default signs `digest(hi)`, the exact bytes those call
+  ## sites signed before. A backend whose signer reads records rather than digests (the
+  ## platform's signer manager, exo-833) overrides it to hand over the record itself, so the
+  ## signer can show it and compute the digest on its own.
+  ks.edSign(digest(hi))
+
 method encIdentity*(ks: Keystore): EncIdentity {.base.} =
   ## Our public encryption identity (Ed25519 + X25519) — announced to be admitted,
   ## and what a binding vouches for.
@@ -92,9 +100,13 @@ method foundingKey*(ks: Keystore, room: string): array[32, byte] {.base.} =
   ## and open, as it holds the keys grants deliver.
   raise newException(KeystoreError, "Keystore.foundingKey is abstract")
 
-proc foundingInfo(room: string): seq[byte] =
+proc foundingRecord*(room: string): HashInput =
+  ## The record a room's founding key is derived over (the HMAC's message, in its encoding).
   if room.len == 0: raise newException(KeystoreError, "a founding key needs a room")
-  encodeHashInput(hashInput("muster.room.founding-key.v1", @[("room", cbText(room))]))
+  hashInput("muster.room.founding-key.v1", @[("room", cbText(room))])
+
+proc foundingInfo(room: string): seq[byte] =
+  encodeHashInput(foundingRecord(room))
 
 # ── keyed operations (exo-45e K2b) ─────────────────────────────────────────────
 # The keystore custodies a SET of authorization keys; a caller selects one by ref. The
@@ -232,7 +244,8 @@ proc makeBinding(ks: Keystore, ctx: LinkContext): LinkStatement =
 proc joinRequestFor*(ks: Keystore, room: string, expiry: uint64): JoinRequest =
   ## Ask to join `room` as our encryption identity, signed by it (exo-a87). It names no
   ## secp key: asking to join discloses the encryption identity and nothing else.
-  issueJoinRequest((proc(m: seq[byte]): Ed25519Sig = ks.edSign(m)), ks.encIdentity(), room, expiry)
+  let enc = ks.encIdentity()
+  JoinRequest(enc: enc, room: room, expiry: expiry, sig: ks.edSignRecord(joinRecord(enc, room, expiry)))
 
 # ── FileKeystore — the Argon2id-encrypted-keyfile stopgap ──────────────────────
 
