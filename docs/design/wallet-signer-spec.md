@@ -275,6 +275,11 @@ Muster's side so far (exo-833.3):
 - `identity_platform_request` / `identity_platform_status` ask the manager's `request_identity`
   for a key derived for `muster_module/default`, and set `identity-backend` once the person
   approves, only while no room is joined.
+- Live under logoscore 0.3.1 (`scripts/platform-identity-logoscore-test.sh`, 2026-10-26): with
+  the forked keystore and manager, and the manager's probe as the keys app, muster asks, the keys
+  app approves, and muster founds a room and posts a message under a key derived for
+  `muster_module/default`, with no prompt; after the keys app locks it, the next post is refused
+  at once with its remedy, and nothing is left pending.
 - Not yet: a key per room (the seam is not room-scoped), the approval-bearing Ed25519 signatures
   (live, vote, Monero multisig rounds, still raw bytes), and the UI that raises the keys app.
 
