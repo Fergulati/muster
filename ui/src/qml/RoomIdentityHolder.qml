@@ -9,7 +9,9 @@ import Logos.Controls
 // which this opens on the request (keystore.accounts.open {handle}); Muster never sees the
 // phrase or the key. Each room knows you by your identity, so it moves only before you join
 // one. Once in the wallet it is unlocked for Muster alone; when that runs out, room messages
-// are refused until you unlock it again here.
+// are refused until you unlock it again here. Moving it is offered in Advanced only: a
+// stock Basecamp's wallet cannot hold it yet (the signer manager's request_identity and the
+// keystore's identity keys are proposed upstream, exo-833.2).
 ColumnLayout {
     id: holder
     property var backend: null
@@ -108,14 +110,14 @@ ColumnLayout {
     // ── moving it to the wallet ──
     ActionButton {
         objectName: "identityHolderMove"
-        visible: !holder.onPlatform && holder.st.changeable === true && !holder.waiting
+        visible: holder.advanced && !holder.onPlatform && holder.st.changeable === true && !holder.waiting
         text: qsTr("Keep it in my Basecamp wallet")
         variant: LogosButton.Variant.Secondary
         onClicked: if (holder.backend) holder.backend.identityPlatformRequest()
     }
     LogosText {
         Layout.fillWidth: true
-        visible: !holder.onPlatform && holder.st.changeable !== undefined
+        visible: holder.advanced && !holder.onPlatform && holder.st.changeable !== undefined
         wrapMode: Text.WordWrap
         text: holder.st.changeable === true
               ? qsTr("Your wallet makes a key for Muster alone from the phrase it already keeps, so a restore brings it back. "
