@@ -132,6 +132,7 @@ import ../src/coordination/swarm       # FileShare: the room as tracker (exo-4d0
 import ../src/coordination/swarm_live  # FileShare: share, fetch and seed from a pump (exo-4d0.5)
 import std/mimetypes
 import ../src/wallet/summary         # what the Wallet page shows: what this instance was given (exo-f37)
+import ../src/wallet/support         # Like Muster?: the pinned tip addresses (exo-168)
 import ../src/monero/address as xmraddr # the payTo rules and the CAIP-2 map (ADR-018)
 
 proc hexToBytes(s: string): seq[byte] =
@@ -376,6 +377,8 @@ var gIdentityBackend = "local"
   ## an identity key the person's keystore_module holds, reached through signer_manager_module
   ## (identity_platform_request). Changed only while this instance has joined no room: a room
   ## knows a member by its identity, and grants sealed to the old one would not open.
+var gSupportPrompt = ""
+  ## exo-168: "dismissed" once the person closed the Like Muster? prompt; kept on this machine only
 var gSettingsLoaded = false
 var gDeliverySaved = false          ## did the user persist a delivery choice? (else env/default)
 proc loadSettingsFile() =
@@ -398,6 +401,7 @@ proc loadSettingsFile() =
       if j.hasKey("keystoreAccount"): gKeystoreAccount = j["keystoreAccount"].getStr()
       if j.hasKey("keystoreBinding"): gKeystoreBinding = j["keystoreBinding"].getStr()
       if j.hasKey("identityBackend"): gIdentityBackend = j["identityBackend"].getStr("local")
+      if j.hasKey("supportPrompt"): gSupportPrompt = j["supportPrompt"].getStr()
       if j.hasKey("delivery"):
         gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
         gDeliverySaved = true
@@ -433,7 +437,8 @@ proc saveSettingsFile() =
                                    "keystoreBackend": gKeystoreBackend,
                                    "keystoreAccount": gKeystoreAccount,
                                    "keystoreBinding": gKeystoreBinding,
-                                   "identityBackend": gIdentityBackend}))
+                                   "identityBackend": gIdentityBackend,
+                                   "supportPrompt": gSupportPrompt}))
   except CatchableError: discard
 
 proc toSig65(b: seq[byte]): Signature65 =
@@ -5351,7 +5356,7 @@ proc walletRows(keep: proc(chain: string): bool): JsonNode =
       # consensus state root (wallet_verified_balance), which needs the beacon
       # light-client sidecar. The UI renders the grade so the user sees which it is.
       var entry = %*{"chain": acc.chain, "account": acc.id, "asset": asset.symbol,
-                     "grade": "attested"}
+                     "form": $acc.form, "grade": "attested"}
       try:
         let bal = w.balance(acc.chain, acc, asset)
         entry["display"] = %bal.display()
@@ -5364,7 +5369,7 @@ proc walletRows(keep: proc(chain: string): bool): JsonNode =
 proc musterWalletBalances(): string =
   $walletRows(proc(chain: string): bool = true)
 
-proc musterWalletSummary(): string =
+proc walletSummaryNow(): JsonNode =
   ## The Wallet page (exo-f37): the wallets this instance has been given — under the
   ## platform the keystore account chosen for Muster, the Monero wallet open in Monero
   ## Wallet, the LEZ wallet — each with its balances, and how to connect the rest. Never
@@ -5393,7 +5398,15 @@ proc musterWalletSummary(): string =
     try: state = $gradeModuleRecord(MoneroBackendModule, rec(MoneroBackendModule)).state
     except CatchableError: discard
   inputs.monero = moneroViewFor(state, proc(): MoneroBackend = moneroBackend())
-  result = $walletSummary(inputs)
+  walletSummary(inputs)
+
+var gLastSummary: JsonNode
+  ## the Wallet page's last summary: what Like Muster? offers to send from, without
+  ## reading every chain again (exo-168)
+
+proc musterWalletSummary(): string =
+  gLastSummary = walletSummaryNow()
+  result = $gLastSummary
   lpDebugOnChange("wallet-summary", result)
 
 proc accountFormOf(w: Wallet, chain, id: string): AccountForm
@@ -5450,6 +5463,37 @@ proc musterWalletSendImpl(chain, fromId, to, assetSymbol, raw: string): string =
 proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
   result = musterWalletSendImpl(chain, fromId, to, assetSymbol, raw)
   if gLpDebug: stderr.writeLine("MUSTER-LP wallet_send " & chain & " " & raw & " " & result)
+
+# ── Like Muster? (exo-168) ──────────────────────────────────────────────────────
+# The project's tip addresses are pinned in wallet/support.json; support.nim holds the
+# rules. A tip goes only to a pinned address, from a sender the options offered.
+
+proc supportOptionsNow(): JsonNode =
+  ## From the summary the Wallet page last read (its 10 s poll), so opening the modal
+  ## repeats no chain read; read once here only if the page never has.
+  loadSettingsFile()
+  if gLastSummary == nil: gLastSummary = walletSummaryNow()
+  let t = supportTable()
+  supportOptions(t.about, t.addresses, gLastSummary, gSupportPrompt)
+
+proc musterSupport_options(): string =
+  try: $supportOptionsNow()
+  except CatchableError as e: $(%*{"error": e.msg})
+
+proc musterSupport_send(option_id, from_id, asset_symbol, amount: string): string =
+  try:
+    let offered = offeredSender(supportOptionsNow(), option_id, from_id, asset_symbol)
+    if not offered.ok: return $(%*{"error": offered.reason})
+    let asset = assetBySymbol(moduleWallet(), offered.chain, asset_symbol)
+    let units = toBaseUnits(amount, asset.decimals)
+    if not units.ok: return $(%*{"error": units.reason})
+    var r = parseJson(musterWalletSendImpl(offered.chain, from_id, offered.address, asset_symbol, units.raw))
+    if r.kind == JObject and not r.hasKey("error"):
+      r["option"] = %option_id
+      r["raw"] = %units.raw
+    $r
+  except CatchableError as e:
+    $(%*{"error": e.msg})
 
 proc musterWalletLezSetup(): string =
   ## Headless LEZ provisioning FALLBACK (exo-44b, the no-broker path): ensure a public
@@ -5634,6 +5678,11 @@ proc musterSetSetting(key, value: string): string =
     # over the env on the next launch.
     gDeliveryConfig = deliveryConfigFor(value)
     gDeliverySaved = true
+  of "support-prompt":
+    # exo-168: the Like Muster? prompt, shown once; "" shows it again
+    if value notin ["", "dismissed"]:
+      return $(%*{"error": "support-prompt is \"dismissed\" or \"\""})
+    gSupportPrompt = value
   of "mix":
     # whether this node sends through the mixnet (exo-dcc.4); like "delivery", the NEXT
     # room joined (or relaunch) boots with it

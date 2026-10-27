@@ -36,6 +36,8 @@ public:
     void loadBalances() override;
     void loadWalletAccounts() override;
     void loadWalletSummary() override;
+    void loadSupport() override;
+    void sendSupport(const QString &optionId, const QString &fromId, const QString &asset, const QString &amount) override;
 
     // FileShare (exo-4d0): the room's shared files, through muster_module's fileshare_*.
     void loadFileShare() override;

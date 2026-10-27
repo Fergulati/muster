@@ -5,7 +5,7 @@ import QtQuick
 
 QtObject {
     // the contract's PROP names, in .rep order (the recorder snapshots exactly these)
-    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "walletSummaryJson", "fileShareJson", "fileShareResultJson"]
+    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "lezMsigCeremoniesJson", "lezMsigOpenJson", "lezMsigProposeJson", "lezMsigFundJson", "lezMsigRecoverJson", "memberAccountsJson", "discloseAccountJson", "lezMsigStateJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "walletSummaryJson", "supportJson", "supportSendJson", "fileShareJson", "fileShareResultJson"]
     // every SLOT call, in order: [{slot, args}]
     property var calls: []
     function record(slot, args) { calls.push({ slot: slot, args: Array.prototype.slice.call(args) }); }
@@ -53,6 +53,14 @@ QtObject {
     property string xmrMsigSetupJson: "{}"
     property string xmrMsigSpendsJson: "[]"
     property string xmrMsigProposeJson: "{}"
+    property string lezMsigCeremoniesJson: "[]"
+    property string lezMsigOpenJson: "{}"
+    property string lezMsigProposeJson: "{}"
+    property string lezMsigFundJson: "{}"
+    property string lezMsigRecoverJson: "{}"
+    property string memberAccountsJson: "[]"
+    property string discloseAccountJson: "{}"
+    property string lezMsigStateJson: "{}"
     property string flowJson: "{\"rows\":[],\"matrix\":{}}"
     property string graphJson: "{}"
     property string policyJson: "{\"policy\":\"threshold\",\"kind\":\"threshold\"}"
@@ -70,6 +78,8 @@ QtObject {
     property string keystoreStatusJson: "{}"
     property string keystoreRequestsJson: "{}"
     property string walletSummaryJson: "{}"
+    property string supportJson: "{}"
+    property string supportSendJson: "{}"
     property string fileShareJson: "{}"
     property string fileShareResultJson: ""
 
@@ -150,6 +160,13 @@ QtObject {
     function xmrMsigSetupJoin(ceremonyId) { record("xmrMsigSetupJoin", arguments); }
     function xmrMsigPropose(account, recipientsJson, feeCap, memo) { record("xmrMsigPropose", arguments); }
     function loadXmrMsig() { record("loadXmrMsig", arguments); }
+    function lezMsigOpen(specJson) { record("lezMsigOpen", arguments); }
+    function lezMsigPropose(actionJson) { record("lezMsigPropose", arguments); }
+    function lezMsigFund(account, amount) { record("lezMsigFund", arguments); }
+    function lezMsigRecover(account) { record("lezMsigRecover", arguments); }
+    function discloseMyAccount(specJson) { record("discloseMyAccount", arguments); }
+    function retractMyAccount(accountId) { record("retractMyAccount", arguments); }
+    function loadLezMsig() { record("loadLezMsig", arguments); }
     function loadFlow() { record("loadFlow", arguments); }
     function loadGraph(roomTopic) { record("loadGraph", arguments); }
     function loadRlnStatus() { record("loadRlnStatus", arguments); }
@@ -157,6 +174,8 @@ QtObject {
     function keystoreSelect(address) { record("keystoreSelect", arguments); }
     function loadKeystoreRequests() { record("loadKeystoreRequests", arguments); }
     function loadWalletSummary() { record("loadWalletSummary", arguments); }
+    function loadSupport() { record("loadSupport", arguments); }
+    function sendSupport(optionId, fromId, asset, amount) { record("sendSupport", arguments); }
     function loadFileShare() { record("loadFileShare", arguments); }
     function shareFile(path) { record("shareFile", arguments); }
     function fetchFile(fileId, folder, privately) { record("fetchFile", arguments); }
