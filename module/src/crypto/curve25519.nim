@@ -68,6 +68,14 @@ proc encFromSeed*(seed: array[32, byte]): EncKeys =
 
 proc identity*(k: EncKeys): EncIdentity = EncIdentity(ed: k.edPk, x: k.xPk)
 
+proc identityOfEd*(ed: Ed25519Pub): EncIdentity =
+  ## The identity an Ed25519 public key stands for: itself and the X25519 key libsodium derives
+  ## from it. How a member's identity is known when its secret lives elsewhere (exo-833).
+  result.ed = ed
+  var e = ed
+  if crypto_sign_ed25519_pk_to_curve25519(addr result.x[0], addr e[0]) != 0:
+    raise newException(Curve25519Error, "not an Ed25519 public key")
+
 proc derivedSecret*(k: EncKeys, info: openArray[byte]): array[32, byte] =
   ## HMAC-SHA256 under this identity's seed (the first half of libsodium's Ed25519
   ## secret) over `info`: a one-way, single-purpose secret, the same on every launch
