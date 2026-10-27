@@ -532,6 +532,17 @@ class MusterUi
     // connect:[{id, name, how, action, package?}], checking:[name]}. Polled while open.
     SLOT(void loadWalletSummary())
     PROP(QString walletSummaryJson="{}" READONLY)
+    // Like Muster? (support_options, exo-168): the project's pinned tip addresses, each with
+    // who sees a payment and the connected wallets that can send to it — {prompt, connected,
+    // about, options:[{id, chain, name, testnet, address, for, uri, discloses, senders}]}.
+    // sendSupport tips `amount` (a decimal) of `asset` from `fromId` to option `optionId`'s
+    // pinned address (support_send; the view never names the address) → supportSendJson,
+    // {txId, chain, option, raw} or {error}. Dismissing the prompt is setSetting
+    // ("support-prompt", "dismissed").
+    SLOT(void loadSupport())
+    PROP(QString supportJson="{}" READONLY)
+    SLOT(void sendSupport(const QString &optionId, const QString &fromId, const QString &asset, const QString &amount))
+    PROP(QString supportSendJson="{}" READONLY)
 
     // FileShare (the room swarm, exo-4d0, docs/design/room-swarm.md): files shared in the
     // joined room, sealed before they leave this machine and moved by Logos Storage.

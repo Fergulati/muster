@@ -1,0 +1,26 @@
+{
+  "about": "Muster is a personal project on the Logos stack. A tip pays for its infrastructure, development time and audits; a testnet coin pays for the live test runs.",
+  "addresses": [
+    {"id": "eth", "chain": "evm:1", "name": "Ethereum", "kind": "evm", "testnet": false,
+     "address": "0x5e9bEa636CdaBB80F849Aa003Af9471eae4F1Fe0",
+     "for": "ETH or any token on Ethereum: infrastructure, development time and audits."},
+    {"id": "sepolia", "chain": "evm:11155111", "name": "Sepolia", "kind": "evm", "testnet": true,
+     "address": "0x5e9bEa636CdaBB80F849Aa003Af9471eae4F1Fe0",
+     "for": "Sepolia ETH pays the gas of the live Safe and split runs in Basecamp."},
+    {"id": "btc", "chain": "bip122:000000000019d6689c085ae165831e93", "name": "Bitcoin", "kind": "btc", "testnet": false,
+     "address": "bc1qhvavl7pkavcps39el8z68ndnd33zg5ycp6q3g8",
+     "for": "Infrastructure, development time and audits."},
+    {"id": "xmr", "chain": "monero:418015bb9ae982a1975da7d79277c270", "name": "Monero", "kind": "monero", "testnet": false,
+     "address": "46E9Jc5dkBS2Mw9DQkqabD2EW6otMwobJBhCqyAmAduNjGKUPsobYYk7s9xsFtx3PhACrwoCo37PVP6oC4VMbGPvF25Pb3v",
+     "for": "Infrastructure, development time and audits."},
+    {"id": "xmr-stagenet", "chain": "monero:76ee3cc98646292206cd3e86f74d88b4", "name": "Monero stagenet", "kind": "monero", "testnet": true,
+     "address": "56SBPSzbPnY2Mw9DQkqabD2EW6otMwobJBhCqyAmAduNjGKUPsobYYk7s9xsFtx3PhACrwoCo37PVP6oC4VMbGPvF6AoiDr",
+     "for": "Stagenet XMR pays for the first live XMR payment between two machines."},
+    {"id": "lez-testnet", "chain": "lez:testnet", "name": "LEZ testnet", "kind": "lez", "testnet": true,
+     "address": "priv:a605558956658bf25576683c578b977e7b77ebc0726c38bf28c15736c8d086b2:a680353963232caa89e7c7a7f0f0a2d8b41200985e08c03485a84888c9600043946508261ea8c483a128e2ab4698382bbf2a6eff40881c208570c4597a3075c92b293a47a133285e345293e40b6e7a3133c2c81e6ad96871b44336b6a5648631fb739f252ab661e657a9689ca430a5b8da6f40e026e0359eeab03d695b52192aaf23178d6f96a67c88bfa1662b62122f16f35c161b4387f797b6ea1c239ba468b642332aaada5144c30a4808acce97238dbe6c3728c589c5916dd5c2c2aaf85a743a9583c32b53ba1b75e880330a4c2b6150ba1c3d2e6a4f71f662d5c87d585c99e45445e5d242e5510a55b8851a712c18a844f5365be7167a75454db005b889188007d74832a531bcfa3441e284556986a2c8bf4c6a64d95b73133250697146d39bc54979b3d1d1910ce0b675e0603185492087228dac30983c49d84a987acb53dcc6842986c35fc88a3a7a93e63cbbca09ab2c050ec155106a769e57547330e96c7c1133d28c2799f356656b9153b0c41dbb908c9339c50a9c36722e6df61415e5a84a4c102de9caac56af012c53db1421c6110219e6126757758abc245d975c2b8c7e8e2c69343632d0d7769f220bf67cbc251b555040409431944c1ba0b3297aaf3c1775f23f876c6d11403eccb67df8cb326c00ba22133eb242357d872e797bb9cce5457bb6a3d9390e8ff37b965678b2056bf87c20ce479769f2c62003811c69c40de2bfc5ac3ed966a9dd67bd9b60c74e6b594d0caf0fa91d273c7fe702355cd0c704034155a36524ca97a4ac8b133427a9b619fa7b323fc9a061b60f6fc9bffb79502012c2367abcbe1696edaac9d561734df7218834388e954f8cca8998b17ac3c492e79ab4ac31b73b921f4618cbda88932d1135935b586400748d8011c0f7c80aa0270321a4d5467787dc6ef13a5626d880e80b82e3f1c6bb1a3320335fb7933b32842e755106e531378a066bd8a2c8a860a65a5b8bb0132552561a7e2a6bc2e7bea98a1ff0b6178b2306480928c9f487098789d3f78a909731c16499efb51399c7a14488002ef5c1b088677b15b9f23669dcbb717042b21d532e0035945b11c9a47897d40b62d8b36341282a1db623023468db28985b1abdecbc4455733ed45b9861283b33fb832fb04b64237150d0059d969567186cf9a86435b4704902672a0a13ddfab608bcaa99e763291c6029c9166627863e57725fc6638341a838aca702ec21c4428ad7eb5bfae5866747bc1f9b2bea0aa587976749c36dc5d61beb7a505bb03b8182934e3c1a30d7bdb3813e46a459d038b2decb5f331b29fa9aa1af99caad3b7dff463933613b1ef896c2279770e2c9d56770d24206a838ad1406043846c2863c6ee639025e37412366193044ac26824f754934c530199e1470edc78a01e59e929a31aa13555d6c6ca1d0513b9467463332be052341735ad198c2dfec1c03f8676bbcadb5d70414aa987e249b85fbb6e963979b74b7ef26a881e01cb4259215db836b9b95745460f9b36b94a21f5e66a6ae19bd920a0c6120827e95018b4347e041afea10b85955a4f623317c72bf20915a465831a7b13aea91140c9c7e31b914057b517e26c946fa262ab8c76efa865317c454438b5958f792c12be75592201e845da50b2b700f601b064dbe636f1f74b2ddeb0ba1",
+     "for": "Native LEZ funds the live LEZ runs: the private split, the multisig and FROST."},
+    {"id": "lez-classic", "chain": "lez:classic", "name": "LEZ classic", "kind": "lez", "testnet": true,
+     "address": "7LWFfE5HoUjZFXvQGNspQpouFN6ZQUm9NdsGB8vVrYKE",
+     "for": "Native LEZ on the RLN registry's zone pays for the room gifter's memberships on logos.test."}
+  ]
+}

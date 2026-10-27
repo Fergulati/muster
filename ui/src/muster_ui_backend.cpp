@@ -175,6 +175,23 @@ void MusterUiBackend::loadWalletSummary()
     setWalletSummaryJson(modules().muster_module.wallet_summary());
 }
 
+void MusterUiBackend::loadSupport()
+{
+    // Like Muster? (exo-168): the pinned tip addresses and the connected wallets that can
+    // send to them. The module decides; the backend holds nothing.
+    setSupportJson(modules().muster_module.support_options());
+}
+
+void MusterUiBackend::sendSupport(const QString &optionId, const QString &fromId, const QString &asset, const QString &amount)
+{
+    // A tip names an option, never an address: the module pays only a pinned one.
+    const QString r = modules().muster_module.support_send(optionId, fromId, asset, amount);
+    qInfo() << "[muster_ui] support_send" << optionId << asset << amount << "->" << r;
+    setSupportSendJson(r);
+    loadSupport();
+    loadWalletSummary();
+}
+
 // ── FileShare (exo-4d0, docs/design/room-swarm.md) ─────────────────────────────────
 // The module seals, uploads, fetches and verifies; the backend only carries its answers.
 // Each action re-reads the list so the view follows reduce(log).

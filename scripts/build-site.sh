@@ -4,6 +4,7 @@
 #   /            site/index.html — the landing page; /media/ its recordings (scripts/demo/)
 #   /diagrams/   docs/diagrams/ — the figure programme, its index, the substrates
 #   /atlas/      docs/design/multisig-atlas.html — the action atlas
+#   /support/    the tip addresses, from module/src/wallet/support.json (scripts/gen-support-page.py)
 #
 # The artifact is assembled by name, not docs/ wholesale (see pages.yml). Until
 # 2026-10-08 the diagrams were the site root, and posts link to their figures and
@@ -23,6 +24,8 @@ mkdir -p "$out/diagrams" "$out/atlas"
 
 cp -r "$root/docs/diagrams/." "$out/diagrams/"
 cp "$root/docs/design/multisig-atlas.html" "$out/atlas/index.html"
+# the addresses the app's Like Muster? button pays, from the file every build pins (exo-168)
+python3 "$root/scripts/gen-support-page.py" "$out/support/index.html"
 
 # The pre-2026-10-08 URLs: every figure, frame and substrate at the root.
 find "$root/docs/diagrams" -maxdepth 1 -type f \

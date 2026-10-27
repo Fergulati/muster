@@ -161,6 +161,19 @@ proc loadWalletSummaryDo(o: MusterUi, d: Done = nil) =
   # decides; the backend holds nothing.
   ask mm.wallet_summaryAsync(proc (r: string) = o.setWalletSummaryJson(r); fin(d, r))
 
+proc loadSupportDo(o: MusterUi, d: Done = nil) =
+  # Like Muster? (exo-168): the pinned tip addresses and the connected wallets that can
+  # send to them. The module decides; the backend holds nothing.
+  ask mm.support_optionsAsync(proc (r: string) = o.setSupportJson(r); fin(d, r))
+
+proc sendSupportDo(o: MusterUi, optionId, fromId, asset, amount: string) =
+  # A tip names an option, never an address: the module pays only a pinned one.
+  ask mm.support_sendAsync(optionId, fromId, asset, amount, proc (r: string) =
+    info "support_send " & optionId & " " & asset & " " & amount & " -> " & qs(r)
+    o.setSupportSendJson(r)
+    o.loadSupportDo()
+    o.loadWalletSummaryDo())
+
 proc loadXmrMsigDo(o: MusterUi, d: Done = nil) =
   ask mm.xmr_msig_setupsAsync(proc (r: string) = o.setXmrMsigSetupsJson(r))
   ask mm.xmr_msig_spendsAsync(proc (r: string) = o.setXmrMsigSpendsJson(r); fin(d, r))
@@ -1244,6 +1257,9 @@ proc retractMyAccountImpl(o: MusterUi, accountId: string) =
     o.loadLezMsigDo())
 proc loadLezMsigImpl(o: MusterUi) = o.loadLezMsigDo()
 proc loadWalletSummaryImpl(o: MusterUi) = o.loadWalletSummaryDo()
+proc loadSupportImpl(o: MusterUi) = o.loadSupportDo()
+proc sendSupportImpl(o: MusterUi, optionId, fromId, asset, amount: string) =
+  o.sendSupportDo(optionId, fromId, asset, amount)
 proc loadFlowImpl(o: MusterUi) = o.loadFlowDo()
 proc loadGraphImpl(o: MusterUi, roomTopic: string) = o.loadGraphDo(roomTopic)
 proc loadRlnStatusImpl(o: MusterUi) = o.loadRlnStatusDo()
