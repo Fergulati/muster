@@ -5,7 +5,7 @@ import QtQuick
 
 QtObject {
     // the contract's PROP names, in .rep order (the recorder snapshots exactly these)
-    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "lezMsigCeremoniesJson", "lezMsigOpenJson", "lezMsigProposeJson", "lezMsigFundJson", "lezMsigRecoverJson", "memberAccountsJson", "discloseAccountJson", "lezMsigStateJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "walletSummaryJson", "fileShareJson", "fileShareResultJson", "voiceJson", "voiceResultJson", "voiceResultSeq"]
+    readonly property var contractProps: ["health", "settingsJson", "accountJson", "intentId", "intentEffect", "intentTxhash", "intentState", "lastError", "balancesJson", "walletAccountsJson", "lezPreviewJson", "lezSendJson", "roomTopic", "messagesJson", "membersJson", "contactsJson", "intentsJson", "invitesJson", "activityJson", "connectivityJson", "securityLevelsJson", "roomAccountJson", "roomSubmitJson", "readinessJson", "offersJson", "composeOffersJson", "declineJson", "auditJson", "outsideJson", "outsideImportJson", "btcProposeJson", "splitJson", "tokenInfoJson", "openAssetsJson", "lezProposeJson", "lezMemberJson", "lezCreateJson", "frostCeremoniesJson", "frostCeremonyJson", "xmrMsigSetupsJson", "xmrMsigSetupJson", "xmrMsigSpendsJson", "xmrMsigProposeJson", "lezMsigCeremoniesJson", "lezMsigOpenJson", "lezMsigProposeJson", "lezMsigFundJson", "lezMsigRecoverJson", "memberAccountsJson", "discloseAccountJson", "lezMsigStateJson", "flowJson", "graphJson", "policyJson", "policyErrorJson", "accountsJson", "accountDiscloseJson", "driversJson", "availableActionsJson", "executeJson", "contributeJson", "conversationsJson", "pendingJson", "joinStatus", "rlnStatusJson", "keystoreStatusJson", "keystoreRequestsJson", "identityPlatformJson", "identityAskJson", "walletSummaryJson", "supportJson", "supportSendJson", "fileShareJson", "fileShareResultJson", "voiceJson", "voiceResultJson", "voiceResultSeq"]
     // every SLOT call, in order: [{slot, args}]
     property var calls: []
     function record(slot, args) { calls.push({ slot: slot, args: Array.prototype.slice.call(args) }); }
@@ -77,7 +77,11 @@ QtObject {
     property string rlnStatusJson: "{}"
     property string keystoreStatusJson: "{}"
     property string keystoreRequestsJson: "{}"
+    property string identityPlatformJson: "{}"
+    property string identityAskJson: "{}"
     property string walletSummaryJson: "{}"
+    property string supportJson: "{}"
+    property string supportSendJson: "{}"
     property string fileShareJson: "{}"
     property string fileShareResultJson: ""
     property string voiceJson: "{}"
@@ -174,7 +178,12 @@ QtObject {
     function loadKeystoreStatus() { record("loadKeystoreStatus", arguments); }
     function keystoreSelect(address) { record("keystoreSelect", arguments); }
     function loadKeystoreRequests() { record("loadKeystoreRequests", arguments); }
+    function loadIdentityPlatform() { record("loadIdentityPlatform", arguments); }
+    function identityPlatformRequest() { record("identityPlatformRequest", arguments); }
+    function identityPlatformUnlock() { record("identityPlatformUnlock", arguments); }
     function loadWalletSummary() { record("loadWalletSummary", arguments); }
+    function loadSupport() { record("loadSupport", arguments); }
+    function sendSupport(optionId, fromId, asset, amount) { record("sendSupport", arguments); }
     function loadFileShare() { record("loadFileShare", arguments); }
     function shareFile(path) { record("shareFile", arguments); }
     function fetchFile(fileId, folder, privately) { record("fetchFile", arguments); }

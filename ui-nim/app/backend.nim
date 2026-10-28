@@ -190,6 +190,19 @@ proc loadWalletSummaryDo(o: MusterUi, d: Done = nil) =
   # decides; the backend holds nothing.
   ask mm.wallet_summaryAsync(proc (r: string) = o.setWalletSummaryJson(r); fin(d, r))
 
+proc loadSupportDo(o: MusterUi, d: Done = nil) =
+  # Like Muster? (exo-168): the pinned tip addresses and the connected wallets that can
+  # send to them. The module decides; the backend holds nothing.
+  ask mm.support_optionsAsync(proc (r: string) = o.setSupportJson(r); fin(d, r))
+
+proc sendSupportDo(o: MusterUi, optionId, fromId, asset, amount: string) =
+  # A tip names an option, never an address: the module pays only a pinned one.
+  ask mm.support_sendAsync(optionId, fromId, asset, amount, proc (r: string) =
+    info "support_send " & optionId & " " & asset & " " & amount & " -> " & qs(r)
+    o.setSupportSendJson(r)
+    o.loadSupportDo()
+    o.loadWalletSummaryDo())
+
 proc loadXmrMsigDo(o: MusterUi, d: Done = nil) =
   ask mm.xmr_msig_setupsAsync(proc (r: string) = o.setXmrMsigSetupsJson(r))
   ask mm.xmr_msig_spendsAsync(proc (r: string) = o.setXmrMsigSpendsJson(r); fin(d, r))
@@ -229,6 +242,22 @@ proc loadKeystoreStatusDo(o: MusterUi, d: Done = nil) =
 
 proc loadKeystoreRequestsDo(o: MusterUi, d: Done = nil) =
   ask mm.keystore_requestsAsync(proc (r: string) = o.setKeystoreRequestsJson(r); fin(d, r))
+
+proc loadIdentityPlatformDo(o: MusterUi, d: Done = nil) =
+  # Where the room identity lives, and the ask in flight (exo-833); reading collects a decided one.
+  ask mm.identity_platform_statusAsync(proc (r: string) = o.setIdentityPlatformJson(r); fin(d, r))
+
+proc identityPlatformRequestDo(o: MusterUi) =
+  ask mm.identity_platform_requestAsync(proc (r: string) =
+    info "IDENTITY-REQUEST " & r
+    o.setIdentityAskJson(r)
+    o.loadIdentityPlatformDo())
+
+proc identityPlatformUnlockDo(o: MusterUi) =
+  ask mm.identity_platform_unlockAsync(proc (r: string) =
+    info "IDENTITY-UNLOCK " & r
+    o.setIdentityAskJson(r)
+    o.loadIdentityPlatformDo())
 
 proc loadSecurityLevelsDo(o: MusterUi, d: Done = nil) =
   ask mm.security_levelsAsync(proc (r: string) = o.setSecurityLevelsJson(r); fin(d, r))
@@ -1343,9 +1372,15 @@ proc retractMyAccountImpl(o: MusterUi, accountId: string) =
     o.loadLezMsigDo())
 proc loadLezMsigImpl(o: MusterUi) = o.loadLezMsigDo()
 proc loadWalletSummaryImpl(o: MusterUi) = o.loadWalletSummaryDo()
+proc loadSupportImpl(o: MusterUi) = o.loadSupportDo()
+proc sendSupportImpl(o: MusterUi, optionId, fromId, asset, amount: string) =
+  o.sendSupportDo(optionId, fromId, asset, amount)
 proc loadFlowImpl(o: MusterUi) = o.loadFlowDo()
 proc loadGraphImpl(o: MusterUi, roomTopic: string) = o.loadGraphDo(roomTopic)
 proc loadRlnStatusImpl(o: MusterUi) = o.loadRlnStatusDo()
 proc loadKeystoreStatusImpl(o: MusterUi) = o.loadKeystoreStatusDo()
 proc keystoreSelectImpl(o: MusterUi, address: string) = o.keystoreSelectDo(address)
 proc loadKeystoreRequestsImpl(o: MusterUi) = o.loadKeystoreRequestsDo()
+proc loadIdentityPlatformImpl(o: MusterUi) = o.loadIdentityPlatformDo()
+proc identityPlatformRequestImpl(o: MusterUi) = o.identityPlatformRequestDo()
+proc identityPlatformUnlockImpl(o: MusterUi) = o.identityPlatformUnlockDo()

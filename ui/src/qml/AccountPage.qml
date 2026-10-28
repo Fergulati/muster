@@ -23,6 +23,31 @@ Item {
         spacing: Theme.spacing.large
         width: Math.min(parent.width - 2 * Theme.spacing.xxlarge, 640)
 
+        // Like Muster? (exo-168): said once, after a wallet of the person's own is connected
+        InlineNotice {
+            objectName: "supportPrompt"
+            visible: root.supportPromptShown
+            Layout.fillWidth: true
+            tone: "info"
+            title: qsTr("Like Muster?")
+            text: qsTr("It's a personal project on the Logos stack. A tip from your wallet keeps it going: "
+                       + "infrastructure, development time, audits. Testnet coins help too.")
+            ActionButton {
+                objectName: "supportPromptOpen"
+                compact: true
+                text: qsTr("Tell me more")
+                iconSource: MusterStyle.icon("heart")
+                onClicked: root.openSupport()
+            }
+            ActionButton {
+                objectName: "supportPromptDismiss"
+                compact: true
+                quiet: true
+                text: qsTr("Not now")
+                onClicked: root.dismissSupportPrompt()
+            }
+        }
+
         // the wallets this instance was given, first (exo-f37)
         WalletList {
             objectName: "walletList"

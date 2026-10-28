@@ -137,6 +137,7 @@ import ../src/audio/miniaudio          # …and its devices: miniaudio, on the p
 import std/exitprocs                   # the voice devices are released at exit (§9)
 import std/mimetypes
 import ../src/wallet/summary         # what the Wallet page shows: what this instance was given (exo-f37)
+import ../src/wallet/support         # Like Muster?: the pinned tip addresses (exo-168)
 import ../src/monero/address as xmraddr # the payTo rules and the CAIP-2 map (ADR-018)
 
 proc hexToBytes(s: string): seq[byte] =
@@ -381,6 +382,11 @@ var gIdentityBackend = "local"
   ## an identity key the person's keystore_module holds, reached through signer_manager_module
   ## (identity_platform_request). Changed only while this instance has joined no room: a room
   ## knows a member by its identity, and grants sealed to the old one would not open.
+var gIdentityAccount = ""
+  ## exo-833: the keystore_module account (kr_…) request_identity named for that key: what
+  ## identity_platform_unlock asks the manager to open for muster again
+var gSupportPrompt = ""
+  ## exo-168: "dismissed" once the person closed the Like Muster? prompt; kept on this machine only
 var gSettingsLoaded = false
 var gDeliverySaved = false          ## did the user persist a delivery choice? (else env/default)
 proc loadSettingsFile() =
@@ -403,6 +409,8 @@ proc loadSettingsFile() =
       if j.hasKey("keystoreAccount"): gKeystoreAccount = j["keystoreAccount"].getStr()
       if j.hasKey("keystoreBinding"): gKeystoreBinding = j["keystoreBinding"].getStr()
       if j.hasKey("identityBackend"): gIdentityBackend = j["identityBackend"].getStr("local")
+      if j.hasKey("identityAccount"): gIdentityAccount = j["identityAccount"].getStr()
+      if j.hasKey("supportPrompt"): gSupportPrompt = j["supportPrompt"].getStr()
       if j.hasKey("delivery"):
         gDeliveryConfig = deliveryConfigFor(j["delivery"].getStr())
         gDeliverySaved = true
@@ -438,7 +446,9 @@ proc saveSettingsFile() =
                                    "keystoreBackend": gKeystoreBackend,
                                    "keystoreAccount": gKeystoreAccount,
                                    "keystoreBinding": gKeystoreBinding,
-                                   "identityBackend": gIdentityBackend}))
+                                   "identityBackend": gIdentityBackend,
+                                   "identityAccount": gIdentityAccount,
+                                   "supportPrompt": gSupportPrompt}))
   except CatchableError: discard
 
 proc toSig65(b: seq[byte]): Signature65 =
@@ -5429,7 +5439,7 @@ proc walletRows(keep: proc(chain: string): bool): JsonNode =
       # consensus state root (wallet_verified_balance), which needs the beacon
       # light-client sidecar. The UI renders the grade so the user sees which it is.
       var entry = %*{"chain": acc.chain, "account": acc.id, "asset": asset.symbol,
-                     "grade": "attested"}
+                     "form": $acc.form, "grade": "attested"}
       try:
         let bal = w.balance(acc.chain, acc, asset)
         entry["display"] = %bal.display()
@@ -5442,7 +5452,7 @@ proc walletRows(keep: proc(chain: string): bool): JsonNode =
 proc musterWalletBalances(): string =
   $walletRows(proc(chain: string): bool = true)
 
-proc musterWalletSummary(): string =
+proc walletSummaryNow(): JsonNode =
   ## The Wallet page (exo-f37): the wallets this instance has been given — under the
   ## platform the keystore account chosen for Muster, the Monero wallet open in Monero
   ## Wallet, the LEZ wallet — each with its balances, and how to connect the rest. Never
@@ -5471,7 +5481,15 @@ proc musterWalletSummary(): string =
     try: state = $gradeModuleRecord(MoneroBackendModule, rec(MoneroBackendModule)).state
     except CatchableError: discard
   inputs.monero = moneroViewFor(state, proc(): MoneroBackend = moneroBackend())
-  result = $walletSummary(inputs)
+  walletSummary(inputs)
+
+var gLastSummary: JsonNode
+  ## the Wallet page's last summary: what Like Muster? offers to send from, without
+  ## reading every chain again (exo-168)
+
+proc musterWalletSummary(): string =
+  gLastSummary = walletSummaryNow()
+  result = $gLastSummary
   lpDebugOnChange("wallet-summary", result)
 
 proc accountFormOf(w: Wallet, chain, id: string): AccountForm
@@ -5528,6 +5546,37 @@ proc musterWalletSendImpl(chain, fromId, to, assetSymbol, raw: string): string =
 proc musterWalletSend(chain, fromId, to, assetSymbol, raw: string): string =
   result = musterWalletSendImpl(chain, fromId, to, assetSymbol, raw)
   if gLpDebug: stderr.writeLine("MUSTER-LP wallet_send " & chain & " " & raw & " " & result)
+
+# ── Like Muster? (exo-168) ──────────────────────────────────────────────────────
+# The project's tip addresses are pinned in wallet/support.json; support.nim holds the
+# rules. A tip goes only to a pinned address, from a sender the options offered.
+
+proc supportOptionsNow(): JsonNode =
+  ## From the summary the Wallet page last read (its 10 s poll), so opening the modal
+  ## repeats no chain read; read once here only if the page never has.
+  loadSettingsFile()
+  if gLastSummary == nil: gLastSummary = walletSummaryNow()
+  let t = supportTable()
+  supportOptions(t.about, t.addresses, gLastSummary, gSupportPrompt)
+
+proc musterSupport_options(): string =
+  try: $supportOptionsNow()
+  except CatchableError as e: $(%*{"error": e.msg})
+
+proc musterSupport_send(option_id, from_id, asset_symbol, amount: string): string =
+  try:
+    let offered = offeredSender(supportOptionsNow(), option_id, from_id, asset_symbol)
+    if not offered.ok: return $(%*{"error": offered.reason})
+    let asset = assetBySymbol(moduleWallet(), offered.chain, asset_symbol)
+    let units = toBaseUnits(amount, asset.decimals)
+    if not units.ok: return $(%*{"error": units.reason})
+    var r = parseJson(musterWalletSendImpl(offered.chain, from_id, offered.address, asset_symbol, units.raw))
+    if r.kind == JObject and not r.hasKey("error"):
+      r["option"] = %option_id
+      r["raw"] = %units.raw
+    $r
+  except CatchableError as e:
+    $(%*{"error": e.msg})
 
 proc musterWalletLezSetup(): string =
   ## Headless LEZ provisioning FALLBACK (exo-44b, the no-broker path): ensure a public
@@ -5698,7 +5747,8 @@ proc musterSetSetting(key, value: string): string =
       if loadJoinedRooms(joinedRoomsPath()).len > 0:
         return $(%*{"error": "identity-backend changes only before any room is joined: each room knows this member by its identity"})
       gIdentityBackend = v
-      gKeystore = nil        # the next use opens the keyfile again and wraps it as set
+      if v == "local": gIdentityAccount = ""
+      gKeystore = nil       # the next use opens the keyfile again and wraps it as set
   of "keystore-backend":
     # exo-149.2: whether a keystore_module account may approve in-room. "interim" carries
     # muster's attestation as an opaque digest leg the signer cannot read (the card says
@@ -5712,6 +5762,11 @@ proc musterSetSetting(key, value: string): string =
     # over the env on the next launch.
     gDeliveryConfig = deliveryConfigFor(value)
     gDeliverySaved = true
+  of "support-prompt":
+    # exo-168: the Like Muster? prompt, shown once; "" shows it again
+    if value notin ["", "dismissed"]:
+      return $(%*{"error": "support-prompt is \"dismissed\" or \"\""})
+    gSupportPrompt = value
   of "mix":
     # whether this node sends through the mixnet (exo-dcc.4); like "delivery", the NEXT
     # room joined (or relaunch) boots with it
@@ -5729,37 +5784,90 @@ proc musterSetSetting(key, value: string): string =
 # ── the room identity held by the platform (exo-833) ─────────────────────────────
 # The person's keystore_module makes muster an identity key of its own (signer_manager_module
 # request_identity, derived for muster_module/<context>) once they approve it in the keys app,
-# unlocked for muster with confirm false so authorship needs no prompt per message. The request's
-# receipt stays in this process's memory; a relaunch while it waits asks again.
-var gIdReq: tuple[handle, receipt: string]
+# unlocked for muster with confirm false so authorship needs no prompt per message. When that
+# unlock runs out, identity_platform_unlock asks for it again. The ask's receipt stays in this
+# process's memory; a relaunch while it waits asks again.
+var gIdReq: PlatformAsk
+var gIdLast = newJNull()
+  ## how the last ask ended without a result ({kind, reason}), shown once by the status
 
 const IdentityContext = "default"
   ## One identity for every room for now; a key per room (rule 8) needs a room-scoped seam.
 
+proc platformLocked(): bool =
+  ## Did the platform identity last refuse because muster's unlock is gone? Read off the open
+  ## keystore only: opening it here would open the keyfile for a status line.
+  gKeystore != nil and gKeystore of PlatformIdentityKeystore and
+    PlatformIdentityKeystore(gKeystore).locked
+
+proc identityAsked(ask: proc(): PlatformAsk): string =
+  if gIdReq.handle.len > 0:
+    return $(%*{"ok": false, "error": "already asking: approve or reject it in the keys app",
+                "handle": gIdReq.handle, "kind": gIdReq.kind})
+  try:
+    gIdReq = ask()
+  except KeystoreError as e:
+    var r = %*{"ok": false, "error": e.msg}
+    if e.msg.contains("did not answer"): r["install"] = %"signer_manager_module"
+    return $r
+  gIdLast = newJNull()
+  $(%*{"ok": true, "handle": gIdReq.handle, "kind": gIdReq.kind, "state": "offered"})
+
 proc musterIdentity_platform_request(): string =
-  let params = %*{"purpose": "room-identity", "context": IdentityContext,
-                  "unlock": {"apps": ["muster_module"], "confirm": false},
-                  "reason": "Muster signs your room messages with it and opens what rooms seal to you"}
-  let r = lpCall("request_identity", %*[$params])
-  if r == nil:
-    return $(%*{"ok": false, "error": "signer_manager_module did not answer",
-                "install": "signer_manager_module"})
-  if not r{"ok"}.getBool(false): return $r
-  gIdReq = (r{"handle"}.getStr(), r{"receipt"}.getStr())
-  $(%*{"ok": true, "handle": gIdReq.handle, "state": r{"state"}.getStr("offered")})
+  identityAsked(proc(): PlatformAsk = askIdentity(managerPort(), IdentityContext))
+
+proc musterIdentity_platform_unlock(): string =
+  if not gIdentityBackend.startsWith("platform:"):
+    return $(%*{"ok": false, "error": "the room identity is muster's own (identity-backend local): nothing to unlock"})
+  if gIdentityAccount.len == 0:
+    return $(%*{"ok": false, "error": "no account is known for this identity: ask for it again (identity_platform_request)"})
+  identityAsked(proc(): PlatformAsk = askUnlock(managerPort(), gIdentityAccount))
 
 proc musterIdentity_platform_status(): string =
+  var o = %*{"state": "none", "backend": gIdentityBackend, "locked": platformLocked(),
+             "changeable": loadJoinedRooms(joinedRoomsPath()).len == 0}
+  if gIdentityBackend.startsWith("platform:"):
+    o["publicKey"] = %gIdentityBackend[9 .. ^1]
+    o["account"] = %gIdentityAccount
   if gIdReq.handle.len == 0:
-    return $(%*{"state": "none", "backend": gIdentityBackend})
-  let f = lpCall("fetch_result", %*[gIdReq.handle, gIdReq.receipt])
-  if f == nil or not f{"ok"}.getBool(false) or f{"result"}.isNil:
-    return $(%*{"state": "waiting", "handle": gIdReq.handle, "backend": gIdentityBackend})
-  let res = f{"result"}
-  let pk = res{"publicKey"}.getStr()
-  discard lpCall("ack_result", %*[gIdReq.handle, gIdReq.receipt])
-  gIdReq = ("", "")
-  let applied = musterSetSetting("identity-backend", "platform:" & pk)
-  let ok = not parseJson(applied).hasKey("error")
-  $(%*{"state": "ready", "publicKey": pk, "account": res{"account"}.getStr(),
-       "context": res{"context"}.getStr(), "unlocked": res{"unlocked"},
-       "applied": ok, "detail": (if ok: "" else: parseJson(applied){"error"}.getStr())})
+    if gIdLast.kind != JNull:
+      o["state"] = %"ended"
+      for k, v in gIdLast: o[k] = v
+      gIdLast = newJNull()
+    return $o
+  o["kind"] = %gIdReq.kind
+  let p = pollAsk(managerPort(), gIdReq)
+  case p{"state"}.getStr()
+  of "waiting":
+    o["state"] = %"waiting"
+    o["handle"] = %gIdReq.handle
+    o["step"] = p{"step"}
+  of "ended":
+    o["state"] = %"ended"
+    o["reason"] = p{"reason"}
+    gIdReq = PlatformAsk()
+  else:
+    let res = p{"result"}
+    let kind = gIdReq.kind
+    gIdReq = PlatformAsk()
+    o["state"] = %"ready"
+    if kind == "unlock":
+      # The next request settles as it arrives again, and the keystore learns it from that one.
+      if platformLocked(): PlatformIdentityKeystore(gKeystore).locked = false
+      o["locked"] = %false
+      o["unlocked"] = res
+      return $o
+    let pk = res{"publicKey"}.getStr()
+    let applied = musterSetSetting("identity-backend", "platform:" & pk)
+    let ok = not parseJson(applied).hasKey("error")
+    if ok:
+      gIdentityAccount = res{"account"}.getStr()
+      saveSettingsFile()
+    o["backend"] = %gIdentityBackend
+    o["publicKey"] = %pk
+    o["account"] = res{"account"}
+    o["context"] = res{"context"}
+    o["unlocked"] = res{"unlocked"}
+    o["applied"] = %ok
+    o["detail"] = %(if ok: "" else: parseJson(applied){"error"}.getStr())
+  $o

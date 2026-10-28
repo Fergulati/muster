@@ -199,6 +199,7 @@ Item {
         balancesGiveUp.restart();
         root.backend.loadAccount();
         root.backend.loadWalletSummary();
+        root.backend.loadSupport();
     }
     onBalancesChanged: root.balancesLoading = false
     // the Wallet page (exo-f37): only what this instance was given, read while it is open —
@@ -228,6 +229,34 @@ Item {
         }
     }
     Timer { id: balancesGiveUp; interval: 15000; onTriggered: root.balancesLoading = false }
+
+    // Like Muster? (exo-168): tip the project. The prompt shows once, on the Wallet page,
+    // after the person connects a wallet of their own (never for the runner's development
+    // key), and is gone for good once dismissed; the button on the Wallet's header stays.
+    // Whether it was seen stays on this machine, in the module's settings.
+    readonly property var support: {
+        try { return JSON.parse(root.backend ? root.backend.supportJson : "{}"); }
+        catch (e) { return ({}); }
+    }
+    readonly property bool walletConnected: !!root.walletSummary && Array.isArray(root.walletSummary.wallets)
+                                            && root.walletSummary.wallets.some(function (w) { return !w.dev; })
+    property bool supportDismissed: false
+    readonly property bool supportPromptShown: root.walletConnected && !root.supportDismissed
+                                               && root.support.prompt === "unseen"
+                                               && Array.isArray(root.support.options) && root.support.options.length > 0
+    onWalletConnectedChanged: if (root.walletConnected && root.backend) root.backend.loadSupport()
+    function dismissSupportPrompt() {
+        root.supportDismissed = true;
+        if (root.backend) root.backend.setSetting("support-prompt", "dismissed");
+    }
+    function openSupport() {
+        if (root.supportPromptShown) root.dismissSupportPrompt();
+        supportDialog.openTip();
+    }
+    SupportDialog {
+        id: supportDialog
+        backend: root.backend
+    }
 
     // Room state, aliased for the home fold.
     readonly property string roomTopic: backend ? backend.roomTopic : ""
@@ -716,6 +745,28 @@ Item {
         anchors.bottom: parent.bottom
     }
 
+    // A room identity held by the wallet (exo-833) refuses room messages once Muster's unlock
+    // runs out: say so once, when it locks, and where to unlock it. Reading the status is a
+    // flag read in the module; it asks the wallet nothing unless an ask is in flight.
+    property bool identityLocked: false
+    Timer {
+        interval: 5000
+        repeat: true
+        running: root.ready && root.backend !== null && root.view !== "settings"
+        onTriggered: root.backend.loadIdentityPlatform()
+    }
+    Connections {
+        target: root.backend
+        ignoreUnknownSignals: true
+        function onIdentityPlatformJsonChanged() {
+            var locked = false;
+            try { locked = (JSON.parse(root.backend.identityPlatformJson) || {}).locked === true; } catch (e) {}
+            if (locked && !root.identityLocked)
+                MusterStyle.notify(qsTr("Your room identity is locked, so your messages aren't sent. Settings → You → Unlock it for Muster."));
+            root.identityLocked = locked;
+        }
+    }
+
     // news from the room and other rooms (exo-773), said once and let go
     Toast {
         id: newsToast
@@ -969,20 +1020,37 @@ Item {
             anchors.left: parent.left
             anchors.right: parent.right
             spacing: 0
-            ColumnLayout {
+            RowLayout {
+                Layout.fillWidth: true
                 Layout.leftMargin: Theme.spacing.xxlarge
+                Layout.rightMargin: Theme.spacing.xxlarge
                 Layout.topMargin: Theme.spacing.xlarge
-                spacing: 2
-                LogosText {
-                    text: qsTr("Wallet")
-                    color: Theme.palette.text
-                    font.pixelSize: MusterStyle.title
-                    font.weight: Theme.typography.weightBold
+                spacing: Theme.spacing.medium
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    LogosText {
+                        text: qsTr("Wallet")
+                        color: Theme.palette.text
+                        font.pixelSize: MusterStyle.title
+                        font.weight: Theme.typography.weightBold
+                    }
+                    LogosText {
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: qsTr("What you hold on the chains you set up, each balance saying whether your own client checked it.")
+                        color: Theme.palette.textSecondary
+                        font.pixelSize: MusterStyle.body
+                    }
                 }
-                LogosText {
-                    text: qsTr("What you hold on the chains you set up, each balance saying whether your own client checked it.")
-                    color: Theme.palette.textSecondary
-                    font.pixelSize: MusterStyle.body
+                ActionButton {
+                    objectName: "supportButton"
+                    Layout.alignment: Qt.AlignTop
+                    compact: true
+                    quiet: true
+                    text: qsTr("Like Muster?")
+                    iconSource: MusterStyle.icon("heart")
+                    onClicked: root.openSupport()
                 }
             }
             LogosTabBar {

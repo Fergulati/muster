@@ -175,6 +175,23 @@ void MusterUiBackend::loadWalletSummary()
     setWalletSummaryJson(modules().muster_module.wallet_summary());
 }
 
+void MusterUiBackend::loadSupport()
+{
+    // Like Muster? (exo-168): the pinned tip addresses and the connected wallets that can
+    // send to them. The module decides; the backend holds nothing.
+    setSupportJson(modules().muster_module.support_options());
+}
+
+void MusterUiBackend::sendSupport(const QString &optionId, const QString &fromId, const QString &asset, const QString &amount)
+{
+    // A tip names an option, never an address: the module pays only a pinned one.
+    const QString r = modules().muster_module.support_send(optionId, fromId, asset, amount);
+    qInfo() << "[muster_ui] support_send" << optionId << asset << amount << "->" << r;
+    setSupportSendJson(r);
+    loadSupport();
+    loadWalletSummary();
+}
+
 // ── FileShare (exo-4d0, docs/design/room-swarm.md) ─────────────────────────────────
 // The module seals, uploads, fetches and verifies; the backend only carries its answers.
 // Each action re-reads the list so the view follows reduce(log).
@@ -687,6 +704,32 @@ void MusterUiBackend::loadKeystoreRequests()
     // the ones that just finished. Reading it also advances them (keystorePump), so the view
     // polls it while any is open; the view raises evm.signing.approve for each new one.
     setKeystoreRequestsJson(modules().muster_module.keystore_requests());
+}
+
+void MusterUiBackend::loadIdentityPlatform()
+{
+    // identity_platform_status (exo-833): where the room identity lives, whether muster's
+    // unlock ran out, and the ask in flight. Reading it also collects a decided ask.
+    setIdentityPlatformJson(modules().muster_module.identity_platform_status());
+}
+
+void MusterUiBackend::identityPlatformRequest()
+{
+    // identity_platform_request: the person's wallet makes muster a key of its own, once
+    // they approve it in the keys app, which the view opens on the handle.
+    const QString r = modules().muster_module.identity_platform_request();
+    qInfo().noquote() << "[muster_ui] IDENTITY-REQUEST" << r;
+    setIdentityAskJson(r);
+    loadIdentityPlatform();
+}
+
+void MusterUiBackend::identityPlatformUnlock()
+{
+    // identity_platform_unlock: open that key for muster again once its unlock ran out.
+    const QString r = modules().muster_module.identity_platform_unlock();
+    qInfo().noquote() << "[muster_ui] IDENTITY-UNLOCK" << r;
+    setIdentityAskJson(r);
+    loadIdentityPlatform();
 }
 
 void MusterUiBackend::loadSecurityLevels()
