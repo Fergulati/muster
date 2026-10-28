@@ -1,0 +1,51 @@
+{
+ "about": "Settings → You → Your room identity (exo-833.6), as a member who has joined a room sees it: kept by Muster; in Advanced, that it moves to the Basecamp wallet only before any room is joined (recorded from scripts/split-self-test.sh).",
+ "snapshot": "data/settings-room-identity.json",
+ "sizes": [
+  "1440x900"
+ ],
+ "steps": [
+  {
+   "view": "settings"
+  },
+  {
+   "click": "settingsBasic"
+  },
+  {
+   "wait": 600
+  },
+  {
+   "expectProp": [
+    "settingsRoomIdentity",
+    "visible",
+    true
+   ]
+  },
+  {
+   "expectProp": [
+    "identityHolderMove",
+    "visible",
+    false
+   ]
+  },
+  {
+   "shot": "basic"
+  },
+  {
+   "click": "settingsAdvanced"
+  },
+  {
+   "wait": 200
+  },
+  {
+   "expectProp": [
+    "identityHolderMove",
+    "visible",
+    false
+   ]
+  },
+  {
+   "shot": "advanced"
+  }
+ ]
+}

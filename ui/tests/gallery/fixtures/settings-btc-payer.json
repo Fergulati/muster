@@ -1,5 +1,5 @@
 {
- "about": "Settings with the Bitcoin address a split's share is paid from (exo-408 item 12): one row per bech32 prefix, naming the networks that share it (recorded from scripts/split-self-test.sh).",
+ "about": "Settings with the Bitcoin address a split's share is paid from (exo-408 item 12): one row per bech32 prefix, naming the networks that share it, in Advanced, where it has lived since the Basic/Advanced split (exo-816) (recorded from scripts/split-self-test.sh).",
  "snapshot": "data/settings-btc-payer.json",
  "sizes": [
   "1440x900"
@@ -7,6 +7,9 @@
  "steps": [
   {
    "view": "settings"
+  },
+  {
+   "click": "settingsAdvanced"
   },
   {
    "wait": 600
